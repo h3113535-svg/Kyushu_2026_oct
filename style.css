@@ -1679,3 +1679,77 @@ html[data-theme="buddy"][data-font-size="xlarge"] .hero-copy-buddy-v391 h1{font-
 .account-setting{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .logout-btn{border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:12px;padding:9px 12px;font-weight:800;cursor:pointer;white-space:nowrap}
 @media(max-width:420px){.auth-gate{padding:16px}.auth-card{padding:29px 20px 24px}.auth-card h1{font-size:27px}.account-setting{align-items:flex-start;flex-direction:column}.logout-btn{width:100%}}
+
+/* =========================================================
+   v4.0.1 — Hero alignment + duplicate season fix
+   ========================================================= */
+html[data-theme="buddy"] .hero-copy-buddy-v391::before,
+html[data-theme="buddy"] .hero-copy-buddy-v391::after{
+  content:none!important;
+  display:none!important;
+}
+
+/* Center the visible pair, not two equal grid columns.
+   Purin is much wider than Usagi, so equal columns made the pair look left-heavy. */
+html[data-theme="buddy"] .hero-character-stage{
+  display:flex!important;
+  align-items:flex-end;
+  justify-content:center;
+  gap:14px;
+  width:100%!important;
+  max-width:430px;
+  margin-left:auto!important;
+  margin-right:auto!important;
+  min-height:175px;
+  padding:0!important;
+  transform:none!important;
+}
+html[data-theme="buddy"] .hero-character-big{
+  flex:0 0 auto;
+  width:auto!important;
+  height:175px;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+}
+html[data-theme="buddy"] .hero-character-big img{
+  width:auto!important;
+  height:100%!important;
+  max-width:none!important;
+  max-height:175px!important;
+  object-fit:contain;
+}
+html[data-theme="buddy"] .purin-big img{
+  transform:rotate(-3deg) scale(1.05)!important;
+  transform-origin:center bottom;
+}
+html[data-theme="buddy"] .usagi-big img{
+  transform:rotate(2deg) scale(1.08)!important;
+  transform-origin:center bottom;
+}
+
+@media (min-width:700px){
+  html[data-theme="buddy"] .hero-character-stage{
+    max-width:540px;
+    min-height:240px;
+    gap:24px;
+  }
+  html[data-theme="buddy"] .hero-character-big{
+    height:240px;
+  }
+  html[data-theme="buddy"] .hero-character-big img{
+    max-height:240px!important;
+  }
+}
+@media (max-width:350px){
+  html[data-theme="buddy"] .hero-character-stage{
+    min-height:145px;
+    gap:8px;
+  }
+  html[data-theme="buddy"] .hero-character-big{
+    height:145px;
+  }
+  html[data-theme="buddy"] .hero-character-big img{
+    max-height:145px!important;
+  }
+}
