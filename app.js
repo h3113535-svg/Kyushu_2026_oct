@@ -1,0 +1,814 @@
+/* Private travel PWA · Firebase Auth gated content · v4.0.0 */
+
+const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
+const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
+const ROOT = window.KYUSHU_PRIVATE_PATH || "trips/kyushu-oct-2026";
+const PRIVATE_CONTENT_CACHE_KEY = "kyushu-private:content-cache";
+const PRIVATE_AUTH_CACHE_KEY = "kyushu-private:auth-cache";
+let TRIP = null;
+let state = null;
+let currentAuthUser = null;
+let appBound = false;
+
+let lastError = "";
+const pollers = new Set();
+
+function pathFor(key){
+  return `${ROOT}/${key}`;
+}
+function endpoint(path){
+  return `${DATABASE_URL}/${path}.json`;
+}
+async function authToken(forceRefresh=false){
+  if(!window.firebase?.auth) return null;
+  const user=firebase.auth().currentUser;
+  if(!user) return null;
+  return user.getIdToken(forceRefresh);
+}
+async function request(path, options = {}){
+  const token=await authToken();
+  if(!token) throw new Error("尚未登入");
+  const url=new URL(endpoint(path));
+  url.searchParams.set("auth",token);
+  const res = await fetch(url.toString(), {
+    cache: "no-store",
+    headers: {"Content-Type":"application/json"},
+    ...options
+  });
+  const text = await res.text();
+  let body = null;
+  try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+  if(!res.ok){
+    const msg = body?.error || body || `${res.status} ${res.statusText}`;
+    lastError = String(msg);
+    throw new Error(lastError);
+  }
+  lastError = "";
+  return body;
+}
+
+function getLastFirebaseError(){
+  return lastError;
+}
+
+async function initFirebase(){
+  try{
+    // A real read probe. "Connected" is shown only if Database actually accepts the request.
+    await request(`${ROOT}/content/id`, {method:"GET"});
+    return true;
+  }catch(e){
+    console.error("Realtime Database probe failed:", e);
+    return false;
+  }
+}
+
+function subscribe(key, callback){
+  let active = true;
+  let previous = Symbol("initial");
+  const poll = async()=>{
+    if(!active) return;
+    try{
+      const value = await request(pathFor(key), {method:"GET"});
+      const signature = JSON.stringify(value);
+      if(previous !== signature){
+        previous = signature;
+        callback(value);
+      }
+    }catch(e){
+      console.error(`Realtime Database read failed (${key}):`, e);
+    }
+  };
+  poll();
+  const id = setInterval(poll, 4000);
+  const stop = ()=>{ active=false; clearInterval(id); pollers.delete(stop); };
+  pollers.add(stop);
+  return stop;
+}
+
+async function setCloud(key, value){
+  return request(pathFor(key), {method:"PUT", body:JSON.stringify(value)});
+}
+
+async function addCloud(key, value){
+  return request(pathFor(key), {method:"POST", body:JSON.stringify(value)});
+}
+
+async function updateCloud(key, id, value){
+  return request(`${pathFor(key)}/${id}`, {method:"PATCH", body:JSON.stringify(value)});
+}
+
+async function removeCloud(key, id){
+  return request(`${pathFor(key)}/${id}`, {method:"DELETE"});
+}
+
+
+
+
+
+const $=(s)=>document.querySelector(s);
+const $$=(s)=>[...document.querySelectorAll(s)];
+const storeKey=k=>`${TRIP?.id||"private-trip"}:${k}`;
+function createState(){
+  return {
+    dayIndex:0, view:"schedule", tool:"booking", shoppingMember:"全部",
+    foods:loadLocal("foods",[]), shopping:loadLocal("shopping",[]), expenses:loadLocal("expenses",[]),
+    taskStatus:loadLocal("taskStatus",{}), decisions:loadLocal("decisions",{}),
+    notes:loadLocal("notes",""), cloud:false, noteTimer:null
+  };
+}
+function loadLocal(key,fallback){try{const v=localStorage.getItem(storeKey(key));return v===null?fallback:JSON.parse(v)}catch{return fallback}}
+function saveLocal(key,value){localStorage.setItem(storeKey(key),JSON.stringify(value))}
+function uid(){return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`}
+function esc(v=""){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+function mapSearch(q){return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`}
+function mapNav(q,mode="driving"){return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}&travelmode=${mode}`}
+function japanToday(){
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:TRIP.timezone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+  const o=Object.fromEntries(parts.filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
+  return `${o.year}-${o.month}-${o.day}`;
+}
+function initialDay(){
+  const today=japanToday();
+  const idx=TRIP.days.findIndex(d=>d.date===today);
+  return idx>=0?idx:0;
+}
+function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1600)}
+function normalizeCloud(val){
+  if(!val)return[];
+  return Array.isArray(val)?val:Object.entries(val).map(([id,v])=>({...v,id}));
+}
+function weatherMode(event){
+  const t=(event.transport||"")+" "+(event.category||"");
+  if(t.includes("🚶")) return "walking";
+  if(t.includes("🚆")||t.includes("🚇")||t.includes("🚋")||t.includes("🚌")) return "transit";
+  return "driving";
+}
+
+function renderDayBrief(day){
+  const box=$("#dayBrief");
+  if(!box) return;
+  const alertHtml=day.alert?`<div class="day-alert">${esc(day.alert)}</div>`:"";
+  const items=(day.brief||[]).map(x=>`<li>${esc(x)}</li>`).join("");
+  const rainHtml=day.rainPlan?`<div class="rain-plan"><b>☔ 雨天備案</b><span>${esc(day.rainPlan)}</span></div>`:"";
+  const hasContent=!!(day.alert||items||day.rainPlan);
+  box.innerHTML=hasContent
+    ? `<div class="brief-title">今日提醒</div>${alertHtml}${items?`<ul>${items}</ul>`:""}${rainHtml}`
+    : "";
+  box.classList.toggle("empty-brief",!hasContent);
+}
+function renderEventExtras(e){
+  const chips=[
+    e.status?`<span class="info-chip">${esc(e.status)}</span>`:"",
+    e.duration?`<span class="info-chip soft">⏱ ${esc(e.duration)}</span>`:""
+  ].filter(Boolean).join("");
+  const tips=(e.tips||[]).map(t=>`<li>${esc(t)}</li>`).join("");
+  const links=(e.links||[]).map(l=>`<a class="mini-action-link" target="_blank" rel="noopener" href="${esc(l.url)}">↗ ${esc(l.label)}</a>`).join("");
+  return `${chips?`<div class="event-info-row">${chips}</div>`:""}${tips?`<div class="event-tips"><b>提醒</b><ul>${tips}</ul></div>`:""}${e.backup?`<div class="backup-box"><b>備案</b><span>${esc(e.backup)}</span></div>`:""}${links?`<div class="event-link-row">${links}</div>`:""}`;
+}
+
+
+function selectedDecision(id){
+  return state.decisions[id] || "";
+}
+async function chooseDecision(id, option){
+  state.decisions[id]=option;
+  saveLocal("decisions",state.decisions);
+  if(state.cloud){try{await setCloud("decisions",state.decisions)}catch{}}
+  renderSchedule();
+}
+function renderDecisionCards(day){
+  const ids=day.decisionIds||[];
+  if(!ids.length)return "";
+  return `<div class="decision-stack">${ids.map(id=>{
+    const d=TRIP.decisions.find(x=>x.id===id); if(!d)return "";
+    const selected=selectedDecision(id);
+    const checklist=(d.checklist||[]).length?`<div class="decision-checks">${d.checklist.map(x=>`<div>□ ${esc(x)}</div>`).join("")}</div>`:"";
+    return `<section class="decision-card">
+      <img class="decision-usagi-art buddy-only-art" src="./usagi_decision.png?v=390" alt="烏薩奇">
+      <div class="decision-kicker">行程選擇</div>
+      <h3>${esc(d.title)}</h3>
+      <p>${esc(d.hint||"")}</p>
+      ${checklist}
+      <div class="decision-options">${d.options.map(o=>`
+        <button class="decision-option ${selected===o.id?"selected":""}" data-decision-id="${esc(d.id)}" data-decision-option="${esc(o.id)}">
+          <span class="decision-icon">${esc(o.icon||"→")}</span>
+          <span><b>${esc(o.label)}</b><small>${esc(o.detail||"")}</small></span>
+          <em>${selected===o.id?"已選":"選擇"}</em>
+        </button>`).join("")}
+      </div>
+    </section>`;
+  }).join("")}</div>`;
+}
+function eventVisible(e){
+  if(!e.decisionId)return true;
+  const selected=selectedDecision(e.decisionId);
+  return !selected || selected===e.optionId;
+}
+
+function renderDays(){
+  $("#dayStrip").innerHTML=TRIP.days.map((d,i)=>`
+    <button class="day-btn ${i===state.dayIndex?"active":""}" data-day="${i}">
+      <span class="weekday">週${"日一二三四五六"[new Date(d.date+"T00:00:00+09:00").getDay()]}</span><span class="date">${d.shortDate.slice(3)}</span><span class="d">D${i+1}</span>
+    </button>`).join("");
+  const active=$("#dayStrip .active"); if(active) active.scrollIntoView({behavior:"smooth",inline:"center",block:"nearest"});
+}
+function buddyRole(e){
+  const text=`${e.category||""} ${e.title||""} ${e.status||""}`;
+  if(/早餐|午餐|晚餐|咖啡|甜點|住宿|Chill|休息|泡湯|Buffet|飯店|Check-in|放空|星空/.test(text)) return "purin";
+  if(/搶|預約|決策|時間控制|購物|補貨|GUNDAM|交通決策|排隊|租車|還車|航班|固定|必守/.test(text)) return "usagi";
+  return "";
+}
+
+function buddyDecorForEvent(e){
+  const text=`${e.category||""} ${e.title||""} ${e.status||""}`;
+  if(/早餐|午餐|晚餐|咖啡|甜點|住宿|休息|飯店|泡湯|Buffet|放空/.test(text)) return "🍮";
+  if(/Marine World|水族館|海豹|海豚/.test(text)) return "🐬";
+  if(/夕陽|日落|百道|海/.test(text)) return "☁️";
+  if(/搶票|預約|固定|強制|決策|還車|租車|GUNDAM|購物|補貨/.test(text)) return "🐰";
+  return "";
+}
+function renderBuddyDashboard(day, visibleEvents){
+  const dash=$("#buddyDashboard");
+  if(!dash) return;
+  $("#buddyTodayDate").textContent=day.shortDate;
+  const todayItems=visibleEvents.slice(0,4).map(e=>`
+    <div class="buddy-mini-item">
+      <span class="t">${esc(e.time)}</span>
+      <div class="c"><b>${esc(e.title)}</b>${buddyDecorForEvent(e)?`<em>${buddyDecorForEvent(e)}</em>`:""}</div>
+    </div>`).join("");
+  $("#buddyTodayList").innerHTML=todayItems || `<div class="buddy-empty">今天先輕鬆走。</div>`;
+
+  const mustKeep=visibleEvents.filter(e=>/(已訂|✅|預約|固定|強制|必守|新幹線|租車|還車|划船|晚餐|午餐)/.test(`${e.status||""} ${e.title||""} ${e.category||""}`));
+  const focusItems=(mustKeep.length?mustKeep.slice(0,3):(day.brief||[]).slice(0,3).map(text=>({title:text, time:"提醒", category:"摘要"})));
+  $("#buddyFocusList").innerHTML=focusItems.map(item=>`
+    <div class="buddy-focus-item">
+      <span>${esc(item.time||item.category||"提醒")}</span>
+      <b>${esc(item.title||item)}</b>
+    </div>`).join("") || `<div class="buddy-empty">今天沒有特別的硬性任務。</div>`;
+
+  const notes=[...(day.brief||[])];
+  if(day.rainPlan) notes.push(`☔ 雨天備案：${day.rainPlan}`);
+  $("#buddyReminderList").innerHTML=(notes.slice(0,3).map(x=>`<div class="buddy-reminder-item">${esc(x)}</div>`).join("")) || `<div class="buddy-empty">今天沒有額外提醒。</div>`;
+}
+
+function syncBuddyWeather(){
+  const mini=$("#buddyWeatherMini"); if(!mini) return;
+  const loc=$("#weatherLocation")?.textContent || "天氣";
+  const temp=$("#weatherTemp")?.textContent || "—";
+  const desc=$("#weatherDesc")?.textContent || "—";
+  const icon=$("#weatherIcon")?.textContent || "☁️";
+  const rain=$("#rainBox")?.textContent || "";
+  mini.innerHTML=`<div class="buddy-weather-top"><span class="icon">${icon}</span><div><b>${loc}</b><span>${temp}</span></div></div><div class="buddy-weather-desc">${desc}</div>${rain?`<div class="buddy-weather-rain">${esc(rain)}</div>`:""}`;
+  const m=temp.match(/(\d+)[°]?/);
+  $("#buddyTopWeather").textContent=`${loc.split(" · ")[0]} ${m?m[1]+"°":"—"}`;
+}
+
+function renderSchedule(){
+  const d=TRIP.days[state.dayIndex];
+  renderWeather(d);
+  $("#dayNumber").textContent=`D${state.dayIndex+1}`;
+  $("#dayTitle").textContent=d.title;
+  $("#daySubtitle").textContent=d.subtitle;
+  renderDayBrief(d);
+  $("#decisionArea").innerHTML=renderDecisionCards(d);
+  const visibleEvents=d.events.filter(eventVisible);
+  $("#timeline").innerHTML=visibleEvents.map((e,i)=>`
+    <article class="event ${buddyRole(e)?`buddy-${buddyRole(e)}`:""}">
+      <span class="event-dot"></span>
+      ${i>0 && e.travel?`<div class="travel">${esc(e.transport||"→")} ${esc(e.travel)}</div>`:""}
+      <div class="event-card">
+        <div class="event-top"><h3 class="event-title">${esc(e.title)}</h3><span class="tag">${esc(e.category||"行程")}</span></div>
+        <div class="event-time">${esc(e.time)}</div>
+        ${renderEventExtras(e)}
+        ${e.note?`<div class="event-note">${esc(e.note)}</div>`:""}
+        ${e.noNav?"":`<a class="nav-link" target="_blank" rel="noopener" href="${mapNav(e.nav||e.title,weatherMode(e))}">↗ Google Maps 導航</a>`}
+      </div>
+    </article>`).join("");
+  renderWeather(d);
+}
+async function renderWeather(d){
+  const card=$("#weatherCard");card.classList.add("skeleton");
+  $("#weatherLocation").textContent=d.location+" · "+d.shortDate;
+  $("#weatherTemp").textContent="載入中";
+  $("#weatherDesc").textContent="正在取得旅行日期預報";
+  $("#weatherIcon").textContent="☁️";$("#rainBox").innerHTML="";
+  try{
+    const w=await getWeather(d);
+    if(w.state!=="forecast"){
+      $("#weatherTemp").textContent="—";
+      $("#weatherDesc").textContent=w.message;
+      $("#rainBox").innerHTML="進入預報範圍後，這裡會顯示高低溫、降雨機率與預計下雨時段。";
+    }else{
+      $("#weatherIcon").textContent=w.icon;
+      $("#weatherTemp").textContent=w.current!==null?`${w.current}° · ${w.high}° / ${w.low}°`:`${w.high}° / ${w.low}°`;
+      $("#weatherDesc").textContent=`${w.desc} · 全日最高降雨機率 ${w.rainMax}%`;
+      if(w.rainGroups.length){
+        $("#rainBox").innerHTML=w.rainGroups.slice(0,2).map(g=>`<div class="rain-alert">🌧️ 預計 ${g.start}–${g.end} 有雨 · 最高 ${g.maxProb}%</div>`).join("");
+      }else $("#rainBox").innerHTML="☂️ 目前預報沒有明顯連續降雨時段。";
+    }
+  }catch(e){
+    $("#weatherTemp").textContent="—";$("#weatherDesc").textContent="天氣暫時無法更新";
+    $("#rainBox").textContent="保留上次行程資料；網路恢復後重新切換日期即可再抓。";
+  }finally{card.classList.remove("skeleton")}
+}
+
+function renderFood(){
+  $("#plannedFood").innerHTML=TRIP.plannedFood.map(i=>`
+    <div class="planned-food-card buddy-food-card">
+      <div class="planned-food-head">
+        <span class="food-day">${esc(i.day)} · ${esc(i.time)}</span>
+        <span class="food-status">${esc(i.status)}</span>
+      </div>
+      <div class="list-title">${esc(i.title)}</div>
+      <div class="list-meta">${esc(i.detail||"")}</div>
+      ${(i.maps||[]).length?`<div class="food-map-row">${i.maps.map((m,idx)=>`<a class="mini-btn" target="_blank" rel="noopener" href="${mapSearch(m)}">地圖${i.maps.length>1?` ${idx+1}`:""}</a>`).join("")}</div>`:""}
+    </div>`).join("");
+  $("#foodQuick").innerHTML=TRIP.foodQuick.map(f=>`<a target="_blank" rel="noopener" class="food-chip" href="${mapSearch(f.query)}"><span>${f.icon}</span>${esc(f.label)} ↗</a>`).join("");
+  $("#foodList").innerHTML=state.foods.length?state.foods.map(i=>`
+    <div class="list-item ${i.checked?"checked":""}">
+      <div class="list-main"><div><div class="list-title">${esc(i.name)}</div><div class="list-meta">${esc(i.location||"地點未指定")}${i.note?` · ${esc(i.note)}`:""}</div></div>
+      <div class="list-actions">
+        <a class="mini-btn" target="_blank" href="${mapSearch((i.location||"")+" "+i.name)}">地圖</a>
+        <button class="mini-btn check-btn ${i.checked?"done":""}" data-check-food="${i.id}">${i.checked?"✓":"○"}</button>
+        <button class="mini-btn" data-delete-food="${i.id}">刪</button>
+      </div></div>
+    </div>`).join(""):`<div class="empty">還沒有額外想吃清單，右上角 ＋ 可以新增。</div>`;
+}
+function taskDone(task){
+  return Object.prototype.hasOwnProperty.call(state.taskStatus,task.id) ? !!state.taskStatus[task.id] : !!task.defaultDone;
+}
+function countdownText(task){
+  if(!task.deadline)return task.when||"待處理";
+  const diff=new Date(task.deadline).getTime()-Date.now();
+  if(diff<=0)return "已到處理時間";
+  const hours=Math.ceil(diff/3600000);
+  const days=Math.floor(hours/24);
+  const remain=hours%24;
+  if(days>=2)return `還有 ${days} 天`;
+  if(days>=1)return `還有 ${days} 天 ${remain} 小時`;
+  return `還有 ${hours} 小時`;
+}
+async function toggleBookingTask(id){
+  const task=TRIP.bookingTasks.find(t=>t.id===id); if(!task)return;
+  state.taskStatus[id]=!taskDone(task);
+  saveLocal("taskStatus",state.taskStatus);
+  if(state.cloud){try{await setCloud("taskStatus",state.taskStatus)}catch{}}
+  renderBookings();
+}
+function bookingTaskCard(t){
+  const done=taskDone(t);
+  return `<div class="task-card ${done?"done":"buddy-task-pending"}">
+    <button class="task-check" data-task-id="${esc(t.id)}" aria-label="${done?"標記未完成":"標記完成"}">${done?"✓":"○"}</button>
+    <div class="task-body">
+      <div class="task-top"><span>${esc(t.type)}</span><b>${esc(t.when||"")}</b></div>
+      <div class="task-title">${esc(t.title)}</div>
+      <div class="task-detail">${esc(t.detail||"")}</div>
+      ${!done?`<div class="task-countdown">${esc(countdownText(t))}</div>`:""}
+      ${t.map?`<a class="mini-action-link" target="_blank" rel="noopener" href="${mapSearch(t.map)}">↗ 位置</a>`:""}
+    </div>
+  </div>`;
+}
+function renderBookings(){
+  const pending=TRIP.bookingTasks.filter(t=>!taskDone(t));
+  const done=TRIP.bookingTasks.filter(taskDone);
+  $("#bookingList").innerHTML=`
+    <section class="task-section">
+      <div class="task-section-title"><span>🔥</span><div><b>尚未處理</b><small>${pending.length} 項</small></div></div>
+      <div class="task-stack">${pending.length?pending.map(bookingTaskCard).join(""):`<div class="empty">目前沒有待處理任務。</div>`}</div>
+    </section>
+    <section class="task-section completed-section">
+      <div class="task-section-title"><span>✅</span><div><b>已完成／已訂</b><small>${done.length} 項</small></div></div>
+      <div class="task-stack">${done.map(bookingTaskCard).join("")}</div>
+    </section>`;
+}
+function renderShopping(){
+  const members=["全部",...TRIP.members];
+  $("#shoppingSummary").innerHTML=members.map(m=>{
+    const list=m==="全部"?state.shopping:state.shopping.filter(i=>i.owner===m);
+    const open=list.filter(i=>!i.checked).length;
+    return `<button class="member-pill ${state.shoppingMember===m?"active":""}" data-member="${esc(m)}">${esc(m)} · ${open}</button>`;
+  }).join("");
+  const list=state.shoppingMember==="全部"?state.shopping:state.shopping.filter(i=>i.owner===state.shoppingMember);
+  $("#shoppingList").innerHTML=list.length?list.map(i=>`
+    <div class="list-item ${i.checked?"checked":""}">
+      <div class="list-main">
+        <div><div class="list-title">${esc(i.name)}</div>
+          <div class="list-meta">${esc(i.owner)}${i.amount?` · ¥${Number(i.amount).toLocaleString()}`:""}${i.shop?` · 📍 ${esc(i.shop)}`:""}${i.day?` · ${esc(i.day)}`:""}</div>
+        </div>
+        <div class="list-actions">
+          ${i.shop?`<a class="mini-btn" target="_blank" href="${mapSearch(i.shop)}">地圖</a>`:""}
+          <button class="mini-btn check-btn ${i.checked?"done":""}" data-check-shopping="${i.id}">${i.checked?"✓":"○"}</button>
+          <button class="mini-btn" data-delete-shopping="${i.id}">刪</button>
+        </div>
+      </div>
+    </div>`).join(""):`<div class="empty">目前沒有購物項目。</div>`;
+}
+function computeExpense(){
+  const paid=Object.fromEntries(TRIP.members.map(m=>[m,0]));
+  const owed=Object.fromEntries(TRIP.members.map(m=>[m,0]));
+  let total=0;
+  state.expenses.forEach(e=>{
+    const amount=Number(e.amount||0); total+=amount;
+    if(paid[e.payer]!==undefined) paid[e.payer]+=amount;
+    const ps=e.participants?.length?e.participants:TRIP.members;
+    ps.forEach(m=>{if(owed[m]!==undefined) owed[m]+=amount/ps.length});
+  });
+  const net=Object.fromEntries(TRIP.members.map(m=>[m,paid[m]-owed[m]]));
+  return {total,paid,owed,net};
+}
+function settlementText(net){
+  if(TRIP.members.length!==2) return "多人結算：依每人淨額顯示，正數代表應收、負數代表應付。";
+  const [a,b]=TRIP.members;
+  if(Math.abs(net[a])<1) return "目前已大致結清。";
+  return net[a]>0?`${b} → ${a} ¥${Math.round(net[a]).toLocaleString()}`:`${a} → ${b} ¥${Math.round(-net[a]).toLocaleString()}`;
+}
+function renderExpenses(){
+  const s=computeExpense();
+  $("#expenseSummary").innerHTML=`<div class="eyebrow">TRIP TOTAL</div><div class="summary-total">¥${Math.round(s.total).toLocaleString()}</div>
+    <div class="list-meta">${TRIP.members.map(m=>`${esc(m)} 已付款 ¥${Math.round(s.paid[m]).toLocaleString()}`).join(" · ")}</div>
+    <div class="settlement"><b>目前結算</b><br>${esc(settlementText(s.net))}</div>`;
+  $("#expenseList").innerHTML=state.expenses.length?state.expenses.slice().reverse().map(i=>`
+    <div class="list-item"><div class="list-main"><div><div class="list-title">${esc(i.name)}</div>
+      <div class="list-meta">¥${Number(i.amount).toLocaleString()} · ${esc(i.payer)} 付款 · 分攤：${esc((i.participants||TRIP.members).join("、"))}${i.date?` · ${esc(i.date)}`:""}</div>
+      </div><button class="mini-btn" data-delete-expense="${i.id}">刪</button></div></div>`).join(""):`<div class="empty">還沒有共同支出。</div>`;
+}
+function renderNotes(){ $("#notesArea").value=state.notes||""; }
+function renderTools(){renderBookings();renderShopping();renderExpenses();renderNotes()}
+function renderAll(){renderDays();renderSchedule();renderFood();renderTools()}
+
+function switchView(v){
+  state.view=v;
+  $$(".view").forEach(x=>x.classList.toggle("active",x.id===`${v}View`));
+  $$(".nav-btn").forEach(x=>x.classList.toggle("active",x.dataset.view===v));
+  $$(".buddy-top-item").forEach(x=>x.classList.toggle("active",x.dataset.view===v));
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+function switchTool(t){
+  state.tool=t;
+  $$(".tool-card").forEach(x=>x.classList.toggle("active",x.dataset.tool===t));
+  $$(".tool-panel").forEach(x=>x.classList.toggle("active",x.id===`${t}Panel`));
+}
+function localUpsert(key,obj){
+  const arr=state[key]; const idx=arr.findIndex(x=>x.id===obj.id);
+  if(idx>=0) arr[idx]={...arr[idx],...obj}; else arr.push(obj);
+  saveLocal(key,arr);
+}
+async function cloudAdd(key,obj){
+  localUpsert(key,obj);
+  if(state.cloud){
+    try{
+      const {id,...cloudValue}=obj;
+      await addCloud(key,cloudValue);
+      $("#syncText").textContent="雲端已同步";
+    }catch(e){
+      $("#syncPill").classList.remove("cloud");
+      $("#syncText").textContent="同步失敗";
+      toast(`Firebase：${e.message}`);
+    }
+  }
+}
+async function toggleItem(key,id){
+  const item=state[key].find(x=>x.id===id); if(!item)return;
+  item.checked=!item.checked; saveLocal(key,state[key]);
+  if(state.cloud){try{await updateCloud(key,id,{checked:item.checked})}catch{}}
+}
+async function deleteItem(key,id){
+  state[key]=state[key].filter(x=>x.id!==id);saveLocal(key,state[key]);
+  if(state.cloud){try{await removeCloud(key,id)}catch{}}
+}
+function openModal(type){
+  const modal=$("#formModal"),fields=$("#modalFields"),title=$("#modalTitle");
+  modal.dataset.type=type;
+  if(type==="food"){
+    title.textContent="新增想吃店家";
+    fields.innerHTML=field("店名","name","text","例如：咖啡廳") + field("區域","location","text","例如：天神") + field("備註","note","text","想吃什麼");
+  }else if(type==="shopping"){
+    title.textContent="新增購物";
+    fields.innerHTML=field("商品","name","text","例如：On Cloud 7")+
+      selectField("誰的","owner",TRIP.members)+field("預算（JPY）","amount","number","20000")+
+      field("店家","shop","text","例如：On Fukuoka")+field("預計哪天","day","text","例如：D2");
+  }else{
+    title.textContent="新增共同支出";
+    fields.innerHTML=field("名稱","name","text","例如：勝烈亭")+field("金額（JPY）","amount","number","4800")+
+      selectField("付款人","payer",TRIP.members)+field("日期","date","date","")+
+      `<div class="field"><label>分攤成員</label><div class="checks">${TRIP.members.map(m=>`<label class="check-label"><input type="checkbox" name="participants" value="${esc(m)}" checked> ${esc(m)}</label>`).join("")}</div></div>`;
+  }
+  modal.showModal();
+}
+function field(label,name,type,placeholder){return `<div class="field"><label>${label}</label><input required name="${name}" type="${type}" placeholder="${placeholder}"></div>`}
+function selectField(label,name,opts){return `<div class="field"><label>${label}</label><select name="${name}">${opts.map(o=>`<option>${esc(o)}</option>`).join("")}</select></div>`}
+async function handleSubmit(e){
+  e.preventDefault(); const type=$("#formModal").dataset.type, fd=new FormData(e.currentTarget);
+  const base={id:uid(),name:fd.get("name")?.trim()};
+  if(type==="food"){
+    await cloudAdd("foods",{...base,location:fd.get("location")?.trim(),note:fd.get("note")?.trim(),checked:false}); renderFood();
+  }else if(type==="shopping"){
+    await cloudAdd("shopping",{...base,owner:fd.get("owner"),amount:Number(fd.get("amount")||0),shop:fd.get("shop")?.trim(),day:fd.get("day")?.trim(),checked:false}); renderShopping();
+  }else{
+    const participants=fd.getAll("participants");
+    await cloudAdd("expenses",{...base,amount:Number(fd.get("amount")||0),payer:fd.get("payer"),participants,date:fd.get("date")||japanToday()});renderExpenses();
+  }
+  $("#formModal").close();e.currentTarget.reset();toast("已儲存");
+}
+
+
+const DISPLAY_THEME_KEY="kyushu-oct-2026:displayTheme";
+const FONT_SIZE_KEY="kyushu-oct-2026:fontSize";
+const THEME_META={travel:"#A8673F",sea:"#58788C",wa:"#874B43",buddy:"#E0A93A"};
+
+function getDisplaySetting(key,fallback){
+  try{return localStorage.getItem(key)||fallback}catch{return fallback}
+}
+function applyDisplaySettings(){
+  const theme=getDisplaySetting(DISPLAY_THEME_KEY,"travel");
+  const fontSize=getDisplaySetting(FONT_SIZE_KEY,"standard");
+  document.documentElement.dataset.theme=theme;
+  document.documentElement.dataset.fontSize=fontSize;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content",THEME_META[theme]||THEME_META.travel);
+  $$("[data-theme-choice]").forEach(b=>{
+    const selected=b.dataset.themeChoice===theme;
+    b.classList.toggle("selected",selected);
+    b.setAttribute("aria-pressed",String(selected));
+  });
+  $$("[data-font-choice]").forEach(b=>{
+    const selected=b.dataset.fontChoice===fontSize;
+    b.classList.toggle("selected",selected);
+    b.setAttribute("aria-pressed",String(selected));
+  });
+}
+function setDisplayTheme(theme){
+  if(!["travel","sea","wa","buddy"].includes(theme))return;
+  try{localStorage.setItem(DISPLAY_THEME_KEY,theme)}catch{}
+  applyDisplaySettings();
+}
+function setFontSize(size){
+  if(!["standard","large","xlarge"].includes(size))return;
+  try{localStorage.setItem(FONT_SIZE_KEY,size)}catch{}
+  applyDisplaySettings();
+}
+
+function bind(){
+  if(appBound)return; appBound=true;
+  document.addEventListener("click",async e=>{
+    const themeChoice=e.target.closest("[data-theme-choice]");if(themeChoice){setDisplayTheme(themeChoice.dataset.themeChoice);return}
+    const fontChoice=e.target.closest("[data-font-choice]");if(fontChoice){setFontSize(fontChoice.dataset.fontChoice);return}
+    const d=e.target.closest("[data-day]");if(d){state.dayIndex=Number(d.dataset.day);renderDays();renderSchedule();return}
+    const n=e.target.closest("[data-view]");if(n){switchView(n.dataset.view);return}
+    const t=e.target.closest("[data-tool]");if(t){switchTool(t.dataset.tool);return}
+    const o=e.target.closest("[data-open-modal]");if(o){openModal(o.dataset.openModal);return}
+    const m=e.target.closest("[data-member]");if(m){state.shoppingMember=m.dataset.member;renderShopping();return}
+    const decision=e.target.closest("[data-decision-id]");if(decision){await chooseDecision(decision.dataset.decisionId,decision.dataset.decisionOption);return}
+    const task=e.target.closest("[data-task-id]");if(task){await toggleBookingTask(task.dataset.taskId);return}
+    for(const [attr,key,render] of [["data-check-food","foods",renderFood],["data-check-shopping","shopping",renderShopping]]){
+      const x=e.target.closest(`[${attr}]`);if(x){await toggleItem(key,x.getAttribute(attr));render();return}
+    }
+    for(const [attr,key,render] of [["data-delete-food","foods",renderFood],["data-delete-shopping","shopping",renderShopping],["data-delete-expense","expenses",renderExpenses]]){
+      const x=e.target.closest(`[${attr}]`);if(x){await deleteItem(key,x.getAttribute(attr));render();toast("已刪除");return}
+    }
+  });
+  $("#settingsBtn").addEventListener("click",()=>{$("#settingsModal").showModal();applyDisplaySettings()});
+  $("#settingsClose").addEventListener("click",()=>$("#settingsModal").close());
+  $("#settingsModal").addEventListener("click",e=>{if(e.target===$("#settingsModal"))$("#settingsModal").close()});
+  $("#displayResetBtn").addEventListener("click",()=>{
+    try{
+      localStorage.removeItem(DISPLAY_THEME_KEY);
+      localStorage.removeItem(FONT_SIZE_KEY);
+    }catch{}
+    applyDisplaySettings();
+    toast("已恢復預設顯示");
+  });
+  $("#modalClose").addEventListener("click",()=>$("#formModal").close());
+  $("#modalForm").addEventListener("submit",handleSubmit);
+  $("#firebaseTestBtn").addEventListener("click", async()=>{
+    $("#noteStatus").textContent="正在測試 Firebase…";
+    try{
+      const testValue=`Firebase test ${new Date().toISOString()}`;
+      await setCloud("_connection_test", testValue);
+      state.cloud=true;
+      $("#syncPill").classList.add("cloud");
+      $("#syncText").textContent="Firebase 已連線";
+      $("#noteStatus").textContent="✓ Firebase 讀寫測試成功";
+      toast("Firebase 測試成功");
+    }catch(err){
+      state.cloud=false;
+      $("#syncPill").classList.remove("cloud");
+      $("#syncText").textContent="同步失敗";
+      $("#noteStatus").textContent=`⚠ Firebase 測試失敗：${err.message}`;
+      toast(`Firebase：${err.message}`);
+    }
+  });
+  $("#notesArea").addEventListener("input",e=>{
+    state.notes=e.target.value;saveLocal("notes",state.notes);$("#noteStatus").textContent="本機已儲存";
+    clearTimeout(state.noteTimer);
+    state.noteTimer=setTimeout(async()=>{
+      if(state.cloud){
+        try{
+          await setCloud("notes",state.notes);
+          $("#noteStatus").textContent="✓ 雲端已同步";
+          $("#syncPill").classList.add("cloud");
+          $("#syncText").textContent="雲端已同步";
+        }catch(err){
+          $("#noteStatus").textContent=`⚠ 雲端同步失敗：${err.message}`;
+          $("#syncPill").classList.remove("cloud");
+          $("#syncText").textContent="同步失敗";
+        }
+      }else{
+        const msg=getLastFirebaseError();
+        if(msg) $("#noteStatus").textContent=`⚠ Firebase 未連線：${msg}`;
+      }
+    },650);
+  });
+  const logoutBtn=$("#logoutBtn");
+  if(logoutBtn) logoutBtn.addEventListener("click", async()=>{
+    try{ await firebase.auth().signOut(); }catch{}
+    clearPrivateCache();
+    location.reload();
+  });
+}
+
+async function connectCloud(){
+  const ok=await initFirebase();
+  if(!ok){
+    state.cloud=false;
+    $("#syncPill").classList.remove("cloud");
+    $("#syncText").textContent="Firebase 未連線";
+    const msg=getLastFirebaseError();
+    if(msg) $("#noteStatus").textContent=`⚠ Firebase 未連線：${msg}`;
+    return;
+  }
+  state.cloud=true;
+  $("#syncPill").classList.add("cloud");
+  $("#syncText").textContent="Firebase 已連線";
+  const mappings=[
+    ["foods",v=>{if(v!==null){state.foods=normalizeCloud(v);saveLocal("foods",state.foods);renderFood()}}],
+    ["shopping",v=>{if(v!==null){state.shopping=normalizeCloud(v);saveLocal("shopping",state.shopping);renderShopping()}}],
+    ["expenses",v=>{if(v!==null){state.expenses=normalizeCloud(v);saveLocal("expenses",state.expenses);renderExpenses()}}],
+    ["taskStatus",v=>{if(v && typeof v==="object"){state.taskStatus=v;saveLocal("taskStatus",v);renderBookings()}}],
+    ["decisions",v=>{if(v && typeof v==="object"){state.decisions=v;saveLocal("decisions",v);renderSchedule()}}],
+    ["notes",v=>{if(typeof v==="string" && document.activeElement!==$("#notesArea")){state.notes=v;saveLocal("notes",v);renderNotes()}}]
+  ];
+  mappings.forEach(([k,cb])=>{try{subscribe(k,cb)}catch{}});
+}
+
+
+function setAuthStatus(message,kind=""){
+  const el=$("#authStatus");
+  if(!el)return;
+  el.textContent=message||"";
+  el.dataset.kind=kind;
+}
+function showAuthGate(){
+  $("#authGate")?.removeAttribute("hidden");
+  $("#app")?.setAttribute("hidden","");
+}
+function showPrivateApp(){
+  $("#authGate")?.setAttribute("hidden","");
+  $("#app")?.removeAttribute("hidden");
+}
+function clearPrivateCache(){
+  try{
+    localStorage.removeItem(PRIVATE_CONTENT_CACHE_KEY);
+    localStorage.removeItem(PRIVATE_AUTH_CACHE_KEY);
+  }catch{}
+}
+function cacheAuthorizedTrip(content,user){
+  try{
+    localStorage.setItem(PRIVATE_CONTENT_CACHE_KEY,JSON.stringify(content));
+    localStorage.setItem(PRIVATE_AUTH_CACHE_KEY,JSON.stringify({email:user?.email||"",verifiedAt:Date.now()}));
+  }catch{}
+}
+function cachedTrip(){
+  try{
+    const content=JSON.parse(localStorage.getItem(PRIVATE_CONTENT_CACHE_KEY)||"null");
+    const auth=JSON.parse(localStorage.getItem(PRIVATE_AUTH_CACHE_KEY)||"null");
+    return content&&auth?{content,auth}:null;
+  }catch{return null}
+}
+function formatTripDate(){
+  if(!TRIP?.startDate||!TRIP?.endDate)return "";
+  const fmt=s=>{const d=new Date(`${s}T00:00:00+09:00`);return `${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")}`};
+  return `${fmt(TRIP.startDate)} — ${fmt(TRIP.endDate)}`;
+}
+function applyPrivateTripMeta(){
+  const title=$("#heroPrivateTitle"); if(title) title.textContent=TRIP.heroTitle||TRIP.title||"私人旅程";
+  const date=$("#heroPrivateDate"); if(date) date.textContent=formatTripDate();
+  const route=$("#heroPrivateRoute"); if(route) route.textContent=TRIP.heroRoute||"";
+  const season=$("#heroPrivateSeason"); if(season) season.textContent="2026・秋";
+  document.title="私人旅程";
+}
+async function fetchPrivateTrip(){
+  const content=await request(`${ROOT}/content`,{method:"GET"});
+  if(!content||!content.days) throw new Error("Firebase 尚未匯入私人行程資料");
+  return content;
+}
+async function bootTrip(content,user,{offline=false}={}){
+  TRIP=content;
+  currentAuthUser=user||null;
+  state=createState();
+  state.dayIndex=initialDay();
+  applyPrivateTripMeta();
+  applyDisplaySettings();
+  bind();
+  renderAll();
+  showPrivateApp();
+  const email=$("#accountEmail"); if(email) email.textContent=user?.email||"離線已授權裝置";
+  if(offline){
+    state.cloud=false;
+    $("#syncPill")?.classList.remove("cloud");
+    if($("#syncText")) $("#syncText").textContent="離線模式";
+    if($("#noteStatus")) $("#noteStatus").textContent="離線：變更先保存在這台裝置";
+  }else{
+    connectCloud();
+  }
+}
+async function handleAuthorizedUser(user){
+  currentAuthUser=user;
+  setAuthStatus("正在載入私人旅程…");
+  try{
+    const content=await fetchPrivateTrip();
+    cacheAuthorizedTrip(content,user);
+    await bootTrip(content,user);
+  }catch(err){
+    console.error(err);
+    if(/Permission denied|PERMISSION_DENIED|401|403|權限/i.test(String(err.message))){
+      clearPrivateCache();
+      setAuthStatus("這個 Google 帳號沒有此旅程的存取權限。","error");
+      try{await firebase.auth().signOut()}catch{}
+      showAuthGate();
+      return;
+    }
+    setAuthStatus(`無法載入私人旅程：${err.message}`,"error");
+    showAuthGate();
+  }
+}
+async function signInGoogle(){
+  if(!window.firebase?.auth){
+    setAuthStatus("Firebase 登入元件尚未載入，請確認網路連線。","error");
+    return;
+  }
+  setAuthStatus("正在開啟 Google 登入…");
+  try{
+    const provider=new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({prompt:"select_account"});
+    await firebase.auth().signInWithPopup(provider);
+  }catch(err){
+    if(["auth/popup-blocked","auth/operation-not-supported-in-this-environment","auth/cancelled-popup-request"].includes(err.code)){
+      try{
+        const provider=new firebase.auth.GoogleAuthProvider();
+        await firebase.auth().signInWithRedirect(provider);
+        return;
+      }catch(redirectErr){
+        setAuthStatus(`登入失敗：${redirectErr.message}`,"error");
+      }
+    }else if(err.code!=="auth/popup-closed-by-user"){
+      setAuthStatus(`登入失敗：${err.message}`,"error");
+    }else{
+      setAuthStatus("已取消登入。");
+    }
+  }
+}
+async function startPrivateAuth(){
+  applyDisplaySettings();
+  showAuthGate();
+  $("#googleLoginBtn")?.addEventListener("click",signInGoogle);
+
+  const cached=cachedTrip();
+  if(!navigator.onLine && cached){
+    setAuthStatus("離線模式：使用這台裝置上次已授權的行程快取。");
+    await bootTrip(cached.content,{email:cached.auth.email},{offline:true});
+    return;
+  }
+  if(!window.KYUSHU_FIREBASE_CONFIG || !FIREBASE_CONFIG.apiKey || /PASTE_/i.test(FIREBASE_CONFIG.apiKey)){
+    setAuthStatus("尚未完成 Firebase Auth 設定。請依私人設定包的 README 操作。","error");
+    return;
+  }
+  if(!window.firebase?.initializeApp){
+    if(cached && !navigator.onLine){
+      await bootTrip(cached.content,{email:cached.auth.email},{offline:true});
+      return;
+    }
+    setAuthStatus("Firebase SDK 載入失敗，請重新整理或確認網路。","error");
+    return;
+  }
+  try{
+    if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+    firebase.auth().onAuthStateChanged(user=>{
+      if(user) handleAuthorizedUser(user);
+      else { showAuthGate(); setAuthStatus("請使用已授權的 Google 帳號登入。"); }
+    });
+  }catch(err){
+    setAuthStatus(`Firebase 初始化失敗：${err.message}`,"error");
+  }
+}
+
+startPrivateAuth();
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load", async()=>{
+    try{
+      const reg = await navigator.serviceWorker.register("./sw.js?v=400",{updateViaCache:"none"});
+      await reg.update();
+    }catch(e){console.warn("Service Worker update failed",e)}
+  });
+}
