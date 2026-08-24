@@ -16,9 +16,9 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=401" />
+  <link rel="stylesheet" href="./style.css?v=420" />
   <title>私人旅程</title>
-  <meta name="app-version" content="4.0.1" />
+  <meta name="app-version" content="4.2.0" />
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -34,21 +34,21 @@
   <div id="app" hidden>
     <header class="hero theme-hero">
       <button class="settings-btn" id="settingsBtn" aria-label="顯示設定">Aa</button>
-      <div class="hero-buddy-clean-v391">
-        <div class="hero-copy hero-copy-buddy-v391">
+      <div class="buddy-hero-v42">
+        <img class="buddy-hero-cloud cloud-a buddy-only-art" src="./travel_cloud.png?v=420" alt="" aria-hidden="true" />
+        <img class="buddy-hero-cloud cloud-b buddy-only-art" src="./travel_cloud.png?v=420" alt="" aria-hidden="true" />
+        <img class="buddy-hero-maple maple-a buddy-only-art" src="./travel_maple.png?v=420" alt="" aria-hidden="true" />
+        <img class="buddy-hero-maple maple-b buddy-only-art" src="./travel_maple.png?v=420" alt="" aria-hidden="true" />
+        <div class="hero-copy buddy-hero-copy">
           <span class="buddy-season" id="heroPrivateSeason"></span>
           <h1 id="heroPrivateTitle">私人旅程</h1>
           <div class="hero-date" id="heroPrivateDate"></div>
           <div class="hero-route" id="heroPrivateRoute"></div>
         </div>
-        <div class="hero-character-stage buddy-only-art">
-          <div class="hero-character-big purin-big">
-            <img src="./purin_hero.png?v=401" alt="布丁狗" />
-          </div>
-          <div class="hero-character-big usagi-big">
-            <img src="./usagi_hero.png?v=401" alt="烏薩奇" />
-          </div>
-        </div>
+        <button type="button" class="buddy-hero-art buddy-only-art" id="buddyHeroEgg" aria-label="旅伴彩蛋">
+          <img src="./buddy_hero.png?v=420" alt="布丁狗與烏薩奇" />
+        </button>
+        <div class="buddy-hero-hint buddy-only-art">tap ♡</div>
       </div>
     </header>
 
@@ -67,6 +67,7 @@
             <div class="weather-icon" id="weatherIcon">☁️</div>
           </div>
           <div class="rain-box" id="rainBox"></div>
+          <div class="weather-buddy-slot buddy-only-art" id="weatherBuddySlot" aria-hidden="true"></div>
         </section>
         <section class="day-title">
           <div>
@@ -74,6 +75,7 @@
             <h2 id="dayTitle">行程</h2>
           </div>
           <p id="daySubtitle"></p>
+          <div class="day-stamp buddy-only-art" id="dayStamp" aria-hidden="true"></div>
         </section>
         <section id="dayBrief" class="day-brief"></section>
         <div id="decisionArea"></div>
@@ -87,12 +89,12 @@
             <h2>餐廳與吃飯計畫</h2>
             <p>先看已安排／候選餐廳；臨時不知道吃什麼時，再用「附近找吃的」。</p>
           </div>
-          <img class="buddy-food-purin buddy-only-art" src="./purin_food.png?v=390" alt="布丁狗" />
+          <img class="buddy-food-duo buddy-only-art" src="./buddy_eat.png?v=420" alt="布丁狗與烏薩奇吃東西" />
         </div>
 
         <div class="card">
           <div class="card-title-row"><div><div class="eyebrow">已安排／候選</div><h3>已安排／候選</h3></div></div>
-          <div id="plannedFood" class="planned-food-list"></div>
+          <div class="food-decor buddy-only-art"><img src="./purin_pudding.png?v=420" alt=""><img src="./purin_spoon.png?v=420" alt=""></div><div id="plannedFood" class="planned-food-list"></div>
         </div>
 
         <div class="food-nearby">
@@ -115,9 +117,9 @@
       </section>
 
       <section id="toolsView" class="view">
-        <div class="section-heading">
-          <span class="eyebrow">旅行工具</span>
-          <h2>旅程工具</h2>
+        <div class="section-heading tools-heading-v42">
+          <div><span class="eyebrow">旅行工具</span><h2>旅程工具</h2></div>
+          <div class="tools-heading-icons buddy-only-art"><img src="./travel_suitcase.png?v=420" alt=""><img src="./travel_ticket.png?v=420" alt=""></div>
         </div>
         <div id="toolMenu" class="tool-grid">
           <button class="tool-card active" data-tool="booking"><span>🎫</span><b>訂位票券</b><small>訂位・票券</small></button>
@@ -127,34 +129,34 @@
         </div>
 
         <div id="bookingPanel" class="tool-panel active">
-          <div class="panel-heading panel-heading-with-art clean-panel-art">
+          <div class="panel-heading panel-heading-with-art buddy-panel-head booking-head-v42">
             <div><span class="eyebrow">待辦與搶票</span><h3>訂位／搶票倒數任務</h3></div>
-            <img class="panel-art buddy-only-art" src="./usagi_task.png?v=390" alt="烏薩奇" />
+            <div class="panel-art-stack buddy-only-art"><img class="booking-ticket-art" src="./travel_ticket.png?v=420" alt=""><img class="booking-usagi-art" src="./usagi_dash.png?v=420" alt="烏薩奇衝刺"></div>
           </div>
           <p class="privacy-note">私人 QR Code、完整訂位編號不要寫進公開 GitHub 原始碼；可放在記事或你自己的受保護雲端連結。</p>
           <div id="bookingList" class="list-stack"></div>
         </div>
 
         <div id="shoppingPanel" class="tool-panel">
-          <div class="panel-heading">
+          <div class="panel-heading buddy-panel-head">
             <div><span class="eyebrow">採買</span><h3>購物清單</h3></div>
-            <button class="icon-btn" data-open-modal="shopping" aria-label="新增購物">＋</button>
+            <div class="panel-actions-with-art"><img class="shopping-art buddy-only-art" src="./travel_shopping.png?v=420" alt=""><button class="icon-btn" data-open-modal="shopping" aria-label="新增購物">＋</button></div>
           </div>
           <div id="shoppingSummary" class="member-pills"></div>
           <div id="shoppingList" class="list-stack"></div>
         </div>
 
         <div id="expensePanel" class="tool-panel">
-          <div class="panel-heading">
+          <div class="panel-heading buddy-panel-head">
             <div><span class="eyebrow">共同花費</span><h3>共同花費</h3></div>
-            <button class="icon-btn" data-open-modal="expense" aria-label="新增支出">＋</button>
+            <div class="panel-actions-with-art"><img class="expense-art buddy-only-art" src="./travel_camera.png?v=420" alt=""><button class="icon-btn" data-open-modal="expense" aria-label="新增支出">＋</button></div>
           </div>
           <div id="expenseSummary" class="summary-card"></div>
           <div id="expenseList" class="list-stack"></div>
         </div>
 
         <div id="notePanel" class="tool-panel">
-          <div class="panel-heading"><div><span class="eyebrow">共用記事</span><h3>共用記事</h3></div></div>
+          <div class="panel-heading"><div><span class="eyebrow">共用記事</span><h3>共用記事</h3></div></div><div class="notes-chill buddy-only-art"><img src="./buddy_chill.png?v=420" alt="布丁狗與烏薩奇休息"></div>
           <textarea id="notesArea" class="notes-area" placeholder="行前提醒、臨時備註、想買的東西…"></textarea>
           <button type="button" class="primary-btn" id="firebaseTestBtn" style="margin-top:10px">測試 Firebase 連線</button>
           <div id="noteStatus" class="save-status">輸入後自動儲存</div>
@@ -188,21 +190,20 @@
         <div class="setting-label"><b>網站風格</b><small>三套版面結構不同，只共用同一份行程資料。</small></div>
         <div class="theme-preview-grid">
           <button type="button" class="theme-preview-card theme-preview-travel" data-theme-choice="travel">
-            <span class="preview-paper"><span class="preview-kicker">2026・秋</span><span class="preview-title">九州 秋旅</span><span class="preview-line"></span><span class="preview-row"><i>21:00</i><b>肉一 博多店</b></span><span class="preview-row"><i>D3</i><b>百道夕陽</b></span></span>
+            <span class="preview-paper"><span class="preview-kicker">2026・秋</span><span class="preview-title">九州 秋旅</span><span class="preview-line"></span><span class="preview-row"><i>21:00</i><b>晚餐預約</b></span><span class="preview-row"><i>D3</i><b>夕陽散步</b></span></span>
             <span class="theme-preview-copy"><b>旅冊</b><small>日本旅遊雜誌・紙張感</small></span><em>預設</em>
           </button>
           <button type="button" class="theme-preview-card theme-preview-sea" data-theme-choice="sea">
-            <span class="preview-sea"><span class="preview-sun"></span><span class="preview-wave"></span><span class="preview-time">17:50</span><span class="preview-place">百道海濱</span></span>
+            <span class="preview-sea"><span class="preview-sun"></span><span class="preview-wave"></span><span class="preview-time">17:50</span><span class="preview-place">海邊散步</span></span>
             <span class="theme-preview-copy"><b>海空</b><small>清爽留白・現代旅行 App</small></span><em></em>
           </button>
           <button type="button" class="theme-preview-card theme-preview-wa" data-theme-choice="wa">
-            <span class="preview-washi"><span class="preview-seal">九州</span><span class="preview-wa-line"></span><span class="preview-wa-row">十月十一日　百道</span><span class="preview-wa-row">十月十五日　高千穗</span></span>
+            <span class="preview-washi"><span class="preview-seal">九州</span><span class="preview-wa-line"></span><span class="preview-wa-row">十月十一日　散步</span><span class="preview-wa-row">十月十五日　自然景色</span></span>
             <span class="theme-preview-copy"><b>和風</b><small>御朱印帳・旅館・紀念章</small></span><em></em>
           </button>
           <button type="button" class="theme-preview-card theme-preview-buddy" data-theme-choice="buddy">
-            <span class="preview-buddy">
-              <img class="buddy-mini buddy-mini-purin-img" src="./purin_sticker.png?v=390" alt="布丁狗" />
-              <img class="buddy-mini buddy-mini-usagi-img" src="./usagi_sticker.png?v=390" alt="烏薩奇" />
+            <span class="preview-buddy preview-buddy-v42">
+              <img class="buddy-mini-duo" src="./buddy_hero.png?v=420" alt="" />
               <span class="buddy-mini-title">九州 秋旅</span>
               <span class="buddy-mini-note">旅伴手帳 ♡</span>
             </span>
@@ -230,10 +231,15 @@
     </form>
   </dialog>
 
+  <div id="buddyPeekLayer" class="buddy-peek-layer buddy-only-art" aria-hidden="true"></div>
+  <div id="buddyCelebration" class="buddy-celebration buddy-only-art" aria-hidden="true">
+    <div class="buddy-celebrate-card"><img id="buddyCelebrateImg" src="./buddy_success.png?v=420" alt=""><div id="buddyCelebrateText">完成！</div></div>
+  </div>
+  <div id="buddySparkLayer" class="buddy-spark-layer buddy-only-art" aria-hidden="true"></div>
   <div id="toast" class="toast" role="status"></div>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-  <script defer src="./firebase-config.js?v=400"></script>
-  <script defer src="./app.js?v=401"></script>
+  <script defer src="./firebase-config.js?v=420"></script>
+  <script defer src="./app.js?v=420"></script>
 </body>
 </html>

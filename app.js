@@ -133,6 +133,45 @@ function initialDay(){
   return idx>=0?idx:0;
 }
 function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1600)}
+function isBuddyTheme(){return document.documentElement.dataset.theme==="buddy"}
+function buddySparkBurst(x=50,y=45){
+  if(!isBuddyTheme()) return;
+  const layer=$("#buddySparkLayer"); if(!layer)return;
+  const parts=["✦","✧","★","✦","♡","✧","★"];
+  layer.innerHTML=parts.map((p,i)=>`<i style="--i:${i};--x:${x+(i-3)*7}%;--y:${y+(i%2?3:-3)}%">${p}</i>`).join("");
+  layer.classList.remove("play"); void layer.offsetWidth; layer.classList.add("play");
+  setTimeout(()=>{layer.classList.remove("play");layer.innerHTML=""},1100);
+}
+function buddyCelebrate(text="完成！",image="./buddy_success.png?v=420"){
+  if(!isBuddyTheme())return;
+  const wrap=$("#buddyCelebration"),img=$("#buddyCelebrateImg"),label=$("#buddyCelebrateText"); if(!wrap)return;
+  img.src=image; label.textContent=text; wrap.classList.remove("show"); void wrap.offsetWidth; wrap.classList.add("show"); buddySparkBurst(50,42);
+  clearTimeout(buddyCelebrate._t); buddyCelebrate._t=setTimeout(()=>wrap.classList.remove("show"),1350);
+}
+function buddyPeek(kind="purin"){
+  if(!isBuddyTheme())return;
+  const layer=$("#buddyPeekLayer"); if(!layer)return;
+  const key=`buddyPeek:${kind}`;
+  try{if(sessionStorage.getItem(key))return;sessionStorage.setItem(key,"1")}catch{}
+  const src=kind==="purin"?"./purin_peek_edge.png?v=420":"./usagi_peek.png?v=420";
+  layer.innerHTML=`<img class="peek-${kind}" src="${src}" alt="">`;
+  layer.className=`buddy-peek-layer buddy-only-art show ${kind}`;
+  setTimeout(()=>{layer.className="buddy-peek-layer buddy-only-art";layer.innerHTML=""},2600);
+}
+function dayStampAsset(index){
+  if(index===0||index===9)return ["./travel_plane.png?v=420","飛機"];
+  if([3,7,8].includes(index))return ["./travel_train.png?v=420","新幹線"];
+  if([4,5,6].includes(index))return ["./travel_onsen.png?v=420","溫泉"];
+  return ["./travel_camera.png?v=420","相機"];
+}
+function renderDayStamp(){
+  const el=$("#dayStamp"); if(!el)return; const [src,alt]=dayStampAsset(state.dayIndex); el.innerHTML=`<img src="${src}" alt="${alt}"><img class="stamp-maple" src="./travel_maple.png?v=420" alt="">`;
+}
+function updateWeatherBuddy(hasRain=false){
+  const el=$("#weatherBuddySlot"); if(!el)return;
+  el.innerHTML=hasRain?`<img class="weather-usagi-rain" src="./usagi_weather.png?v=420" alt="雨天烏薩奇">`:`<img class="weather-cloud-art" src="./travel_cloud.png?v=420" alt="">`;
+}
+
 function normalizeCloud(val){
   if(!val)return[];
   return Array.isArray(val)?val:Object.entries(val).map(([id,v])=>({...v,id}));
@@ -175,6 +214,7 @@ async function chooseDecision(id, option){
   saveLocal("decisions",state.decisions);
   if(state.cloud){try{await setCloud("decisions",state.decisions)}catch{}}
   renderSchedule();
+  buddyCelebrate("決定好啦！","./usagi_success.png?v=420");
 }
 function renderDecisionCards(day){
   const ids=day.decisionIds||[];
@@ -184,7 +224,7 @@ function renderDecisionCards(day){
     const selected=selectedDecision(id);
     const checklist=(d.checklist||[]).length?`<div class="decision-checks">${d.checklist.map(x=>`<div>□ ${esc(x)}</div>`).join("")}</div>`:"";
     return `<section class="decision-card">
-      <img class="decision-usagi-art buddy-only-art" src="./usagi_decision.png?v=390" alt="烏薩奇">
+      <img class="decision-usagi-art buddy-only-art" src="./usagi_think.png?v=420" alt="烏薩奇">
       <div class="decision-kicker">行程選擇</div>
       <h3>${esc(d.title)}</h3>
       <p>${esc(d.hint||"")}</p>
@@ -270,6 +310,7 @@ function renderSchedule(){
   $("#dayTitle").textContent=d.title;
   $("#daySubtitle").textContent=d.subtitle;
   renderDayBrief(d);
+  renderDayStamp();
   $("#decisionArea").innerHTML=renderDecisionCards(d);
   const visibleEvents=d.events.filter(eventVisible);
   $("#timeline").innerHTML=visibleEvents.map((e,i)=>`
@@ -297,18 +338,18 @@ async function renderWeather(d){
     if(w.state!=="forecast"){
       $("#weatherTemp").textContent="—";
       $("#weatherDesc").textContent=w.message;
-      $("#rainBox").innerHTML="進入預報範圍後，這裡會顯示高低溫、降雨機率與預計下雨時段。";
+      $("#rainBox").innerHTML="進入預報範圍後，這裡會顯示高低溫、降雨機率與預計下雨時段。"; updateWeatherBuddy(false);
     }else{
       $("#weatherIcon").textContent=w.icon;
       $("#weatherTemp").textContent=w.current!==null?`${w.current}° · ${w.high}° / ${w.low}°`:`${w.high}° / ${w.low}°`;
       $("#weatherDesc").textContent=`${w.desc} · 全日最高降雨機率 ${w.rainMax}%`;
       if(w.rainGroups.length){
-        $("#rainBox").innerHTML=w.rainGroups.slice(0,2).map(g=>`<div class="rain-alert">🌧️ 預計 ${g.start}–${g.end} 有雨 · 最高 ${g.maxProb}%</div>`).join("");
-      }else $("#rainBox").innerHTML="☂️ 目前預報沒有明顯連續降雨時段。";
+        $("#rainBox").innerHTML=w.rainGroups.slice(0,2).map(g=>`<div class="rain-alert">🌧️ 預計 ${g.start}–${g.end} 有雨 · 最高 ${g.maxProb}%</div>`).join(""); updateWeatherBuddy(true);
+      }else { $("#rainBox").innerHTML="☂️ 目前預報沒有明顯連續降雨時段。"; updateWeatherBuddy(false); }
     }
   }catch(e){
     $("#weatherTemp").textContent="—";$("#weatherDesc").textContent="天氣暫時無法更新";
-    $("#rainBox").textContent="保留上次行程資料；網路恢復後重新切換日期即可再抓。";
+    $("#rainBox").textContent="保留上次行程資料；網路恢復後重新切換日期即可再抓。"; updateWeatherBuddy(false);
   }finally{card.classList.remove("skeleton")}
 }
 
@@ -350,10 +391,15 @@ function countdownText(task){
 }
 async function toggleBookingTask(id){
   const task=TRIP.bookingTasks.find(t=>t.id===id); if(!task)return;
-  state.taskStatus[id]=!taskDone(task);
+  const wasDone=taskDone(task);
+  state.taskStatus[id]=!wasDone;
   saveLocal("taskStatus",state.taskStatus);
   if(state.cloud){try{await setCloud("taskStatus",state.taskStatus)}catch{}}
   renderBookings();
+  if(!wasDone){
+    const allDone=TRIP.bookingTasks.every(taskDone);
+    buddyCelebrate(allDone?"全部搞定！":"完成一項！",allDone?"./buddy_celebrate.png?v=420":"./usagi_success.png?v=420");
+  }
 }
 function bookingTaskCard(t){
   const done=taskDone(t);
@@ -442,6 +488,8 @@ function switchView(v){
   $$(".nav-btn").forEach(x=>x.classList.toggle("active",x.dataset.view===v));
   $$(".buddy-top-item").forEach(x=>x.classList.toggle("active",x.dataset.view===v));
   window.scrollTo({top:0,behavior:"smooth"});
+  if(v==="food") setTimeout(()=>buddyPeek("purin"),450);
+  if(v==="tools") setTimeout(()=>buddyPeek("usagi"),450);
 }
 function switchTool(t){
   state.tool=t;
@@ -489,7 +537,7 @@ function openModal(type){
       field("店家","shop","text","例如：On Fukuoka")+field("預計哪天","day","text","例如：D2");
   }else{
     title.textContent="新增共同支出";
-    fields.innerHTML=field("名稱","name","text","例如：勝烈亭")+field("金額（JPY）","amount","number","4800")+
+    fields.innerHTML=field("名稱","name","text","例如：晚餐")+field("金額（JPY）","amount","number","4800")+
       selectField("付款人","payer",TRIP.members)+field("日期","date","date","")+
       `<div class="field"><label>分攤成員</label><div class="checks">${TRIP.members.map(m=>`<label class="check-label"><input type="checkbox" name="participants" value="${esc(m)}" checked> ${esc(m)}</label>`).join("")}</div></div>`;
   }
@@ -540,6 +588,7 @@ function setDisplayTheme(theme){
   if(!["travel","sea","wa","buddy"].includes(theme))return;
   try{localStorage.setItem(DISPLAY_THEME_KEY,theme)}catch{}
   applyDisplaySettings();
+  if(theme==="buddy")setTimeout(()=>buddySparkBurst(50,32),120);
 }
 function setFontSize(size){
   if(!["standard","large","xlarge"].includes(size))return;
@@ -560,12 +609,21 @@ function bind(){
     const decision=e.target.closest("[data-decision-id]");if(decision){await chooseDecision(decision.dataset.decisionId,decision.dataset.decisionOption);return}
     const task=e.target.closest("[data-task-id]");if(task){await toggleBookingTask(task.dataset.taskId);return}
     for(const [attr,key,render] of [["data-check-food","foods",renderFood],["data-check-shopping","shopping",renderShopping]]){
-      const x=e.target.closest(`[${attr}]`);if(x){await toggleItem(key,x.getAttribute(attr));render();return}
+      const x=e.target.closest(`[${attr}]`);if(x){const id=x.getAttribute(attr);const before=state[key].find(i=>i.id===id)?.checked;await toggleItem(key,id);render();if(!before)buddyCelebrate(key==="foods"?"收進美食清單！":"買到啦！",key==="foods"?"./purin_clap.png?v=420":"./buddy_success.png?v=420");return}
     }
     for(const [attr,key,render] of [["data-delete-food","foods",renderFood],["data-delete-shopping","shopping",renderShopping],["data-delete-expense","expenses",renderExpenses]]){
       const x=e.target.closest(`[${attr}]`);if(x){await deleteItem(key,x.getAttribute(attr));render();toast("已刪除");return}
     }
   });
+  const heroEgg=$("#buddyHeroEgg");
+  if(heroEgg){
+    let taps=0,tapTimer=null,holdTimer=null;
+    const resetTap=()=>{clearTimeout(tapTimer);tapTimer=setTimeout(()=>taps=0,1200)};
+    heroEgg.addEventListener("click",()=>{taps++;resetTap();if(taps>=5){taps=0;buddyCelebrate("旅伴集合！","./buddy_celebrate.png?v=420")}});
+    ["pointerdown","touchstart"].forEach(ev=>heroEgg.addEventListener(ev,()=>{clearTimeout(holdTimer);holdTimer=setTimeout(()=>buddyCelebrate("找到隱藏彩蛋 ♡","./buddy_celebrate.png?v=420"),900)},{passive:true}));
+    ["pointerup","pointercancel","pointerleave","touchend"].forEach(ev=>heroEgg.addEventListener(ev,()=>clearTimeout(holdTimer),{passive:true}));
+  }
+  $("#buddyCelebration")?.addEventListener("click",()=>$("#buddyCelebration").classList.remove("show"));
   $("#settingsBtn").addEventListener("click",()=>{$("#settingsModal").showModal();applyDisplaySettings()});
   $("#settingsClose").addEventListener("click",()=>$("#settingsModal").close());
   $("#settingsModal").addEventListener("click",e=>{if(e.target===$("#settingsModal"))$("#settingsModal").close()});
@@ -807,7 +865,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=401",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=420",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });

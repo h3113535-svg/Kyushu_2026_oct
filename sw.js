@@ -1,7 +1,43 @@
-const CACHE = "kyushu-private-v4.0.0";
+const CACHE = "kyushu-private-v4.2.0";
 const SHELL = [
-  "./","./index.html","./style.css?v=401","./app.js?v=401",
-  "./manifest.json","./firebase-config.js?v=400","./icon-192.png","./icon-512.png"
+  "./","./index.html","./style.css?v=420","./app.js?v=420",
+  "./manifest.json","./firebase-config.js?v=420","./icon-192.png","./icon-512.png",
+  "./buddy_celebrate.png",
+  "./buddy_chill.png",
+  "./buddy_eat.png",
+  "./buddy_hero.png",
+  "./buddy_success.png",
+  "./purin_surprise.png",
+  "./purin_clap.png",
+  "./purin_lie.png",
+  "./purin_pudding.png",
+  "./purin_beret.png",
+  "./purin_spoon.png",
+  "./purin_spoon_alt.png",
+  "./purin_paw.png",
+  "./purin_peek.png",
+  "./purin_peek_edge.png",
+  "./purin_walk.png",
+  "./usagi_excited.png",
+  "./usagi_point.png",
+  "./usagi_think.png",
+  "./usagi_sleep.png",
+  "./usagi_stars.png",
+  "./usagi_motion.png",
+  "./usagi_sweat.png",
+  "./usagi_peek.png",
+  "./usagi_dash.png",
+  "./usagi_success.png",
+  "./travel_suitcase.png",
+  "./travel_ticket.png",
+  "./travel_cloud.png",
+  "./travel_coffee.png",
+  "./travel_camera.png",
+  "./travel_plane.png",
+  "./travel_train.png",
+  "./travel_maple.png",
+  "./travel_onsen.png",
+  "./travel_shopping.png"
 ];
 
 self.addEventListener("install", event => {
@@ -43,6 +79,6 @@ self.addEventListener("fetch", event => {
         caches.open(CACHE).then(cache => cache.put(event.request, copy));
         return response;
       })
-      .catch(() => caches.match(event.request))
+      .catch(() => caches.match(event.request,{ignoreSearch:true}))
   );
 });
