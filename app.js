@@ -202,12 +202,11 @@ function dailySceneAsset(index){
   return `./day-scene-${String(index+1).padStart(2,"0")}.webp?v=460`;
 }
 function renderDailyScene(){
-  const img=$("#daySceneImage"), progress=$("#daySceneProgress"), bar=$("#daySceneProgressBar");
+  const img=$("#daySceneImage"), bar=$("#daySceneProgressBar");
   if(!img)return;
   const src=dailySceneAsset(state.dayIndex);
   if(img.getAttribute("src")!==src) img.src=src;
   img.alt=`D${state.dayIndex+1} 布丁狗與烏薩奇旅行主題插畫`;
-  if(progress) progress.textContent=`${state.dayIndex+1} / ${TRIP.days.length}`;
   if(bar) bar.style.width=`${((state.dayIndex+1)/TRIP.days.length)*100}%`;
 }
 

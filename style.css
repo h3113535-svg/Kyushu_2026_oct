@@ -2343,10 +2343,9 @@ html[data-theme="buddy"] .day-scene-card>img{
   transform:scale(1.015);filter:drop-shadow(0 6px 8px rgba(78,58,43,.06));
 }
 html[data-theme="buddy"] .day-scene-progress{
-  position:absolute;z-index:2;left:13px;right:13px;bottom:9px;display:flex;align-items:center;gap:9px;
+  position:absolute;z-index:2;left:18px;right:18px;bottom:9px;display:flex;align-items:center;
   pointer-events:none;
 }
-html[data-theme="buddy"] .day-scene-progress b{font-size:9px;color:#735b46;white-space:nowrap;letter-spacing:.05em}
 html[data-theme="buddy"] .day-scene-progress i{display:block;height:4px;flex:1;border-radius:99px;background:rgba(137,108,73,.14);overflow:hidden}
 html[data-theme="buddy"] .day-scene-progress em{display:block;height:100%;border-radius:99px;background:#e2b44d;transition:width .28s ease}
 html[data-theme="buddy"] .day-scene-card:active>img{transform:scale(.995)}
