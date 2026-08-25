@@ -2441,3 +2441,52 @@ html[data-theme="buddy"][data-font-size="large"] .day-title-v46 #dayTitle,
 html[data-theme="buddy"][data-font-size="xlarge"] .day-title-v46 #dayTitle{white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
 html[data-theme="buddy"][data-font-size="xlarge"] .day-title-v46 #dayTitle{font-size:clamp(19px,5.15vw,27px)!important}
 @media(prefers-reduced-motion:reduce){html[data-theme="buddy"] .day-scene-progress em{transition:none}}
+
+
+/* =========================================================
+   v4.7.0 — contextual buddy dialogue + reaction effects
+   ========================================================= */
+html[data-theme="buddy"] .toast{
+  max-width:min(86vw,430px);
+  text-align:center;
+  font-size:12px;
+  font-weight:800;
+  line-height:1.35;
+  letter-spacing:.01em;
+  background:#5d493b;
+  box-shadow:0 8px 24px rgba(83,62,48,.18);
+}
+html[data-theme="buddy"] .toast[data-tone="weather"]{background:#607e9d}
+html[data-theme="buddy"] .toast[data-tone="food"]{background:#a66f63}
+html[data-theme="buddy"] .toast[data-tone="booking"]{background:#7d684f}
+html[data-theme="buddy"] .toast[data-tone="shop"]{background:#9d6b7d}
+html[data-theme="buddy"] .toast[data-tone="money"]{background:#766953}
+html[data-theme="buddy"] .toast[data-tone="note"]{background:#7f6e83}
+html[data-theme="buddy"] .toast[data-tone="hotel"]{background:#6f647e}
+html[data-theme="buddy"] .toast[data-tone="day"],
+html[data-theme="buddy"] .toast[data-tone="duo"]{background:#6d5948}
+
+html[data-theme="buddy"] .buddy-spark-layer[data-tone="weather"] i{color:#78aedd}
+html[data-theme="buddy"] .buddy-spark-layer[data-tone="food"] i{color:#e59aaa}
+html[data-theme="buddy"] .buddy-spark-layer[data-tone="booking"] i{color:#f1bd49}
+html[data-theme="buddy"] .buddy-spark-layer[data-tone="shop"] i{color:#e5a0b5}
+html[data-theme="buddy"] .buddy-spark-layer[data-tone="money"] i{color:#c89b50}
+html[data-theme="buddy"] .buddy-spark-layer[data-tone="note"] i{color:#b99ac5}
+html[data-theme="buddy"] .buddy-spark-layer[data-tone="hotel"] i{color:#b9a8d0}
+
+html[data-theme="buddy"] .weather-usagi-rain{
+  width:82px!important;
+  height:112px!important;
+  object-fit:contain!important;
+  object-position:center bottom!important;
+}
+html[data-theme="buddy"] .weather-buddy-slot.is-rain .weather-usagi-rain{
+  animation:buddyRainBounce 1.9s ease-in-out infinite;
+}
+@keyframes buddyRainBounce{
+  0%,100%{transform:translateY(-1px) rotate(-1deg)}
+  50%{transform:translateY(-5px) rotate(1deg)}
+}
+@media (max-width:520px){
+  html[data-theme="buddy"] .weather-usagi-rain{width:72px!important;height:101px!important}
+}

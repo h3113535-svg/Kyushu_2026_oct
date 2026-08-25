@@ -1,8 +1,10 @@
-/* Private travel PWA · Firebase Auth gated content · v4.0.0 */
+/* Private travel PWA · Firebase Auth gated content · v4.7.0 Buddy Dialogue */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
 const ROOT = window.KYUSHU_PRIVATE_PATH || "trips/kyushu-oct-2026";
+const OFFICIAL_TRIP_START = "2026-10-09";
+const OFFICIAL_TRIP_END = "2026-10-18";
 const PRIVATE_CONTENT_CACHE_KEY = "kyushu-private:content-cache";
 const PRIVATE_AUTH_CACHE_KEY = "kyushu-private:auth-cache";
 let TRIP = null;
@@ -16,7 +18,7 @@ const pollers = new Set();
 const BUDDY_FAST_ASSETS=[
   "./day-scene-01.webp?v=460","./day-scene-02.webp?v=460","./day-scene-03.webp?v=460","./day-scene-04.webp?v=460","./day-scene-05.webp?v=460",
   "./day-scene-06.webp?v=460","./day-scene-07.webp?v=460","./day-scene-08.webp?v=460","./day-scene-09.webp?v=460","./day-scene-10.webp?v=460",
-  "./usagi_weather.png?v=462","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
+  "./weather-rain-usagi-v47.webp?v=470","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
   "./ui-cloud.webp?v=440","./ui-coffee.webp?v=440","./ui-suitcase.webp?v=440","./ui-purin-tip.webp?v=440"
 ];
 const buddyFastImageCache=[];
@@ -140,7 +142,7 @@ function esc(v=""){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt
 function mapSearch(q){return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`}
 function mapNav(q,mode="driving"){return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}&travelmode=${mode}`}
 function japanToday(){
-  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:TRIP.timezone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:TRIP?.timezone||"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
   const o=Object.fromEntries(parts.filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
   return `${o.year}-${o.month}-${o.day}`;
 }
@@ -149,39 +151,211 @@ function initialDay(){
   const idx=TRIP.days.findIndex(d=>d.date===today);
   return idx>=0?idx:0;
 }
-function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1600)}
+
+const BUDDY_DIALOG={
+  purin:[
+    "慢慢走也很好 ♡","先吃飽再出發！","今天也要舒服旅行～","不急不急，慢慢來。",
+    "休息一下也沒關係 ♡","今天一定會很好玩～","拍張照片再走吧！","要不要先找個地方坐一下？",
+    "好喜歡今天的行程 ♡","旅行就是要開開心心～"
+  ],
+  usagi:[
+    "出發！！","往這邊！","好耶！繼續走！","蛤？","衝啊啊啊！",
+    "嗚拉","呀哈！","嗚拉呀哈呀哈嗚拉～","哼～？","噗嚕"
+  ],
+  duo:[
+    "今天也一起走 ♡","一起出發！","九州探險中！","今天也要玩得開心！","下一站去哪裡？",
+    "兩個人一起就好玩 ♡","今天又收集到一個回憶！","旅程繼續——！","今天的進度很順利！",
+    "再拍一張再走！","我們是鴨寶幫！"
+  ],
+  weather:{
+    sunny:["今天適合出去玩！","天氣很好耶 ♡","拍照日！","今天可以放心跑行程～"],
+    rain:["雨雨雨——！！","傘帶了嗎！","下雨也要玩！","雨衣裝備完成！","小心不要淋濕！","雨小一點再衝！！"],
+    cloudy:["陰天也很好拍～","今天慢慢走就好。"]
+  },
+  food:{
+    purin:["這個看起來好好吃 ♡","先吃再說～","甜點也算正餐吧？","再吃一間嘛。","今天要吃好吃的！","吃飽才有力氣旅行～","這間我可以！","留一點肚子吃甜點 ♡"],
+    usagi:["吃這間！！","下一間！","找吃的！出發！","我還吃得下！！"],
+    complete:["收進美食清單！","今天又吃到一間 ♡","美食成就＋1！"]
+  },
+  booking:{
+    reminder:["這個記得要預約！","還有一個任務沒完成。","先確認一下時間～","清單確認中 ✓"],
+    urgent:["準備開搶！！","時間到了！！","衝啊啊啊啊！！","手指準備好了嗎！","不可以忘記！！","剩最後一步！"],
+    complete:["搶到了！！","完成一項！","任務完成 ✓","太好了，搞定！"],
+    all:["全部搞定！！","搶票任務全部完成！","可以安心去玩了 ♡"]
+  },
+  shop:{
+    general:["這間也要逛！","再一家就好！","先進去看一下！","有沒有特殊色！","戰利品搜尋中～","今天是購物日！"],
+    complete:["買到啦！！","戰利品＋1！","這個帶回家 ♡","購物任務完成！"],
+    purin:["買完去喝咖啡吧～","提袋變多了耶…","這個好可愛 ♡"]
+  },
+  money:[
+    "這筆記下來！","記帳完成 ✓","今天花多少了？","旅費紀錄＋1","欸……又買了？",
+    "旅行就是要花一點嘛 ♡","先記下來，回去再算！","分帳交給我！","錢包還好嗎……","有記就不怕忘記！"
+  ],
+  note:[
+    "先記下來 ♡","等一下不要忘記！","旅行備忘＋1","想到什麼就寫下來～",
+    "這個之後會用到！","今天的回憶也記一下。","收藏今天的小事情 ♡","筆記完成 ✓"
+  ],
+  hotel:{
+    normal:["回飯店囉～","今天辛苦了 ♡","回去躺平！","今天走好多！！","洗澡睡覺！","終於可以休息了～","泡完澡就睡覺吧。","明天再繼續玩 ♡"],
+    late:["已經很晚了耶～","今天到這裡就好。","快回去休息！","晚安，明天見 ♡"]
+  },
+  day:[
+    ["九州，我們來啦！！","旅行正式開始 ♡","第一站：福岡！"],
+    ["今天火力全開逛街！","購物袋準備好了嗎？","天神 → 大名 → Canal City，出發！"],
+    ["海豹在哪裡！！","今天要看海、拍夕陽 ♡","記得留體力拍夜景！"],
+    ["今天慢慢散步就好～","甜點、散步、泡湯 ♡","由布院 CHILL DAY！"],
+    ["今天來兜風！","山路慢慢開，風景慢慢看。","星空看得到嗎 ♡"],
+    ["阿蘇大冒險繼續！","牛奶、赤牛、出發高千穗！","今天也要一路吃一路玩～"],
+    ["划船成功！！！","今天是高千穗大冒險！","牛排也不能錯過！"],
+    ["火山今天有開嗎？","草千里拍完，前進熊本！","今天移動很多，慢慢來～"],
+    ["鋼彈朝聖日！！","今天要把最後想買的買齊！","夕陽＋鋼彈，拍爆！"],
+    ["最後一天了 QAQ","再逛一下再回家嘛。","九州，下次再見 ♡"]
+  ],
+  egg:[
+    "找到隱藏彩蛋 ♡","旅伴集合！！","布丁狗 × 烏薩奇：一起出發！","被你發現了！",
+    "布丁狗散步中～","咻————！！","還沒睡嗎……？","還可以再玩！！",
+    "該睡覺了啦～","任務全部完成，無敵！","不想回家！！","九州旅程 START！"
+  ],
+  time:{
+    morning:["早安～今天去哪裡？","新的一天出發！","早餐先吃好 ♡"],
+    afternoon:["下午也繼續玩！","要不要喝杯咖啡？","還有好多地方可以去！"],
+    evening:["今天玩得開心嗎？","夜晚也很好拍 ♡","差不多準備回飯店囉～"],
+    late:["今天已經走很多了。","明天再繼續！","晚安 ♡"]
+  }
+};
+function pickLine(list,fallback=""){
+  if(!Array.isArray(list)||!list.length)return fallback;
+  return list[Math.floor(Math.random()*list.length)];
+}
+function japanHour(){
+  try{
+    return Number(new Intl.DateTimeFormat("en-US",{timeZone:TRIP?.timezone||"Asia/Tokyo",hour:"2-digit",hourCycle:"h23"}).format(new Date()));
+  }catch{return new Date().getHours()}
+}
+function timeDialogue(){
+  const h=japanHour();
+  if(h<11)return BUDDY_DIALOG.time.morning;
+  if(h<17)return BUDDY_DIALOG.time.afternoon;
+  if(h<22)return BUDDY_DIALOG.time.evening;
+  return BUDDY_DIALOG.time.late;
+}
+function buddyToneForContext(context){
+  return ({weather:"weather",food:"food",booking:"booking",shop:"shop",money:"money",note:"note",hotel:"hotel",day:"day",duo:"duo"})[context]||"";
+}
+function toast(msg,tone=""){
+  const t=$("#toast"); if(!t)return;
+  t.textContent=msg;t.dataset.tone=tone||"";
+  t.classList.remove("show");void t.offsetWidth;t.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t=setTimeout(()=>{t.classList.remove("show");setTimeout(()=>{t.dataset.tone=""},220)},1900);
+}
 function isBuddyTheme(){return document.documentElement.dataset.theme==="buddy"}
-function buddySparkBurst(x=50,y=45){
+function buddySparkBurst(x=50,y=45,tone="duo"){
   if(!isBuddyTheme()) return;
   const layer=$("#buddySparkLayer"); if(!layer)return;
-  const parts=["✦","✧","★","✦","♡","✧","★"];
+  const glyphs={
+    weather:["•","✦","•","·","✦","•","·"],
+    food:["♡","✦","♡","♥","✦","♡","♥"],
+    booking:["✦","!","★","✦","!","★","✦"],
+    shop:["✦","★","✧","✦","★","✧","✦"],
+    money:["¥","✦","¥","✧","¥","✦","✧"],
+    note:["✎","♡","✦","✎","♡","✧","✦"],
+    hotel:["♡","✦","☾","♡","✧","☾","♡"],
+    day:["✦","✧","★","♡","✦","★","✧"],
+    duo:["✦","✧","★","✦","♡","✧","★"]
+  };
+  const parts=glyphs[tone]||glyphs.duo;
+  layer.dataset.tone=tone;
   layer.innerHTML=parts.map((p,i)=>`<i style="--i:${i};--x:${x+(i-3)*7}%;--y:${y+(i%2?3:-3)}%">${p}</i>`).join("");
   layer.classList.remove("play"); void layer.offsetWidth; layer.classList.add("play");
-  setTimeout(()=>{layer.classList.remove("play");layer.innerHTML=""},1100);
+  setTimeout(()=>{layer.classList.remove("play");layer.innerHTML="";layer.dataset.tone=""},1100);
 }
-function buddyCelebrate(text="完成！",image="./buddy_success.png?v=430"){
+function buddyCelebrate(text="完成！",image="./buddy_success.png?v=430",tone="duo"){
   if(!isBuddyTheme())return;
   const wrap=$("#buddyCelebration"),img=$("#buddyCelebrateImg"),label=$("#buddyCelebrateText"); if(!wrap)return;
-  img.src=image; label.textContent=text; wrap.classList.remove("show"); void wrap.offsetWidth; wrap.classList.add("show"); buddySparkBurst(50,42);
-  clearTimeout(buddyCelebrate._t); buddyCelebrate._t=setTimeout(()=>wrap.classList.remove("show"),1350);
+  img.src=image; label.textContent=text; wrap.dataset.tone=tone; wrap.classList.remove("show"); void wrap.offsetWidth; wrap.classList.add("show"); buddySparkBurst(50,42,tone);
+  clearTimeout(buddyCelebrate._t); buddyCelebrate._t=setTimeout(()=>{wrap.classList.remove("show");wrap.dataset.tone=""},1450);
+}
+function inferBuddyContext(el){
+  if(!el)return "";
+  if(el.dataset?.buddyContext)return el.dataset.buddyContext;
+  if(el.closest?.("#daySceneCard"))return "day";
+  if(el.closest?.("#weatherCard"))return "weather";
+  if(el.closest?.("#foodView,#foodNearbyModal"))return "food";
+  if(el.closest?.("#bookingPanel,.decision-card"))return "booking";
+  if(el.closest?.("#shoppingPanel"))return "shop";
+  if(el.closest?.("#expensePanel"))return "money";
+  if(el.closest?.("#notePanel"))return "note";
+  if(el.closest?.("#hotelReturnCard"))return "hotel";
+  return "";
+}
+function weatherDialogue(){
+  const slot=$("#weatherBuddySlot");
+  if(slot?.classList.contains("is-rain"))return BUDDY_DIALOG.weather.rain;
+  const icon=$("#weatherIcon")?.textContent||"";
+  const desc=$("#weatherDesc")?.textContent||"";
+  if(/☀|晴|sun/i.test(icon+" "+desc))return BUDDY_DIALOG.weather.sunny;
+  return BUDDY_DIALOG.weather.cloudy;
+}
+function bookingHasUrgent(){
+  if(!TRIP?.bookingTasks?.length)return false;
+  const now=Date.now();
+  return TRIP.bookingTasks.some(t=>{
+    if(taskDone(t)||!t.deadline)return false;
+    const diff=new Date(t.deadline).getTime()-now;
+    return diff>0&&diff<=24*3600000;
+  });
+}
+function buddyDialogueFor(kind,context){
+  if(context==="day")return pickLine(BUDDY_DIALOG.day[state?.dayIndex]||BUDDY_DIALOG.duo);
+  if(context==="weather")return pickLine(weatherDialogue());
+  if(context==="food"){
+    if(kind==="purin")return pickLine(BUDDY_DIALOG.food.purin);
+    if(kind==="usagi")return pickLine(BUDDY_DIALOG.food.usagi);
+    return pickLine([...BUDDY_DIALOG.food.purin,...BUDDY_DIALOG.food.usagi]);
+  }
+  if(context==="booking"){
+    if(kind==="usagi"&&bookingHasUrgent())return pickLine(BUDDY_DIALOG.booking.urgent);
+    return pickLine(BUDDY_DIALOG.booking.reminder);
+  }
+  if(context==="shop"){
+    if(kind==="purin")return pickLine([...BUDDY_DIALOG.shop.purin,...BUDDY_DIALOG.shop.general]);
+    return pickLine(BUDDY_DIALOG.shop.general);
+  }
+  if(context==="money")return pickLine(BUDDY_DIALOG.money);
+  if(context==="note")return pickLine(BUDDY_DIALOG.note);
+  if(context==="hotel"){
+    return pickLine(japanHour()>=21?BUDDY_DIALOG.hotel.late:BUDDY_DIALOG.hotel.normal);
+  }
+  if(kind==="duo")return pickLine(BUDDY_DIALOG.duo);
+  // Generic character taps occasionally react to Japan-local time so the app feels alive.
+  if(Math.random()<0.28)return pickLine(timeDialogue());
+  return pickLine(kind==="purin"?BUDDY_DIALOG.purin:BUDDY_DIALOG.usagi);
 }
 function buddyReact(kind,el){
   if(!isBuddyTheme())return;
-  if(el){el.classList.remove("buddy-boop");void el.offsetWidth;el.classList.add("buddy-boop");setTimeout(()=>el.classList.remove("buddy-boop"),420)}
+  const context=inferBuddyContext(el);
+  if(el){
+    el.classList.remove("buddy-boop");void el.offsetWidth;el.classList.add("buddy-boop");
+    setTimeout(()=>el.classList.remove("buddy-boop"),420);
+  }
   const now=Date.now();
-  buddyReact.last=buddyReact.last||{kind:"",time:0};
+  buddyReact.last=buddyReact.last||{kind:"",time:0,context:""};
   const prev=buddyReact.last;
   if(kind==="duo"){
-    toast("今天也一起走 ♡");buddySparkBurst(50,44);buddyReact.last={kind:"",time:0};return;
+    const tone=buddyToneForContext(context)||"duo";
+    toast(buddyDialogueFor("duo",context),tone);buddySparkBurst(50,44,tone);
+    buddyReact.last={kind:"",time:0,context:""};return;
   }
   if(prev.kind && prev.kind!==kind && now-prev.time<1800){
-    toast("布丁狗 × 烏薩奇：一起出發！");buddySparkBurst(50,44);buddyReact.last={kind:"",time:0};return;
+    toast(pickLine(BUDDY_DIALOG.duo),"duo");buddySparkBurst(50,44,"duo");
+    buddyReact.last={kind:"",time:0,context:""};return;
   }
-  const purinLines=["慢慢走也很好 ♡","先吃飽再出發！","今天也要舒服旅行。"];
-  const usagiLines=["出發！！","往這邊！","好耶！繼續走！"];
-  const list=kind==="purin"?purinLines:usagiLines;
-  toast(list[Math.floor(Math.random()*list.length)]);
-  buddyReact.last={kind,time:now};
+  const tone=buddyToneForContext(context);
+  toast(buddyDialogueFor(kind,context),tone);
+  if(context)buddySparkBurst(50,44,tone||"duo");
+  buddyReact.last={kind,time:now,context};
 }
 
 function buddyPeek(kind="purin"){
@@ -214,14 +388,11 @@ function renderDailyScene(){
 function updateWeatherBuddy(hasRain=false){
   const el=$("#weatherBuddySlot"); if(!el)return;
   el.classList.toggle("is-rain",!!hasRain);
-  el.innerHTML=`<img class="weather-usagi-rain buddy-reactable" data-buddy-react="usagi" src="./usagi_weather.png?v=462" alt="雨衣烏薩奇">`;
+  el.innerHTML=`<img class="weather-usagi-rain buddy-reactable" data-buddy-react="usagi" data-buddy-context="weather" src="./weather-rain-usagi-v47.webp?v=470" alt="雨衣烏薩奇">`;
 }
 
 
-function localDateKey(){
-  const d=new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-}
+function localDateKey(){ return japanToday(); }
 function maybePurinWalkEgg(){
   if(!isBuddyTheme())return;
   const key=`buddyWalk:${localDateKey()}`;
@@ -231,6 +402,7 @@ function maybePurinWalkEgg(){
   setTimeout(()=>{
     if(!isBuddyTheme())return;
     el.classList.remove("play"); void el.offsetWidth; el.classList.add("play");
+    toast(BUDDY_DIALOG.egg[4],"duo");
     setTimeout(()=>el.classList.remove("play"),10500);
   },delay);
 }
@@ -249,10 +421,17 @@ function maybeUrgentBookingEgg(){
   setTimeout(()=>{
     if(!isBuddyTheme())return;
     el.classList.remove("play"); void el.offsetWidth; el.classList.add("play");
+    toast(pickLine(BUDDY_DIALOG.booking.urgent),"booking");
     setTimeout(()=>el.classList.remove("play"),2100);
   },1800);
 }
 
+function maybeTripStartEgg(){
+  if(!isBuddyTheme()||japanToday()!==OFFICIAL_TRIP_START)return;
+  const key=`buddyTripStart:${OFFICIAL_TRIP_START}`;
+  try{if(localStorage.getItem(key))return;localStorage.setItem(key,"1")}catch{}
+  setTimeout(()=>buddyCelebrate(BUDDY_DIALOG.egg[11],"./buddy_celebrate.png?v=430","day"),900);
+}
 function normalizeCloud(val){
   if(!val)return[];
   return Array.isArray(val)?val:Object.entries(val).map(([id,v])=>({...v,id}));
@@ -305,7 +484,7 @@ function renderDecisionCards(day){
     const selected=selectedDecision(id);
     const checklist=(d.checklist||[]).length?`<div class="decision-checks">${d.checklist.map(x=>`<div>□ ${esc(x)}</div>`).join("")}</div>`:"";
     return `<section class="decision-card">
-      <img class="decision-usagi-art buddy-only-art buddy-reactable" data-buddy-react="usagi" src="./usagi_think.png?v=430" alt="烏薩奇">
+      <img class="decision-usagi-art buddy-only-art buddy-reactable" data-buddy-react="usagi" data-buddy-context="booking" src="./usagi_think.png?v=430" alt="烏薩奇">
       <div class="decision-kicker">行程選擇</div>
       <h3>${esc(d.title)}</h3>
       <p>${esc(d.hint||"")}</p>
@@ -411,7 +590,7 @@ function renderHotelReturnCard(){
   const label=lastDay?"返台前據點":"今晚住這裡";
   const help=lastDay?"取行李或需要回住宿時，從這裡直接導航。":"一天走完要回飯店時，不用再往上找地址。";
   box.hidden=false;
-  box.innerHTML=`<div class="hotel-return-copy"><span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ 導航回飯店</a></div><div class="hotel-return-art buddy-only-art buddy-reactable" data-buddy-react="duo"><img src="./hotel-return-duo.webp?v=460" alt="布丁狗與烏薩奇回飯店休息"></div>`;
+  box.innerHTML=`<div class="hotel-return-copy"><span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ 導航回飯店</a></div><div class="hotel-return-art buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="hotel"><img src="./hotel-return-duo.webp?v=460" alt="布丁狗與烏薩奇回飯店休息"></div>`;
 }
 
 function renderSchedule(){
@@ -511,7 +690,7 @@ async function toggleBookingTask(id){
   renderBookings();
   if(!wasDone){
     const allDone=TRIP.bookingTasks.every(taskDone);
-    buddyCelebrate(allDone?"全部搞定！":"完成一項！",allDone?"./buddy_celebrate.png?v=430":"./usagi_success.png?v=430");
+    buddyCelebrate(allDone?pickLine(BUDDY_DIALOG.booking.all):pickLine(BUDDY_DIALOG.booking.complete),allDone?"./buddy_celebrate.png?v=430":"./usagi_success.png?v=430","booking");
   }
 }
 function bookingTaskCard(t){
@@ -724,7 +903,7 @@ function bind(){
     const decision=e.target.closest("[data-decision-id]");if(decision){await chooseDecision(decision.dataset.decisionId,decision.dataset.decisionOption);return}
     const task=e.target.closest("[data-task-id]");if(task){await toggleBookingTask(task.dataset.taskId);return}
     for(const [attr,key,render] of [["data-check-food","foods",renderFood],["data-check-shopping","shopping",renderShopping]]){
-      const x=e.target.closest(`[${attr}]`);if(x){const id=x.getAttribute(attr);const before=state[key].find(i=>i.id===id)?.checked;await toggleItem(key,id);render();if(!before)buddyCelebrate(key==="foods"?"收進美食清單！":"買到啦！",key==="foods"?"./purin_clap.png?v=430":"./buddy_success.png?v=430");return}
+      const x=e.target.closest(`[${attr}]`);if(x){const id=x.getAttribute(attr);const before=state[key].find(i=>i.id===id)?.checked;await toggleItem(key,id);render();if(!before)buddyCelebrate(key==="foods"?pickLine(BUDDY_DIALOG.food.complete):pickLine(BUDDY_DIALOG.shop.complete),key==="foods"?"./purin_clap.png?v=430":"./buddy_success.png?v=430",key==="foods"?"food":"shop");return}
     }
     for(const [attr,key,render] of [["data-delete-food","foods",renderFood],["data-delete-shopping","shopping",renderShopping],["data-delete-expense","expenses",renderExpenses]]){
       const x=e.target.closest(`[${attr}]`);if(x){await deleteItem(key,x.getAttribute(attr));render();toast("已刪除");return}
@@ -754,9 +933,9 @@ function bind(){
       syncDots();
     };
     const resetTap=()=>{clearTimeout(tapTimer);tapTimer=setTimeout(()=>taps=0,1200)};
-    heroEgg.addEventListener("click",()=>{if(holdTriggered){holdTriggered=false;return;}setHero(heroIndex+1);taps++;resetTap();if(taps>=5){taps=0;buddyCelebrate("旅伴集合！","./buddy_celebrate.png?v=430")}});
+    heroEgg.addEventListener("click",()=>{if(holdTriggered){holdTriggered=false;return;}setHero(heroIndex+1);taps++;resetTap();if(taps>=5){taps=0;buddyCelebrate(BUDDY_DIALOG.egg[1],"./buddy_celebrate.png?v=430","duo")}});
     $$("#buddyHeroDots [data-hero-index]").forEach(dot=>dot.addEventListener("click",()=>setHero(Number(dot.dataset.heroIndex))));
-    heroEgg.addEventListener("pointerdown",()=>{holdTriggered=false;clearTimeout(holdTimer);holdTimer=setTimeout(()=>{holdTriggered=true;buddyCelebrate("找到隱藏彩蛋 ♡","./buddy_success.png?v=430")},900)});
+    heroEgg.addEventListener("pointerdown",()=>{holdTriggered=false;clearTimeout(holdTimer);holdTimer=setTimeout(()=>{holdTriggered=true;buddyCelebrate(BUDDY_DIALOG.egg[0],"./buddy_success.png?v=430","duo")},900)});
     ["pointerup","pointercancel","pointerleave"].forEach(ev=>heroEgg.addEventListener(ev,()=>clearTimeout(holdTimer)));
     syncDots();
   }
@@ -883,9 +1062,10 @@ function cachedTrip(){
   }catch{return null}
 }
 function formatTripDate(){
-  if(!TRIP?.startDate||!TRIP?.endDate)return "";
+  const start=TRIP?.startDate||OFFICIAL_TRIP_START;
+  const end=TRIP?.endDate||OFFICIAL_TRIP_END;
   const fmt=s=>{const d=new Date(`${s}T00:00:00+09:00`);return `${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")}`};
-  return `${fmt(TRIP.startDate)} — ${fmt(TRIP.endDate)}`;
+  return `${fmt(start)} — ${fmt(end)}`;
 }
 function applyPrivateTripMeta(){
   const title=$("#heroPrivateTitle"); if(title) title.textContent=TRIP.heroTitle||TRIP.title||"私人旅程";
@@ -909,7 +1089,7 @@ async function bootTrip(content,user,{offline=false}={}){
   bind();
   renderAll();
   showPrivateApp();
-  setTimeout(()=>{maybePurinWalkEgg();maybeUrgentBookingEgg()},650);
+  setTimeout(()=>{maybePurinWalkEgg();maybeUrgentBookingEgg();maybeTripStartEgg()},650);
   const email=$("#accountEmail"); if(email) email.textContent=user?.email||"離線已授權裝置";
   if(offline){
     state.cloud=false;
@@ -1006,7 +1186,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=460",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=470",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });

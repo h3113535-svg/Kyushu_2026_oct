@@ -16,7 +16,7 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=462" />
+  <link rel="stylesheet" href="./style.css?v=470" />
   <title>私人旅程</title>
   <meta name="app-version" content="4.3.0" />
 </head>
@@ -80,7 +80,7 @@
           </div>
           <p id="daySubtitle"></p>
         </section>
-        <button type="button" id="daySceneCard" class="day-scene-card buddy-only-art buddy-reactable" data-buddy-react="duo" aria-label="今日旅伴主題插畫">
+        <button type="button" id="daySceneCard" class="day-scene-card buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="day" aria-label="今日旅伴主題插畫">
           <img id="daySceneImage" src="./day-scene-01.webp?v=460" alt="布丁狗與烏薩奇今日旅行">
           <span class="day-scene-progress"><i><em id="daySceneProgressBar"></em></i></span>
         </button>
@@ -99,7 +99,7 @@
               <span>已訂餐廳</span><span>候選清單</span><span>附近搜尋</span>
             </div>
           </div>
-          <img class="buddy-food-duo buddy-only-art buddy-reactable" data-buddy-react="duo" src="./buddy_eat.png?v=430" alt="布丁狗與烏薩奇吃東西" />
+          <img class="buddy-food-duo buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="food" src="./buddy_eat.png?v=430" alt="布丁狗與烏薩奇吃東西" />
         </div>
         <button type="button" class="food-nearby-trigger" id="foodNearbyOpen">
           <span class="food-nearby-trigger-icon buddy-only-art"><img src="./ui-coffee.webp?v=440" alt=""></span>
@@ -143,9 +143,9 @@
           <div class="panel-heading panel-heading-with-art buddy-panel-head booking-head-v42">
             <div><span class="eyebrow">待辦與搶票</span><h3>訂位／搶票倒數任務</h3></div>
             <div class="booking-buddy-strip buddy-only-art" aria-label="布丁狗確認、烏薩奇衝刺">
-              <img class="booking-purin-art buddy-reactable" data-buddy-react="purin" src="./booking-check-purin.webp?v=460" alt="布丁狗確認票券">
+              <img class="booking-purin-art buddy-reactable" data-buddy-react="purin" data-buddy-context="booking" src="./booking-check-purin.webp?v=460" alt="布丁狗確認票券">
               <span class="booking-ticket-divider"><img src="./travel_ticket.png?v=431" alt=""></span>
-              <img class="booking-usagi-art buddy-reactable" data-buddy-react="usagi" src="./booking-dash-usagi.webp?v=460" alt="烏薩奇衝刺">
+              <img class="booking-usagi-art buddy-reactable" data-buddy-react="usagi" data-buddy-context="booking" src="./booking-dash-usagi.webp?v=460" alt="烏薩奇衝刺">
             </div>
           </div>
           <p class="privacy-note">私人 QR Code、完整訂位編號不要寫進公開 GitHub 原始碼；可放在記事或你自己的受保護雲端連結。</p>
@@ -156,8 +156,8 @@
           <div class="panel-heading buddy-panel-head">
             <div><span class="eyebrow">採買</span><h3>購物清單</h3></div>
             <div class="panel-actions-with-art buddy-panel-pair">
-              <img class="panel-character-art buddy-only-art buddy-reactable" data-buddy-react="purin" src="./purin_clap.png?v=430" alt="布丁狗拍手">
-              <img class="panel-character-art buddy-only-art buddy-reactable" data-buddy-react="usagi" src="./usagi_point.png?v=430" alt="烏薩奇指路">
+              <img class="panel-character-art buddy-only-art buddy-reactable" data-buddy-react="purin" data-buddy-context="shop" src="./purin_clap.png?v=430" alt="布丁狗拍手">
+              <img class="panel-character-art buddy-only-art buddy-reactable" data-buddy-react="usagi" data-buddy-context="shop" src="./usagi_point.png?v=430" alt="烏薩奇指路">
               <img class="shopping-art buddy-only-art" src="./travel_shopping.png?v=430" alt="">
               <button class="icon-btn" data-open-modal="shopping" aria-label="新增購物">＋</button>
             </div>
@@ -170,8 +170,8 @@
           <div class="panel-heading buddy-panel-head">
             <div><span class="eyebrow">分帳</span><h3>旅費記帳</h3></div>
             <div class="panel-actions-with-art buddy-panel-pair">
-              <img class="panel-character-art expense-character buddy-only-art buddy-reactable" data-buddy-react="purin" src="./purin_surprise.png?v=430" alt="布丁狗驚訝">
-              <img class="panel-character-art expense-usagi buddy-only-art buddy-reactable" data-buddy-react="usagi" src="./usagi_sticker.png?v=430" alt="烏薩奇">
+              <img class="panel-character-art expense-character buddy-only-art buddy-reactable" data-buddy-react="purin" data-buddy-context="money" src="./purin_surprise.png?v=430" alt="布丁狗驚訝">
+              <img class="panel-character-art expense-usagi buddy-only-art buddy-reactable" data-buddy-react="usagi" data-buddy-context="money" src="./usagi_sticker.png?v=430" alt="烏薩奇">
               <img class="expense-art buddy-only-art" src="./travel_coffee.png?v=430" alt="">
               <button class="icon-btn" data-open-modal="expense" aria-label="新增記帳">＋</button>
             </div>
@@ -181,7 +181,7 @@
         </div>
 
         <div id="notePanel" class="tool-panel">
-          <div class="panel-heading"><div><span class="eyebrow">旅行備忘</span><h3>旅行記事</h3></div></div><div class="notes-chill buddy-only-art buddy-reactable" data-buddy-react="duo"><img src="./buddy_chill.png?v=430" alt="布丁狗與烏薩奇休息"></div>
+          <div class="panel-heading"><div><span class="eyebrow">旅行備忘</span><h3>旅行記事</h3></div></div><div class="notes-chill buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="note"><img src="./buddy_chill.png?v=430" alt="布丁狗與烏薩奇休息"></div>
           <textarea id="notesArea" class="notes-area" placeholder="行前提醒、臨時備註、想買的東西…"></textarea>
           <button type="button" class="primary-btn" id="firebaseTestBtn" style="margin-top:10px">測試 Firebase 連線</button>
           <div id="noteStatus" class="save-status">輸入後自動儲存</div>
@@ -255,8 +255,8 @@
       <p>選一個類別，直接用 Google Maps 搜尋你現在附近。</p>
       <div id="foodQuick" class="chip-grid food-quick-sheet-grid"></div>
       <div class="food-sheet-buddies buddy-only-art" aria-hidden="true">
-        <img class="food-sheet-purin buddy-reactable" data-buddy-react="purin" src="./purin_peek_edge.png?v=430" alt="">
-        <img class="food-sheet-usagi buddy-reactable" data-buddy-react="usagi" src="./usagi_point.png?v=430" alt="">
+        <img class="food-sheet-purin buddy-reactable" data-buddy-react="purin" data-buddy-context="food" src="./purin_peek_edge.png?v=430" alt="">
+        <img class="food-sheet-usagi buddy-reactable" data-buddy-react="usagi" data-buddy-context="food" src="./usagi_point.png?v=430" alt="">
       </div>
     </div>
   </dialog>
@@ -283,6 +283,6 @@
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=430"></script>
-  <script defer src="./app.js?v=462"></script>
+  <script defer src="./app.js?v=470"></script>
 </body>
 </html>

@@ -1,9 +1,9 @@
-const CACHE = "kyushu-private-v4.6.2";
+const CACHE = "kyushu-private-v4.7.0";
 const SHELL = [
-  "./","./index.html","./style.css?v=462","./app.js?v=462",
+  "./","./index.html","./style.css?v=470","./app.js?v=470",
   "./manifest.json","./firebase-config.js?v=430","./icon-192.png","./icon-512.png",
   "./buddy_hero.png","./buddy_celebrate.png","./buddy_chill.png","./buddy_eat.png","./buddy_success.png",
-  "./purin_peek_edge.png","./purin_walk.png","./usagi_peek.png","./usagi_dash.png","./usagi_success.png","./usagi_weather.png",
+  "./purin_peek_edge.png","./purin_walk.png","./usagi_peek.png","./usagi_dash.png","./usagi_success.png","./usagi_weather.png","./weather-rain-usagi-v47.webp",
   "./travel_shopping.png","./travel_ticket.png",
   "./daily-d1.webp","./daily-d2.webp","./daily-d3.webp","./daily-d4.webp","./daily-d5.webp",
   "./daily-d6.webp","./daily-d7.webp","./daily-d8.webp","./daily-d9.webp","./daily-d10.webp",
@@ -22,7 +22,7 @@ const SHELL = [
   "./day-scene-08.webp?v=460",
   "./day-scene-09.webp?v=460",
   "./day-scene-10.webp?v=460",
-  "./usagi_weather.png?v=462",
+  "./weather-rain-usagi-v47.webp?v=470",
   "./booking-check-purin.webp?v=460",
   "./booking-dash-usagi.webp?v=460",
   "./hotel-return-duo.webp?v=460"];
