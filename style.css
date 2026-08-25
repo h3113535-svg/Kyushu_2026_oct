@@ -2298,3 +2298,147 @@ html[data-theme="buddy"] .food-sheet-usagi{width:68px;height:82px;z-index:2}
   html[data-theme="buddy"] .food-plan-card-v45{grid-template-columns:52px minmax(0,1fr)!important;gap:10px!important;padding:11px!important}
   html[data-theme="buddy"] .food-schedule-badge{min-height:60px}
 }
+
+
+/* =========================================================
+   v4.6.0 — Travel Story / one illustrated scene per day
+   ========================================================= */
+
+/* Daily heading gets the whole width. No title wrapping. */
+html[data-theme="buddy"] .day-title-v46{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:3px!important;
+  min-height:0!important;
+  padding:4px 2px 9px!important;
+  margin:0!important;
+}
+html[data-theme="buddy"] .day-title-v46 .day-title-main{display:flex;align-items:baseline;gap:10px;min-width:0}
+html[data-theme="buddy"] .day-title-v46 #dayNumber{flex:0 0 auto;font-size:12px;letter-spacing:.08em}
+html[data-theme="buddy"] .day-title-v46 #dayTitle{
+  min-width:0;max-width:100%;margin:0!important;
+  font-size:clamp(18px,5.25vw,26px)!important;
+  line-height:1.12!important;letter-spacing:-.025em!important;
+  white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
+}
+html[data-theme="buddy"] .day-title-v46 #daySubtitle{
+  max-width:100%!important;text-align:left!important;margin:1px 0 0!important;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+html[data-theme="buddy"] .day-art-cluster{display:none!important}
+
+/* One complete scene — no composited character/stamp cluster. */
+html[data-theme="buddy"] .day-scene-card{
+  position:relative;display:block;width:100%;height:clamp(148px,39vw,214px);
+  margin:0 0 14px;padding:0;border:1px solid #eadcc1;border-radius:24px;
+  background:linear-gradient(145deg,#fffdf6,#f6fbff);overflow:hidden;
+  box-shadow:0 8px 23px rgba(76,56,39,.075);cursor:pointer;
+}
+html[data-theme="buddy"] .day-scene-card::before{
+  content:"";position:absolute;inset:auto 0 0;height:40%;z-index:1;pointer-events:none;
+  background:linear-gradient(to top,rgba(255,253,248,.90),rgba(255,253,248,0));
+}
+html[data-theme="buddy"] .day-scene-card>img{
+  display:block;width:100%;height:100%;object-fit:contain;object-position:center center;
+  transform:scale(1.015);filter:drop-shadow(0 6px 8px rgba(78,58,43,.06));
+}
+html[data-theme="buddy"] .day-scene-progress{
+  position:absolute;z-index:2;left:13px;right:13px;bottom:9px;display:flex;align-items:center;gap:9px;
+  pointer-events:none;
+}
+html[data-theme="buddy"] .day-scene-progress b{font-size:9px;color:#735b46;white-space:nowrap;letter-spacing:.05em}
+html[data-theme="buddy"] .day-scene-progress i{display:block;height:4px;flex:1;border-radius:99px;background:rgba(137,108,73,.14);overflow:hidden}
+html[data-theme="buddy"] .day-scene-progress em{display:block;height:100%;border-radius:99px;background:#e2b44d;transition:width .28s ease}
+html[data-theme="buddy"] .day-scene-card:active>img{transform:scale(.995)}
+
+/* Weather mascot: supplied raincoat Usagi, never a generic cloud substitute. */
+html[data-theme="buddy"] .weather-card{padding-right:100px!important;min-height:125px}
+html[data-theme="buddy"] .weather-buddy-slot{right:6px!important;bottom:2px!important;width:91px!important;height:111px!important;display:flex!important;align-items:flex-end!important;justify-content:center!important}
+html[data-theme="buddy"] .weather-usagi-rain{width:88px!important;height:106px!important;object-fit:contain!important;opacity:.92;filter:drop-shadow(0 5px 7px rgba(67,72,79,.09));transition:transform .25s ease,opacity .25s ease}
+html[data-theme="buddy"] .weather-buddy-slot.is-rain .weather-usagi-rain{opacity:1;transform:translateY(-2px)}
+html[data-theme="buddy"] .weather-icon{margin-right:2px}
+
+/* Booking header: Purin and Usagi have their own lanes, zero overlap. */
+html[data-theme="buddy"] #bookingPanel{padding:24px 20px 26px!important}
+html[data-theme="buddy"] .booking-head-v42{display:grid!important;grid-template-columns:minmax(0,1fr) 166px!important;align-items:center!important;gap:12px!important}
+html[data-theme="buddy"] .booking-buddy-strip{width:166px;height:86px;display:grid;grid-template-columns:64px 30px 64px;align-items:end;justify-content:end;gap:4px;overflow:visible}
+html[data-theme="buddy"] .booking-buddy-strip .booking-purin-art{width:64px!important;height:80px!important;object-fit:contain;margin:0!important;position:static!important}
+html[data-theme="buddy"] .booking-buddy-strip .booking-usagi-art{width:64px!important;height:80px!important;object-fit:contain;margin:0!important;position:static!important}
+html[data-theme="buddy"] .booking-ticket-divider{width:30px;height:36px;display:grid;place-items:center;align-self:center;opacity:.78}
+html[data-theme="buddy"] .booking-ticket-divider img{width:29px;height:29px;object-fit:contain}
+html[data-theme="buddy"] #bookingPanel .privacy-note{margin:3px 0 24px!important}
+html[data-theme="buddy"] #bookingPanel .task-section{padding:0 3px;margin-bottom:28px!important}
+html[data-theme="buddy"] #bookingPanel .task-stack{gap:15px!important}
+html[data-theme="buddy"] #bookingPanel .task-card{padding:16px!important;border-radius:18px!important}
+
+/* All tool panels: visible breathing room between outer panel and inner content. */
+html[data-theme="buddy"] #shoppingPanel,
+html[data-theme="buddy"] #expensePanel,
+html[data-theme="buddy"] #notePanel{
+  padding:23px 20px 25px!important;border-radius:24px!important;
+}
+html[data-theme="buddy"] #shoppingPanel>.panel-heading,
+html[data-theme="buddy"] #expensePanel>.panel-heading,
+html[data-theme="buddy"] #notePanel>.panel-heading{margin:0 0 19px!important;padding-bottom:14px;border-bottom:1px dashed #eadfd0}
+html[data-theme="buddy"] #shoppingPanel>#shoppingSummary{margin:0 0 18px!important}
+html[data-theme="buddy"] #shoppingPanel>#shoppingList,
+html[data-theme="buddy"] #expensePanel>#expenseList{display:flex;flex-direction:column;gap:12px!important}
+html[data-theme="buddy"] #expensePanel>#expenseSummary{margin:0 0 19px!important;padding:16px!important}
+html[data-theme="buddy"] #notePanel .notes-chill{margin:-5px 0 13px auto!important;position:relative!important;right:auto!important;top:auto!important;width:135px!important;height:85px!important}
+html[data-theme="buddy"] #notePanel .notes-area{margin-top:3px!important;min-height:230px;padding:17px!important;border-radius:17px!important}
+html[data-theme="buddy"] #shoppingPanel .list-item,
+html[data-theme="buddy"] #expensePanel .list-item{padding:14px!important;border-radius:17px!important}
+
+/* Planned food: editorial hierarchy, no box-inside-box schedule badge. */
+html[data-theme="buddy"] .food-plan-card-v46{
+  display:block!important;padding:14px 15px!important;background:#fffdf8!important;
+  border:1px solid #eadbc0!important;border-radius:18px!important;
+  box-shadow:0 4px 12px rgba(85,63,45,.035);
+}
+html[data-theme="buddy"] .food-plan-meta-row{display:flex;align-items:center;gap:6px;margin-bottom:8px;min-width:0}
+html[data-theme="buddy"] .food-day-chip,
+html[data-theme="buddy"] .food-time-chip{font-size:9.5px;font-weight:900;color:#7b5a38;background:#fff2c8;border:1px solid #ead59b;border-radius:99px;padding:4px 8px;white-space:nowrap}
+html[data-theme="buddy"] .food-time-chip{background:#f5f9fb;border-color:#dae4e7;color:#617079}
+html[data-theme="buddy"] .food-plan-meta-row .food-status{margin-left:auto;font-size:8.5px;white-space:nowrap}
+html[data-theme="buddy"] .food-plan-card-v46 h4{font-size:15px;line-height:1.34;margin:0;color:var(--ink);letter-spacing:.005em}
+html[data-theme="buddy"] .food-plan-card-v46 .food-plan-detail{margin:5px 0 0;font-size:10.5px;line-height:1.58;color:#766f67}
+html[data-theme="buddy"] .food-plan-card-v46 .food-map-row{margin-top:9px}
+html[data-theme="buddy"] .food-plan-card-v45{display:none!important}
+
+/* Hotel card uses the supplied two-traveler bedtime scene. */
+html[data-theme="buddy"] .hotel-return-card{min-height:150px;padding:18px 190px 18px 18px!important;overflow:hidden}
+html[data-theme="buddy"] .hotel-return-art{right:2px!important;bottom:-5px!important;width:190px!important;height:150px!important}
+html[data-theme="buddy"] .hotel-return-art>img:first-child{width:185px!important;height:145px!important;max-width:none!important;object-fit:contain!important;object-position:center bottom!important}
+html[data-theme="buddy"] .hotel-return-art .hotel-suitcase{display:none!important}
+
+/* Small story details: functional, not sticker clutter. */
+html[data-theme="buddy"] #foodView .food-nearby-trigger{margin-top:0;margin-bottom:15px}
+html[data-theme="buddy"] #toolsView .tool-card{transition:transform .16s ease,box-shadow .16s ease}
+html[data-theme="buddy"] #toolsView .tool-card:active{transform:translateY(1px) scale(.99)}
+html[data-theme="buddy"] .event-card{transition:border-color .15s ease,box-shadow .15s ease}
+html[data-theme="buddy"] .event-card:active{border-color:#e1c993;box-shadow:0 6px 15px rgba(79,58,42,.055)}
+
+@media(max-width:430px){
+  html[data-theme="buddy"] .day-title-v46 #dayTitle{font-size:clamp(17px,5vw,22px)!important}
+  html[data-theme="buddy"] .day-scene-card{height:clamp(142px,42vw,178px);border-radius:21px}
+  html[data-theme="buddy"] .weather-card{padding-right:88px!important;min-height:119px}
+  html[data-theme="buddy"] .weather-buddy-slot{width:80px!important;height:102px!important}
+  html[data-theme="buddy"] .weather-usagi-rain{width:77px!important;height:98px!important}
+  html[data-theme="buddy"] #bookingPanel{padding:21px 16px 23px!important}
+  html[data-theme="buddy"] .booking-head-v42{grid-template-columns:minmax(0,1fr) 126px!important;gap:7px!important}
+  html[data-theme="buddy"] .booking-buddy-strip{width:126px;height:75px;grid-template-columns:48px 24px 48px;gap:3px}
+  html[data-theme="buddy"] .booking-buddy-strip .booking-purin-art,
+  html[data-theme="buddy"] .booking-buddy-strip .booking-usagi-art{width:48px!important;height:68px!important}
+  html[data-theme="buddy"] .booking-ticket-divider{width:24px;height:30px}
+  html[data-theme="buddy"] .booking-ticket-divider img{width:23px;height:23px}
+  html[data-theme="buddy"] #shoppingPanel,
+  html[data-theme="buddy"] #expensePanel,
+  html[data-theme="buddy"] #notePanel{padding:20px 16px 22px!important}
+  html[data-theme="buddy"] .hotel-return-card{min-height:145px;padding:17px 145px 17px 16px!important}
+  html[data-theme="buddy"] .hotel-return-art{width:148px!important;height:138px!important;right:-3px!important}
+  html[data-theme="buddy"] .hotel-return-art>img:first-child{width:148px!important;height:134px!important}
+}
+html[data-theme="buddy"][data-font-size="large"] .day-title-v46 #dayTitle,
+html[data-theme="buddy"][data-font-size="xlarge"] .day-title-v46 #dayTitle{white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+html[data-theme="buddy"][data-font-size="xlarge"] .day-title-v46 #dayTitle{font-size:clamp(19px,5.15vw,27px)!important}
+@media(prefers-reduced-motion:reduce){html[data-theme="buddy"] .day-scene-progress em{transition:none}}

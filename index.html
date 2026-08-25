@@ -16,7 +16,7 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=450" />
+  <link rel="stylesheet" href="./style.css?v=460" />
   <title>私人旅程</title>
   <meta name="app-version" content="4.3.0" />
 </head>
@@ -73,17 +73,17 @@
           <div class="rain-box" id="rainBox"></div>
           <div class="weather-buddy-slot buddy-only-art" id="weatherBuddySlot" aria-hidden="true"></div>
         </section>
-        <section class="day-title">
-          <div>
+        <section class="day-title day-title-v46">
+          <div class="day-title-main">
             <span id="dayNumber">D1</span>
             <h2 id="dayTitle">行程</h2>
           </div>
           <p id="daySubtitle"></p>
-          <div class="day-art-cluster buddy-only-art" aria-hidden="true">
-            <div class="day-buddy-slot" id="dayBuddySlot"></div>
-            <div class="day-stamp" id="dayStamp"></div>
-          </div>
         </section>
+        <button type="button" id="daySceneCard" class="day-scene-card buddy-only-art buddy-reactable" data-buddy-react="duo" aria-label="今日旅伴主題插畫">
+          <img id="daySceneImage" src="./day-scene-01.webp?v=460" alt="布丁狗與烏薩奇今日旅行">
+          <span class="day-scene-progress"><b id="daySceneProgress">1 / 10</b><i><em id="daySceneProgressBar"></em></i></span>
+        </button>
         <section id="dayBrief" class="day-brief"></section>
         <div id="decisionArea"></div>
         <section id="timeline" class="timeline"></section>
@@ -142,10 +142,10 @@
         <div id="bookingPanel" class="tool-panel active">
           <div class="panel-heading panel-heading-with-art buddy-panel-head booking-head-v42">
             <div><span class="eyebrow">待辦與搶票</span><h3>訂位／搶票倒數任務</h3></div>
-            <div class="panel-art-stack buddy-only-art booking-buddy-pair">
-              <img class="booking-purin-art buddy-reactable" data-buddy-react="purin" src="./purin_surprise.png?v=430" alt="布丁狗提醒">
-              <img class="booking-ticket-art" src="./travel_ticket.png?v=431" alt="">
-              <img class="booking-usagi-art buddy-reactable" data-buddy-react="usagi" src="./usagi_dash.png?v=431" alt="烏薩奇衝刺">
+            <div class="booking-buddy-strip buddy-only-art" aria-label="布丁狗確認、烏薩奇衝刺">
+              <img class="booking-purin-art buddy-reactable" data-buddy-react="purin" src="./booking-check-purin.webp?v=460" alt="布丁狗確認票券">
+              <span class="booking-ticket-divider"><img src="./travel_ticket.png?v=431" alt=""></span>
+              <img class="booking-usagi-art buddy-reactable" data-buddy-react="usagi" src="./booking-dash-usagi.webp?v=460" alt="烏薩奇衝刺">
             </div>
           </div>
           <p class="privacy-note">私人 QR Code、完整訂位編號不要寫進公開 GitHub 原始碼；可放在記事或你自己的受保護雲端連結。</p>
@@ -283,6 +283,6 @@
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=430"></script>
-  <script defer src="./app.js?v=450"></script>
+  <script defer src="./app.js?v=460"></script>
 </body>
 </html>

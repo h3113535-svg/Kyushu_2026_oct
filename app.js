@@ -14,12 +14,10 @@ let lastError = "";
 const pollers = new Set();
 
 const BUDDY_FAST_ASSETS=[
-  "./daily-d1.webp?v=440","./daily-d2.webp?v=440","./daily-d3.webp?v=440","./daily-d4.webp?v=440","./daily-d5.webp?v=440",
-  "./daily-d6.webp?v=440","./daily-d7.webp?v=440","./daily-d8.webp?v=440","./daily-d9.webp?v=440","./daily-d10.webp?v=440",
-  "./stamp-plane.webp?v=440","./stamp-train.webp?v=440","./stamp-onsen.webp?v=440","./stamp-camera.webp?v=440",
-  "./ui-cloud.webp?v=440","./ui-coffee.webp?v=440","./ui-suitcase.webp?v=440","./ui-purin-tip.webp?v=440","./hotel-purin.webp?v=440",
-  "./mini-purin-clap.webp?v=450","./mini-purin-hero.webp?v=450","./mini-purin-lie.webp?v=450","./mini-purin-surprise.webp?v=450",
-  "./mini-usagi-point.webp?v=450","./mini-usagi-excited.webp?v=450","./mini-usagi-success.webp?v=450","./mini-usagi-sticker.webp?v=450"
+  "./day-scene-01.webp?v=460","./day-scene-02.webp?v=460","./day-scene-03.webp?v=460","./day-scene-04.webp?v=460","./day-scene-05.webp?v=460",
+  "./day-scene-06.webp?v=460","./day-scene-07.webp?v=460","./day-scene-08.webp?v=460","./day-scene-09.webp?v=460","./day-scene-10.webp?v=460",
+  "./weather-rain-usagi.webp?v=460","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
+  "./ui-cloud.webp?v=440","./ui-coffee.webp?v=440","./ui-suitcase.webp?v=440","./ui-purin-tip.webp?v=440"
 ];
 const buddyFastImageCache=[];
 function preloadBuddyFastAssets(){
@@ -200,42 +198,24 @@ function buddyPeek(kind="purin"){
   requestAnimationFrame(()=>requestAnimationFrame(()=>layer.classList.add("show")));
   buddyPeek._timer=setTimeout(()=>{layer.classList.remove("show");setTimeout(()=>{layer.className="buddy-peek-layer buddy-only-art";layer.innerHTML=""},480)},2400);
 }
-function dayStampAsset(index){
-  if(index===0||index===9)return ["./stamp-plane.webp?v=440","飛機"];
-  if([3,7,8].includes(index))return ["./stamp-train.webp?v=440","新幹線"];
-  if([4,5,6].includes(index))return ["./stamp-onsen.webp?v=440","溫泉"];
-  return ["./stamp-camera.webp?v=440","相機"];
+function dailySceneAsset(index){
+  return `./day-scene-${String(index+1).padStart(2,"0")}.webp?v=460`;
 }
-function renderDayStamp(){
-  const el=$("#dayStamp"); if(!el)return; const [src,alt]=dayStampAsset(state.dayIndex); el.innerHTML=`<img src="${src}" alt="${alt}">`;
+function renderDailyScene(){
+  const img=$("#daySceneImage"), progress=$("#daySceneProgress"), bar=$("#daySceneProgressBar");
+  if(!img)return;
+  const src=dailySceneAsset(state.dayIndex);
+  if(img.getAttribute("src")!==src) img.src=src;
+  img.alt=`D${state.dayIndex+1} 布丁狗與烏薩奇旅行主題插畫`;
+  if(progress) progress.textContent=`${state.dayIndex+1} / ${TRIP.days.length}`;
+  if(bar) bar.style.width=`${((state.dayIndex+1)/TRIP.days.length)*100}%`;
 }
-function dailyBuddyAsset(index){
-  const list=[
-    ["./mini-purin-clap.webp?v=450","./mini-usagi-excited.webp?v=450","出發啦"],
-    ["./mini-purin-hero.webp?v=450","./mini-usagi-point.webp?v=450","一起逛街"],
-    ["./mini-purin-clap.webp?v=450","./mini-usagi-excited.webp?v=450","海邊散步"],
-    ["./mini-purin-lie.webp?v=450","./mini-usagi-sticker.webp?v=450","慢慢逛"],
-    ["./mini-purin-surprise.webp?v=450","./mini-usagi-point.webp?v=450","山路出發"],
-    ["./mini-purin-hero.webp?v=450","./mini-usagi-point.webp?v=450","往高千穗"],
-    ["./mini-purin-clap.webp?v=450","./mini-usagi-success.webp?v=450","高千穗日"],
-    ["./mini-purin-surprise.webp?v=450","./mini-usagi-excited.webp?v=450","阿蘇火山"],
-    ["./mini-purin-clap.webp?v=450","./mini-usagi-excited.webp?v=450","GUNDAM 日"],
-    ["./mini-purin-lie.webp?v=450","./mini-usagi-sticker.webp?v=450","最後一天"]
-  ];
-  return list[index%list.length];
-}
-function renderDailyBuddy(){
-  const el=$("#dayBuddySlot"); if(!el)return;
-  const [purin,usagi,label]=dailyBuddyAsset(state.dayIndex);
-  el.innerHTML=`<div class="day-buddy-pair" aria-label="${esc(label)}">
-    <img class="day-buddy-purin buddy-reactable" data-buddy-react="purin" src="${purin}" alt="布丁狗">
-    <img class="day-buddy-usagi buddy-reactable" data-buddy-react="usagi" src="${usagi}" alt="烏薩奇">
-  </div>`;
-}
+
 
 function updateWeatherBuddy(hasRain=false){
   const el=$("#weatherBuddySlot"); if(!el)return;
-  el.innerHTML=hasRain?`<img class="weather-usagi-rain" src="./usagi_weather.png?v=430" alt="雨天烏薩奇">`:`<img class="weather-cloud-art" src="./ui-cloud.webp?v=440" alt="">`;
+  el.classList.toggle("is-rain",!!hasRain);
+  el.innerHTML=`<img class="weather-usagi-rain buddy-reactable" data-buddy-react="usagi" src="./weather-rain-usagi.webp?v=460" alt="雨衣烏薩奇">`;
 }
 
 
@@ -432,7 +412,7 @@ function renderHotelReturnCard(){
   const label=lastDay?"返台前據點":"今晚住這裡";
   const help=lastDay?"取行李或需要回住宿時，從這裡直接導航。":"一天走完要回飯店時，不用再往上找地址。";
   box.hidden=false;
-  box.innerHTML=`<div class="hotel-return-copy"><span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ 導航回飯店</a></div><div class="hotel-return-art buddy-only-art"><img src="./hotel-purin.webp?v=440" alt=""><img class="hotel-suitcase" src="./ui-suitcase.webp?v=440" alt=""></div>`;
+  box.innerHTML=`<div class="hotel-return-copy"><span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ 導航回飯店</a></div><div class="hotel-return-art buddy-only-art buddy-reactable" data-buddy-react="duo"><img src="./hotel-return-duo.webp?v=460" alt="布丁狗與烏薩奇回飯店休息"></div>`;
 }
 
 function renderSchedule(){
@@ -442,8 +422,7 @@ function renderSchedule(){
   $("#dayTitle").textContent=d.title;
   $("#daySubtitle").textContent=d.subtitle;
   renderDayBrief(d);
-  renderDayStamp();
-  renderDailyBuddy();
+  renderDailyScene();
   $("#decisionArea").innerHTML=renderDecisionCards(d);
   const visibleEvents=d.events.filter(eventVisible);
   $("#timeline").innerHTML=visibleEvents.map((e,i)=>`
@@ -489,15 +468,15 @@ async function renderWeather(d){
 
 function renderFood(){
   $("#plannedFood").innerHTML=TRIP.plannedFood.map(i=>`
-    <article class="planned-food-card buddy-food-card food-plan-card-v45">
-      <div class="food-schedule-badge">
-        <b>${esc(i.day)}</b><span>${esc(i.time)}</span>
+    <article class="planned-food-card buddy-food-card food-plan-card-v46">
+      <div class="food-plan-meta-row">
+        <span class="food-day-chip">${esc(i.day)}</span>
+        <span class="food-time-chip">${esc(i.time)}</span>
+        <span class="food-status">${esc(i.status)}</span>
       </div>
-      <div class="food-plan-main">
-        <div class="food-plan-name-row"><h4>${esc(i.title)}</h4><span class="food-status">${esc(i.status)}</span></div>
-        ${i.detail?`<p class="food-plan-detail">${esc(i.detail)}</p>`:""}
-        ${(i.maps||[]).length?`<div class="food-map-row">${i.maps.map((m,idx)=>`<a class="mini-btn" target="_blank" rel="noopener" href="${mapSearch(m)}">地圖${i.maps.length>1?` ${idx+1}`:""} ↗</a>`).join("")}</div>`:""}
-      </div>
+      <h4>${esc(i.title)}</h4>
+      ${i.detail?`<p class="food-plan-detail">${esc(i.detail)}</p>`:""}
+      ${(i.maps||[]).length?`<div class="food-map-row">${i.maps.map((m,idx)=>`<a class="mini-btn" target="_blank" rel="noopener" href="${mapSearch(m)}">地圖${i.maps.length>1?` ${idx+1}`:""} ↗</a>`).join("")}</div>`:""}
     </article>`).join("");
   $("#foodQuick").innerHTML=TRIP.foodQuick.map(f=>`<a target="_blank" rel="noopener" class="food-chip" href="${mapSearch(f.query)}"><span>${f.icon}</span>${esc(f.label)} ↗</a>`).join("");
   $("#foodList").innerHTML=state.foods.length?state.foods.map(i=>`
@@ -1028,7 +1007,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=450",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=460",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });

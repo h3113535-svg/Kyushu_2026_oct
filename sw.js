@@ -1,6 +1,6 @@
-const CACHE = "kyushu-private-v4.5.0";
+const CACHE = "kyushu-private-v4.6.0";
 const SHELL = [
-  "./","./index.html","./style.css?v=450","./app.js?v=450",
+  "./","./index.html","./style.css?v=460","./app.js?v=460",
   "./manifest.json","./firebase-config.js?v=430","./icon-192.png","./icon-512.png",
   "./buddy_hero.png","./buddy_celebrate.png","./buddy_chill.png","./buddy_eat.png","./buddy_success.png",
   "./purin_peek_edge.png","./purin_walk.png","./usagi_peek.png","./usagi_dash.png","./usagi_success.png","./usagi_weather.png",
@@ -11,7 +11,21 @@ const SHELL = [
   "./ui-cloud.webp","./ui-coffee.webp","./ui-suitcase.webp","./ui-purin-tip.webp","./hotel-purin.webp",
   "./mini-purin-clap.webp","./mini-purin-hero.webp","./mini-purin-lie.webp","./mini-purin-surprise.webp",
   "./mini-usagi-point.webp","./mini-usagi-excited.webp","./mini-usagi-success.webp","./mini-usagi-sticker.webp"
-];
+,
+  "./day-scene-01.webp?v=460",
+  "./day-scene-02.webp?v=460",
+  "./day-scene-03.webp?v=460",
+  "./day-scene-04.webp?v=460",
+  "./day-scene-05.webp?v=460",
+  "./day-scene-06.webp?v=460",
+  "./day-scene-07.webp?v=460",
+  "./day-scene-08.webp?v=460",
+  "./day-scene-09.webp?v=460",
+  "./day-scene-10.webp?v=460",
+  "./weather-rain-usagi.webp?v=460",
+  "./booking-check-purin.webp?v=460",
+  "./booking-dash-usagi.webp?v=460",
+  "./hotel-return-duo.webp?v=460"];
 
 self.addEventListener("install", event => {
   event.waitUntil(
