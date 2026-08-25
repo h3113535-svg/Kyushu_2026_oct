@@ -13,6 +13,23 @@ let appBound = false;
 let lastError = "";
 const pollers = new Set();
 
+const BUDDY_FAST_ASSETS=[
+  "./daily-d1.webp?v=440","./daily-d2.webp?v=440","./daily-d3.webp?v=440","./daily-d4.webp?v=440","./daily-d5.webp?v=440",
+  "./daily-d6.webp?v=440","./daily-d7.webp?v=440","./daily-d8.webp?v=440","./daily-d9.webp?v=440","./daily-d10.webp?v=440",
+  "./stamp-plane.webp?v=440","./stamp-train.webp?v=440","./stamp-onsen.webp?v=440","./stamp-camera.webp?v=440",
+  "./ui-cloud.webp?v=440","./ui-coffee.webp?v=440","./ui-suitcase.webp?v=440","./ui-purin-tip.webp?v=440","./hotel-purin.webp?v=440"
+];
+const buddyFastImageCache=[];
+function preloadBuddyFastAssets(){
+  if(preloadBuddyFastAssets.started)return;
+  preloadBuddyFastAssets.started=true;
+  BUDDY_FAST_ASSETS.forEach(src=>{
+    const img=new Image(); img.decoding="async"; img.src=src; buddyFastImageCache.push(img);
+    if(img.decode) img.decode().catch(()=>{});
+  });
+}
+preloadBuddyFastAssets();
+
 function pathFor(key){
   return `${ROOT}/${key}`;
 }
@@ -151,34 +168,38 @@ function buddyCelebrate(text="完成！",image="./buddy_success.png?v=430"){
 function buddyPeek(kind="purin"){
   if(!isBuddyTheme())return;
   const layer=$("#buddyPeekLayer"); if(!layer)return;
-  const key=`buddyPeek:${kind}`;
-  try{if(sessionStorage.getItem(key))return;sessionStorage.setItem(key,"1")}catch{}
+  const now=Date.now(), cooldown=6000;
+  buddyPeek._last=buddyPeek._last||{};
+  if(now-(buddyPeek._last[kind]||0)<cooldown)return;
+  buddyPeek._last[kind]=now;
+  clearTimeout(buddyPeek._timer);
   const src=kind==="purin"?"./purin_peek_edge.png?v=430":"./usagi_peek.png?v=430";
   layer.innerHTML=`<img class="peek-${kind}" src="${src}" alt="">`;
-  layer.className=`buddy-peek-layer buddy-only-art show ${kind}`;
-  setTimeout(()=>{layer.className="buddy-peek-layer buddy-only-art";layer.innerHTML=""},2600);
+  layer.className=`buddy-peek-layer buddy-only-art ${kind}`;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>layer.classList.add("show")));
+  buddyPeek._timer=setTimeout(()=>{layer.classList.remove("show");setTimeout(()=>{layer.className="buddy-peek-layer buddy-only-art";layer.innerHTML=""},480)},2400);
 }
 function dayStampAsset(index){
-  if(index===0||index===9)return ["./travel_plane.png?v=430","飛機"];
-  if([3,7,8].includes(index))return ["./travel_train.png?v=430","新幹線"];
-  if([4,5,6].includes(index))return ["./travel_onsen.png?v=430","溫泉"];
-  return ["./travel_camera.png?v=430","相機"];
+  if(index===0||index===9)return ["./stamp-plane.webp?v=440","飛機"];
+  if([3,7,8].includes(index))return ["./stamp-train.webp?v=440","新幹線"];
+  if([4,5,6].includes(index))return ["./stamp-onsen.webp?v=440","溫泉"];
+  return ["./stamp-camera.webp?v=440","相機"];
 }
 function renderDayStamp(){
-  const el=$("#dayStamp"); if(!el)return; const [src,alt]=dayStampAsset(state.dayIndex); el.innerHTML=`<img src="${src}" alt="${alt}"><img class="stamp-maple" src="./travel_maple.png?v=430" alt="">`;
+  const el=$("#dayStamp"); if(!el)return; const [src,alt]=dayStampAsset(state.dayIndex); el.innerHTML=`<img src="${src}" alt="${alt}">`;
 }
 function dailyBuddyAsset(index){
   const list=[
-    ["./buddy_celebrate.png?v=430","旅伴出發"],
-    ["./usagi_point.png?v=430","烏薩奇指路"],
-    ["./usagi_excited.png?v=430","烏薩奇興奮"],
-    ["./buddy_chill.png?v=430","旅伴悠閒"],
-    ["./purin_surprise.png?v=430","布丁狗驚喜"],
-    ["./usagi_think.png?v=430","烏薩奇思考"],
-    ["./usagi_success.png?v=430","烏薩奇完成"],
-    ["./purin_clap.png?v=430","布丁狗開心"],
-    ["./buddy_success.png?v=430","旅伴成功"],
-    ["./purin_lie.png?v=430","布丁狗休息"]
+    ["./daily-d1.webp?v=440","旅伴出發"],
+    ["./daily-d2.webp?v=440","烏薩奇指路"],
+    ["./daily-d3.webp?v=440","烏薩奇興奮"],
+    ["./daily-d4.webp?v=440","旅伴悠閒"],
+    ["./daily-d5.webp?v=440","布丁狗驚喜"],
+    ["./daily-d6.webp?v=440","烏薩奇思考"],
+    ["./daily-d7.webp?v=440","烏薩奇完成"],
+    ["./daily-d8.webp?v=440","布丁狗開心"],
+    ["./daily-d9.webp?v=440","旅伴成功"],
+    ["./daily-d10.webp?v=440","布丁狗休息"]
   ];
   return list[index%list.length];
 }
@@ -190,7 +211,7 @@ function renderDailyBuddy(){
 
 function updateWeatherBuddy(hasRain=false){
   const el=$("#weatherBuddySlot"); if(!el)return;
-  el.innerHTML=hasRain?`<img class="weather-usagi-rain" src="./usagi_weather.png?v=430" alt="雨天烏薩奇">`:`<img class="weather-cloud-art" src="./travel_cloud.png?v=430" alt="">`;
+  el.innerHTML=hasRain?`<img class="weather-usagi-rain" src="./usagi_weather.png?v=430" alt="雨天烏薩奇">`:`<img class="weather-cloud-art" src="./ui-cloud.webp?v=440" alt="">`;
 }
 
 
@@ -248,7 +269,7 @@ function renderDayBrief(day){
   const rainHtml=day.rainPlan?`<div class="rain-plan"><b>☔ 雨天備案</b><span>${esc(day.rainPlan)}</span></div>`:"";
   const hasContent=!!(day.alert||items||day.rainPlan);
   box.innerHTML=hasContent
-    ? `<div class="brief-title">今日提醒</div>${alertHtml}${items?`<ul>${items}</ul>`:""}${rainHtml}`
+    ? `<div class="day-brief-head-v44"><div class="brief-title">今日提醒</div><img class="brief-tip-art buddy-only-art" src="./ui-purin-tip.webp?v=440" alt=""></div>${alertHtml}${items?`<ul>${items}</ul>`:""}${rainHtml}`
     : "";
   box.classList.toggle("empty-brief",!hasContent);
 }
@@ -360,6 +381,36 @@ function syncBuddyWeather(){
   $("#buddyTopWeather").textContent=`${loc.split(" · ")[0]} ${m?m[1]+"°":"—"}`;
 }
 
+
+function mapDirections(q){return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}`}
+function hotelForDay(index){
+  const explicit=TRIP.days?.[index]?.hotel;
+  if(explicit?.name && (explicit.nav||explicit.name))return {title:explicit.name,nav:explicit.nav||explicit.name};
+  let latest=null;
+  for(let i=0;i<=index;i++){
+    for(const e of (TRIP.days?.[i]?.events||[])){
+      const title=String(e.title||""), category=String(e.category||"");
+      if(category.includes("住宿") && e.nav && !/退房|Check[- ]?out|起床|整理/i.test(title)){
+        latest={title,nav:e.nav};
+      }
+    }
+  }
+  return latest;
+}
+function cleanHotelTitle(title){
+  return String(title||"飯店").replace(/\s*(Check[- ]?in|check[- ]?in|入住|放行李).*$/i,"").trim()||"飯店";
+}
+function renderHotelReturnCard(){
+  const box=$("#hotelReturnCard"); if(!box)return;
+  const hotel=hotelForDay(state.dayIndex);
+  if(!hotel){box.hidden=true;box.innerHTML="";return;}
+  const lastDay=state.dayIndex===TRIP.days.length-1;
+  const label=lastDay?"返台前據點":"今晚住這裡";
+  const help=lastDay?"取行李或需要回住宿時，從這裡直接導航。":"一天走完要回飯店時，不用再往上找地址。";
+  box.hidden=false;
+  box.innerHTML=`<div class="hotel-return-copy"><span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ 導航回飯店</a></div><div class="hotel-return-art buddy-only-art"><img src="./hotel-purin.webp?v=440" alt=""><img class="hotel-suitcase" src="./ui-suitcase.webp?v=440" alt=""></div>`;
+}
+
 function renderSchedule(){
   const d=TRIP.days[state.dayIndex];
   renderWeather(d);
@@ -383,6 +434,7 @@ function renderSchedule(){
         ${e.noNav?"":`<a class="nav-link" target="_blank" rel="noopener" href="${mapNav(e.nav||e.title,weatherMode(e))}">↗ Google Maps 導航</a>`}
       </div>
     </article>`).join("");
+  renderHotelReturnCard();
   renderWeather(d);
 }
 async function renderWeather(d){
@@ -528,13 +580,13 @@ function settlementText(net){
 }
 function renderExpenses(){
   const s=computeExpense();
-  $("#expenseSummary").innerHTML=`<div class="eyebrow">TRIP TOTAL</div><div class="summary-total">¥${Math.round(s.total).toLocaleString()}</div>
+  $("#expenseSummary").innerHTML=`<div class="eyebrow">旅費總計</div><div class="summary-total">¥${Math.round(s.total).toLocaleString()}</div>
     <div class="list-meta">${TRIP.members.map(m=>`${esc(m)} 已付款 ¥${Math.round(s.paid[m]).toLocaleString()}`).join(" · ")}</div>
     <div class="settlement"><b>目前結算</b><br>${esc(settlementText(s.net))}</div>`;
   $("#expenseList").innerHTML=state.expenses.length?state.expenses.slice().reverse().map(i=>`
     <div class="list-item"><div class="list-main"><div><div class="list-title">${esc(i.name)}</div>
       <div class="list-meta">¥${Number(i.amount).toLocaleString()} · ${esc(i.payer)} 付款 · 分攤：${esc((i.participants||TRIP.members).join("、"))}${i.date?` · ${esc(i.date)}`:""}</div>
-      </div><button class="mini-btn" data-delete-expense="${i.id}">刪</button></div></div>`).join(""):`<div class="empty">還沒有共同支出。</div>`;
+      </div><button class="mini-btn" data-delete-expense="${i.id}">刪</button></div></div>`).join(""):`<div class="empty">還沒有記帳紀錄。</div>`;
 }
 function renderNotes(){ $("#notesArea").value=state.notes||""; }
 function renderTools(){renderBookings();renderShopping();renderExpenses();renderNotes()}
@@ -594,7 +646,7 @@ function openModal(type){
       selectField("誰的","owner",TRIP.members)+field("預算（JPY）","amount","number","20000")+
       field("店家","shop","text","例如：On Fukuoka")+field("預計哪天","day","text","例如：D2");
   }else{
-    title.textContent="新增共同支出";
+    title.textContent="新增記帳";
     fields.innerHTML=field("名稱","name","text","例如：晚餐")+field("金額（JPY）","amount","number","4800")+
       selectField("付款人","payer",TRIP.members)+field("日期","date","date","")+
       `<div class="field"><label>分攤成員</label><div class="checks">${TRIP.members.map(m=>`<label class="check-label"><input type="checkbox" name="participants" value="${esc(m)}" checked> ${esc(m)}</label>`).join("")}</div></div>`;
@@ -683,23 +735,30 @@ function bind(){
       "./buddy_eat.png?v=430",
       "./buddy_success.png?v=430"
     ];
-    let heroIndex=0,taps=0,tapTimer=null,holdTimer=null;
-    const resetTap=()=>{clearTimeout(tapTimer);tapTimer=setTimeout(()=>taps=0,1200)};
-    heroEgg.addEventListener("click",()=>{
-      heroIndex=(heroIndex+1)%heroGallery.length;
+    let heroIndex=0,taps=0,tapTimer=null,holdTimer=null,holdTriggered=false;
+    heroGallery.slice(1).forEach(src=>{const p=new Image();p.src=src;if(p.decode)p.decode().catch(()=>{})});
+    const syncDots=()=>{$$("#buddyHeroDots [data-hero-index]").forEach((d,i)=>d.classList.toggle("active",i===heroIndex))};
+    const setHero=(idx,animate=true)=>{
+      heroIndex=(idx+heroGallery.length)%heroGallery.length;
       if(heroImg){
         heroImg.classList.remove("swap");
-        void heroImg.offsetWidth;
+        if(animate)void heroImg.offsetWidth;
         heroImg.src=heroGallery[heroIndex];
-        heroImg.classList.add("swap");
+        if(animate)heroImg.classList.add("swap");
       }
-      taps++;resetTap();
-      if(taps>=5){taps=0;buddyCelebrate("旅伴集合！","./buddy_celebrate.png?v=430")}
-    });
-    ["pointerdown","touchstart"].forEach(ev=>heroEgg.addEventListener(ev,()=>{clearTimeout(holdTimer);holdTimer=setTimeout(()=>buddyCelebrate("找到隱藏彩蛋 ♡","./buddy_success.png?v=430"),900)},{passive:true}));
-    ["pointerup","pointercancel","pointerleave","touchend"].forEach(ev=>heroEgg.addEventListener(ev,()=>clearTimeout(holdTimer),{passive:true}));
+      syncDots();
+    };
+    const resetTap=()=>{clearTimeout(tapTimer);tapTimer=setTimeout(()=>taps=0,1200)};
+    heroEgg.addEventListener("click",()=>{if(holdTriggered){holdTriggered=false;return;}setHero(heroIndex+1);taps++;resetTap();if(taps>=5){taps=0;buddyCelebrate("旅伴集合！","./buddy_celebrate.png?v=430")}});
+    $$("#buddyHeroDots [data-hero-index]").forEach(dot=>dot.addEventListener("click",()=>setHero(Number(dot.dataset.heroIndex))));
+    heroEgg.addEventListener("pointerdown",()=>{holdTriggered=false;clearTimeout(holdTimer);holdTimer=setTimeout(()=>{holdTriggered=true;buddyCelebrate("找到隱藏彩蛋 ♡","./buddy_success.png?v=430")},900)});
+    ["pointerup","pointercancel","pointerleave"].forEach(ev=>heroEgg.addEventListener(ev,()=>clearTimeout(holdTimer)));
+    syncDots();
   }
   $("#buddyCelebration")?.addEventListener("click",()=>$("#buddyCelebration").classList.remove("show"));
+  $("#foodNearbyOpen")?.addEventListener("click",()=>$("#foodNearbyModal")?.showModal());
+  $("#foodNearbyClose")?.addEventListener("click",()=>$("#foodNearbyModal")?.close());
+  $("#foodNearbyModal")?.addEventListener("click",e=>{if(e.target===$("#foodNearbyModal"))$("#foodNearbyModal").close()});
   $("#settingsBtn").addEventListener("click",()=>{$("#settingsModal").showModal();applyDisplaySettings()});
   $("#settingsClose").addEventListener("click",()=>$("#settingsModal").close());
   $("#settingsModal").addEventListener("click",e=>{if(e.target===$("#settingsModal"))$("#settingsModal").close()});
@@ -942,7 +1001,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=431",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=440",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });

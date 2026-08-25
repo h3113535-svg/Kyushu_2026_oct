@@ -2064,3 +2064,129 @@ html[data-theme="buddy"] .day-buddy-slot img{
   opacity:1!important;
   transform:none!important;
 }
+
+
+/* =========================================================
+   v4.4.0 — Layout & UX Polish
+   ========================================================= */
+
+/* No maple motif in this trip UI. */
+html[data-theme="buddy"] .buddy-hero-maple,
+html[data-theme="buddy"] .stamp-maple,
+html[data-theme="buddy"] .buddy-sticker-ribbon{display:none!important}
+
+/* Reserve a real safe zone for Aa. */
+html[data-theme="buddy"] .settings-btn{
+  z-index:60!important;
+  top:calc(env(safe-area-inset-top,0px) + 13px)!important;
+  right:14px!important;
+  width:46px;height:46px;
+  background:#FFFDF8!important;
+  box-shadow:0 7px 18px rgba(89,66,43,.12)!important;
+}
+html[data-theme="buddy"] .buddy-hero-v42{padding-top:58px;box-sizing:border-box}
+html[data-theme="buddy"] .buddy-hero-copy{width:min(86%,455px)!important}
+
+/* Hero carousel dots replace the blocked Tap text. */
+html[data-theme="buddy"] .buddy-hero-hint{display:none!important}
+.buddy-hero-dots{display:none}
+html[data-theme="buddy"] .buddy-hero-dots{
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  height:24px;margin:-10px 0 8px;position:relative;z-index:8;
+}
+html[data-theme="buddy"] .buddy-hero-dots button{
+  width:7px;height:7px;border-radius:99px;border:0;padding:0;background:#D9CFBD;
+  transition:width .2s ease,background .2s ease,transform .2s ease;
+}
+html[data-theme="buddy"] .buddy-hero-dots button.active{width:22px;background:#E4B94E}
+
+/* Daily heading is a true grid: copy and art never overlap. */
+html[data-theme="buddy"] .day-title{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) 112px!important;
+  grid-template-areas:"title art" "subtitle art"!important;
+  align-items:center!important;gap:3px 10px!important;
+  min-height:88px!important;padding:4px 2px 12px!important;
+}
+html[data-theme="buddy"] .day-title>div:first-child{grid-area:title;min-width:0}
+html[data-theme="buddy"] .day-title>p{grid-area:subtitle;text-align:left!important;max-width:none!important;margin:2px 0 0!important;min-width:0}
+html[data-theme="buddy"] .day-art-cluster{
+  grid-area:art;position:relative!important;right:auto!important;bottom:auto!important;
+  width:112px!important;height:82px!important;align-self:center;
+}
+html[data-theme="buddy"] .day-buddy-slot{right:30px!important;bottom:0!important;width:76px!important;height:76px!important}
+html[data-theme="buddy"] .day-buddy-slot img{animation:none!important;opacity:1!important;transform:none!important}
+html[data-theme="buddy"] .day-stamp{right:0!important;bottom:5px!important;width:40px!important;height:40px!important;transform:rotate(4deg)!important}
+html[data-theme="buddy"] .day-stamp>img:first-child{max-width:38px!important;max-height:38px!important}
+
+/* Reminder card: remove floating memo tag and keep a bounded header row. */
+html[data-theme="buddy"] .day-brief:after{display:none!important;content:none!important}
+html[data-theme="buddy"] .day-brief{overflow:visible!important;padding:14px 15px!important}
+html[data-theme="buddy"] .day-brief-head-v44{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}
+html[data-theme="buddy"] .day-brief-head-v44 .brief-title{margin:0}
+html[data-theme="buddy"] .brief-tip-art{width:42px;height:38px;object-fit:contain;flex:0 0 42px;filter:drop-shadow(0 4px 5px rgba(88,63,43,.08))}
+
+/* Food quick search = top action, detailed choices live in a bottom sheet. */
+.food-nearby-trigger{
+  width:100%;border:1px solid var(--line);background:rgba(255,255,255,.86);border-radius:18px;
+  padding:11px 14px;margin:0 0 14px;display:flex;align-items:center;gap:11px;text-align:left;color:var(--ink);
+  box-shadow:0 7px 18px rgba(72,55,42,.06);
+}
+.food-nearby-trigger-icon{width:42px;height:42px;display:grid;place-items:center;flex:0 0 42px}
+.food-nearby-trigger-icon img{width:40px;height:40px;object-fit:contain}
+.food-nearby-trigger-copy{display:block;min-width:0;flex:1}
+.food-nearby-trigger-copy b{display:block;font-size:14px}
+.food-nearby-trigger-copy small{display:block;margin-top:2px;color:var(--muted);font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.food-nearby-trigger em{font-style:normal;font-size:26px;color:var(--muted)}
+html[data-theme="buddy"] .food-nearby-trigger{background:linear-gradient(135deg,#F4FAFF,#FFF9DF);border-color:#D9E6E7}
+.food-nearby-modal{border:0;padding:0;background:transparent;width:min(100%,520px);max-width:520px;margin:auto auto 0;overflow:visible}
+.food-nearby-modal::backdrop{background:rgba(39,34,29,.32);backdrop-filter:blur(2px)}
+.food-nearby-sheet{position:relative;background:var(--paper);border-radius:26px 26px 0 0;padding:18px 18px calc(22px + env(safe-area-inset-bottom,0px));box-shadow:0 -18px 55px rgba(47,38,31,.18);overflow:hidden}
+.food-nearby-sheet-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.food-nearby-sheet-head h3{font-size:22px;margin:3px 0 0}
+.food-nearby-sheet>p{font-size:11px;color:var(--muted);margin:8px 0 14px;max-width:78%}
+.food-quick-sheet-grid{position:relative;z-index:2;padding-right:72px}
+.food-sheet-purin{position:absolute;right:-4px;bottom:3px;width:92px;max-height:132px;object-fit:contain;pointer-events:none}
+
+/* Hotel / base card after the timeline. */
+.hotel-return-card[hidden]{display:none!important}
+.hotel-return-card{
+  position:relative;margin:20px 0 4px;padding:16px 118px 16px 17px;min-height:126px;
+  border:1px solid var(--line);border-radius:22px;background:rgba(255,255,255,.88);box-shadow:var(--shadow);overflow:hidden;
+}
+.hotel-return-copy{position:relative;z-index:2}
+.hotel-return-card h3{font-size:17px;margin:4px 0 4px;line-height:1.35}
+.hotel-return-card p{font-size:10.5px;line-height:1.55;color:var(--muted);margin:0 0 10px}
+.hotel-nav-btn{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 13px;border-radius:12px;background:var(--accent);color:#fff;font-size:12px;font-weight:900}
+.hotel-return-art{position:absolute;right:5px;bottom:0;width:112px;height:112px}
+.hotel-return-art>img:first-child{position:absolute;right:3px;bottom:0;width:105px;height:80px;object-fit:contain;object-position:center bottom}
+.hotel-return-art .hotel-suitcase{position:absolute;right:4px;top:4px;width:42px;height:42px;object-fit:contain;transform:rotate(6deg)}
+html[data-theme="buddy"] .hotel-return-card{background:linear-gradient(135deg,#FFFDF6,#F2FAFC);border-color:#E6D6B4}
+html[data-theme="buddy"] .hotel-nav-btn{background:#E3B649;color:#5A402C}
+
+/* Pop characters may reappear on later visits; transition remains soft. */
+html[data-theme="buddy"] .buddy-peek-layer{transition:transform .42s cubic-bezier(.2,.85,.25,1.12),opacity .2s;opacity:0}
+html[data-theme="buddy"] .buddy-peek-layer.show{opacity:1}
+
+/* Tool naming hierarchy: bigger destination, smaller purpose. */
+html[data-theme="buddy"] .tool-card b{font-size:14px}
+html[data-theme="buddy"] .tool-card small{margin-top:2px}
+
+@media (max-width:430px){
+  html[data-theme="buddy"] .hero{min-height:458px!important}
+  html[data-theme="buddy"] .buddy-hero-v42{padding-top:56px;min-height:438px}
+  html[data-theme="buddy"] .buddy-hero-copy{width:84%!important;padding-left:9px!important;padding-right:9px!important}
+  html[data-theme="buddy"] .settings-btn{right:10px!important}
+  html[data-theme="buddy"] .day-title{grid-template-columns:minmax(0,1fr) 100px!important;min-height:82px!important}
+  html[data-theme="buddy"] .day-art-cluster{width:100px!important;height:76px!important}
+  html[data-theme="buddy"] .day-buddy-slot{width:70px!important;height:70px!important;right:27px!important}
+  html[data-theme="buddy"] .day-stamp{width:36px!important;height:36px!important}
+  .hotel-return-card{padding-right:104px}
+  .hotel-return-art{width:100px}
+}
+html[data-theme="buddy"][data-font-size="xlarge"] .day-title{
+  display:grid!important;grid-template-columns:minmax(0,1fr) 92px!important;padding:6px 2px 16px!important;
+}
+html[data-theme="buddy"][data-font-size="xlarge"] .day-art-cluster{width:92px!important}
+html[data-theme="buddy"][data-font-size="xlarge"] .day-buddy-slot{width:62px!important;height:62px!important}
+html[data-theme="buddy"][data-font-size="xlarge"] .food-nearby-trigger-copy small{white-space:normal}
