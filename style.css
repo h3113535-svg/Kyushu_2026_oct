@@ -1897,3 +1897,160 @@ html[data-theme="buddy"] .buddy-spark-layer.play i{animation:buddySpark 1s ease-
   html[data-theme="buddy"] .panel-art-stack{width:94px;flex-basis:94px}.booking-usagi-art{width:72px!important}
   html[data-theme="buddy"] .tools-heading-icons{min-width:92px}.tools-heading-icons img:first-child{height:58px!important}
 }
+
+
+/* =========================================================
+   v4.3.0 — Asset-rich Buddy Diary
+   ========================================================= */
+
+/* Only #heroPrivateSeason may display 2026・秋. */
+html[data-theme="buddy"] .hero-row>div::before,
+html[data-theme="buddy"] .hero-row>div:before,
+html[data-theme="buddy"] .hero-copy::before,
+html[data-theme="buddy"] .hero-copy:before,
+html[data-theme="buddy"] .hero-copy-buddy::before,
+html[data-theme="buddy"] .hero-copy-buddy:before,
+html[data-theme="buddy"] .buddy-hero-copy::before,
+html[data-theme="buddy"] .buddy-hero-copy:before{
+  content:none!important;
+  display:none!important;
+}
+
+html[data-theme="buddy"] .hero{min-height:480px!important}
+html[data-theme="buddy"] .buddy-hero-v42{min-height:445px}
+html[data-theme="buddy"] .buddy-hero-art{width:min(96%,570px);height:302px}
+html[data-theme="buddy"] .buddy-hero-hint{bottom:5px;right:7%}
+
+html[data-theme="buddy"] .buddy-sticker-ribbon{
+  width:min(calc(100% - 26px),790px);
+  height:58px;
+  margin:-8px auto 12px;
+  padding:7px 16px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:clamp(10px,4vw,25px);
+  border:1px dashed #E5C985;
+  border-radius:18px;
+  background:rgba(255,253,247,.94);
+  box-shadow:0 7px 18px rgba(99,72,43,.07);
+  position:relative;
+  z-index:7;
+  overflow:hidden;
+}
+html[data-theme="buddy"] .buddy-sticker-ribbon::after{
+  content:"";
+  position:absolute;
+  width:72px;height:15px;top:-7px;left:50%;
+  transform:translateX(-50%) rotate(-1deg);
+  background:rgba(255,232,144,.58);
+  border-radius:3px;
+}
+html[data-theme="buddy"] .buddy-sticker-ribbon span{width:42px;height:42px;display:grid;place-items:center}
+html[data-theme="buddy"] .buddy-sticker-ribbon img{max-width:40px;max-height:40px;object-fit:contain;filter:drop-shadow(0 4px 4px rgba(88,62,42,.08))}
+html[data-theme="buddy"] .buddy-sticker-ribbon span:nth-child(2){transform:rotate(-7deg)}
+html[data-theme="buddy"] .buddy-sticker-ribbon span:nth-child(3){transform:rotate(5deg)}
+html[data-theme="buddy"] .buddy-sticker-ribbon span:nth-child(4){transform:rotate(-4deg)}
+html[data-theme="buddy"] .buddy-sticker-ribbon span:nth-child(5){transform:rotate(6deg)}
+html[data-theme="buddy"] .buddy-sticker-ribbon span:nth-child(6){transform:rotate(-10deg)}
+
+html[data-theme="buddy"] .day-title{
+  min-height:92px;
+  padding-right:142px!important;
+  align-items:center;
+}
+html[data-theme="buddy"] .day-art-cluster{
+  position:absolute;right:2px;bottom:4px;width:136px;height:92px;
+  display:flex;align-items:flex-end;justify-content:flex-end;pointer-events:none;
+}
+html[data-theme="buddy"] .day-buddy-slot{
+  position:absolute;right:38px;bottom:0;width:88px;height:88px;
+  display:flex;align-items:flex-end;justify-content:center;z-index:2;
+}
+html[data-theme="buddy"] .day-buddy-slot img{
+  max-width:100%;max-height:100%;object-fit:contain;object-position:center bottom;
+  filter:drop-shadow(0 6px 8px rgba(83,62,44,.10));
+  animation:buddyDailyIn .42s cubic-bezier(.2,.86,.25,1.1) both;
+}
+html[data-theme="buddy"] .day-stamp{
+  right:0!important;top:auto!important;bottom:4px!important;width:50px!important;height:50px!important;
+  z-index:3;transform:rotate(5deg)!important;
+}
+html[data-theme="buddy"] .day-stamp>img:first-child{max-width:44px!important;max-height:42px!important}
+html[data-theme="buddy"] .day-stamp .stamp-maple{width:17px!important;right:-2px!important;top:-3px!important}
+@keyframes buddyDailyIn{from{opacity:0;transform:translateY(11px) scale(.90)}to{opacity:1;transform:none}}
+
+html[data-theme="buddy"] .buddy-food-nearby{position:relative;overflow:hidden;padding-right:86px!important}
+html[data-theme="buddy"] .food-nearby-stickers{position:absolute;right:9px;top:8px;width:76px;height:70px}
+html[data-theme="buddy"] .food-nearby-stickers img:first-child{position:absolute;width:50px;right:0;bottom:0;transform:rotate(6deg)}
+html[data-theme="buddy"] .food-nearby-stickers img:last-child{position:absolute;width:30px;left:0;top:0;transform:rotate(-22deg)}
+html[data-theme="buddy"] .buddy-wishlist-card{position:relative;overflow:hidden;padding-right:76px!important}
+html[data-theme="buddy"] .wishlist-purin{position:absolute;right:4px;top:4px;width:70px;height:72px;object-fit:contain;opacity:.96;filter:drop-shadow(0 5px 7px rgba(80,60,42,.08))}
+
+html[data-theme="buddy"] .tool-card{min-height:94px;padding-right:74px!important}
+html[data-theme="buddy"] .tool-card .tool-emoji{display:none!important}
+html[data-theme="buddy"] .tool-card-art{
+  display:block!important;position:absolute;right:10px;bottom:8px;width:58px;height:58px;object-fit:contain;
+  filter:drop-shadow(0 5px 6px rgba(85,62,44,.08));transition:transform .18s ease;
+}
+html[data-theme="buddy"] .tool-card:active .tool-card-art{transform:scale(.93) rotate(-3deg)}
+html[data-theme="buddy"] .panel-character-art{width:54px;height:64px;object-fit:contain;margin-right:-6px;filter:drop-shadow(0 5px 7px rgba(77,58,43,.09))}
+html[data-theme="buddy"] .expense-character{width:50px}
+
+.purin-walk-egg,.usagi-urgent-egg{display:none}
+html[data-theme="buddy"] .purin-walk-egg{
+  display:block;position:fixed;z-index:75;left:-180px;bottom:72px;width:145px;height:44px;
+  pointer-events:none;opacity:0;
+}
+html[data-theme="buddy"] .purin-walk-egg img{width:145px;height:43px;object-fit:contain}
+html[data-theme="buddy"] .purin-walk-egg.play{animation:purinWalkAcross 10s linear both}
+@keyframes purinWalkAcross{
+  0%{opacity:0;transform:translateX(0)}
+  7%{opacity:1}
+  93%{opacity:1}
+  100%{opacity:0;transform:translateX(calc(100vw + 330px))}
+}
+
+html[data-theme="buddy"] .usagi-urgent-egg{
+  display:block;position:fixed;z-index:86;right:-155px;bottom:84px;width:132px;height:132px;
+  pointer-events:none;opacity:0;
+}
+html[data-theme="buddy"] .usagi-urgent-egg img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 8px 10px rgba(72,56,44,.12))}
+html[data-theme="buddy"] .usagi-urgent-egg.play{animation:usagiUrgentDash 1.65s cubic-bezier(.18,.75,.23,1) both}
+@keyframes usagiUrgentDash{
+  0%{opacity:0;transform:translateX(0) rotate(-5deg)}
+  12%{opacity:1}
+  70%{opacity:1;transform:translateX(calc(-100vw - 90px)) rotate(3deg)}
+  100%{opacity:0;transform:translateX(calc(-100vw - 230px)) rotate(5deg)}
+}
+
+html[data-theme="buddy"] .buddy-hero-art img.swap{animation:buddyHeroSwap .34s cubic-bezier(.2,.86,.25,1.08) both}
+@keyframes buddyHeroSwap{
+  0%{opacity:.15;transform:scale(.90) rotate(-1deg)}
+  70%{opacity:1;transform:scale(1.025) rotate(.5deg)}
+  100%{opacity:1;transform:none}
+}
+
+@media (max-width:430px){
+  html[data-theme="buddy"] .hero{min-height:448px!important}
+  html[data-theme="buddy"] .buddy-hero-v42{min-height:428px}
+  html[data-theme="buddy"] .buddy-hero-art{height:278px;width:102%}
+  html[data-theme="buddy"] .buddy-sticker-ribbon{width:calc(100% - 18px);height:52px;margin:-7px auto 10px;padding:6px 9px;gap:8px}
+  html[data-theme="buddy"] .buddy-sticker-ribbon span{width:35px;height:35px}
+  html[data-theme="buddy"] .buddy-sticker-ribbon img{max-width:34px;max-height:34px}
+  html[data-theme="buddy"] .day-title{min-height:86px;padding-right:116px!important}
+  html[data-theme="buddy"] .day-art-cluster{width:112px;height:84px}
+  html[data-theme="buddy"] .day-buddy-slot{width:78px;height:78px;right:31px}
+  html[data-theme="buddy"] .day-stamp{width:43px!important;height:43px!important}
+  html[data-theme="buddy"] .day-stamp>img:first-child{max-width:38px!important;max-height:36px!important}
+  html[data-theme="buddy"] .buddy-wishlist-card{padding-right:62px!important}
+  html[data-theme="buddy"] .wishlist-purin{width:58px;height:60px}
+  html[data-theme="buddy"] .tool-card{padding-right:63px!important}
+  html[data-theme="buddy"] .tool-card-art{width:49px;height:49px}
+}
+html[data-theme="buddy"][data-font-size="xlarge"] .day-title{padding-right:118px!important}
+html[data-theme="buddy"][data-font-size="xlarge"] .day-buddy-slot{width:70px;height:70px}
+@media (prefers-reduced-motion:reduce){
+  html[data-theme="buddy"] .purin-walk-egg,
+  html[data-theme="buddy"] .usagi-urgent-egg{display:none!important}
+}

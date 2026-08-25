@@ -142,7 +142,7 @@ function buddySparkBurst(x=50,y=45){
   layer.classList.remove("play"); void layer.offsetWidth; layer.classList.add("play");
   setTimeout(()=>{layer.classList.remove("play");layer.innerHTML=""},1100);
 }
-function buddyCelebrate(text="完成！",image="./buddy_success.png?v=420"){
+function buddyCelebrate(text="完成！",image="./buddy_success.png?v=430"){
   if(!isBuddyTheme())return;
   const wrap=$("#buddyCelebration"),img=$("#buddyCelebrateImg"),label=$("#buddyCelebrateText"); if(!wrap)return;
   img.src=image; label.textContent=text; wrap.classList.remove("show"); void wrap.offsetWidth; wrap.classList.add("show"); buddySparkBurst(50,42);
@@ -153,23 +153,80 @@ function buddyPeek(kind="purin"){
   const layer=$("#buddyPeekLayer"); if(!layer)return;
   const key=`buddyPeek:${kind}`;
   try{if(sessionStorage.getItem(key))return;sessionStorage.setItem(key,"1")}catch{}
-  const src=kind==="purin"?"./purin_peek_edge.png?v=420":"./usagi_peek.png?v=420";
+  const src=kind==="purin"?"./purin_peek_edge.png?v=430":"./usagi_peek.png?v=430";
   layer.innerHTML=`<img class="peek-${kind}" src="${src}" alt="">`;
   layer.className=`buddy-peek-layer buddy-only-art show ${kind}`;
   setTimeout(()=>{layer.className="buddy-peek-layer buddy-only-art";layer.innerHTML=""},2600);
 }
 function dayStampAsset(index){
-  if(index===0||index===9)return ["./travel_plane.png?v=420","飛機"];
-  if([3,7,8].includes(index))return ["./travel_train.png?v=420","新幹線"];
-  if([4,5,6].includes(index))return ["./travel_onsen.png?v=420","溫泉"];
-  return ["./travel_camera.png?v=420","相機"];
+  if(index===0||index===9)return ["./travel_plane.png?v=430","飛機"];
+  if([3,7,8].includes(index))return ["./travel_train.png?v=430","新幹線"];
+  if([4,5,6].includes(index))return ["./travel_onsen.png?v=430","溫泉"];
+  return ["./travel_camera.png?v=430","相機"];
 }
 function renderDayStamp(){
-  const el=$("#dayStamp"); if(!el)return; const [src,alt]=dayStampAsset(state.dayIndex); el.innerHTML=`<img src="${src}" alt="${alt}"><img class="stamp-maple" src="./travel_maple.png?v=420" alt="">`;
+  const el=$("#dayStamp"); if(!el)return; const [src,alt]=dayStampAsset(state.dayIndex); el.innerHTML=`<img src="${src}" alt="${alt}"><img class="stamp-maple" src="./travel_maple.png?v=430" alt="">`;
 }
+function dailyBuddyAsset(index){
+  const list=[
+    ["./buddy_celebrate.png?v=430","旅伴出發"],
+    ["./usagi_point.png?v=430","烏薩奇指路"],
+    ["./usagi_excited.png?v=430","烏薩奇興奮"],
+    ["./buddy_chill.png?v=430","旅伴悠閒"],
+    ["./purin_surprise.png?v=430","布丁狗驚喜"],
+    ["./usagi_think.png?v=430","烏薩奇思考"],
+    ["./usagi_success.png?v=430","烏薩奇完成"],
+    ["./purin_clap.png?v=430","布丁狗開心"],
+    ["./buddy_success.png?v=430","旅伴成功"],
+    ["./purin_lie.png?v=430","布丁狗休息"]
+  ];
+  return list[index%list.length];
+}
+function renderDailyBuddy(){
+  const el=$("#dayBuddySlot"); if(!el)return;
+  const [src,alt]=dailyBuddyAsset(state.dayIndex);
+  el.innerHTML=`<img src="${src}" alt="${esc(alt)}">`;
+}
+
 function updateWeatherBuddy(hasRain=false){
   const el=$("#weatherBuddySlot"); if(!el)return;
-  el.innerHTML=hasRain?`<img class="weather-usagi-rain" src="./usagi_weather.png?v=420" alt="雨天烏薩奇">`:`<img class="weather-cloud-art" src="./travel_cloud.png?v=420" alt="">`;
+  el.innerHTML=hasRain?`<img class="weather-usagi-rain" src="./usagi_weather.png?v=430" alt="雨天烏薩奇">`:`<img class="weather-cloud-art" src="./travel_cloud.png?v=430" alt="">`;
+}
+
+
+function localDateKey(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function maybePurinWalkEgg(){
+  if(!isBuddyTheme())return;
+  const key=`buddyWalk:${localDateKey()}`;
+  try{if(localStorage.getItem(key))return;localStorage.setItem(key,"1")}catch{}
+  const el=$("#purinWalkEgg"); if(!el)return;
+  const delay=4500+Math.floor(Math.random()*3500);
+  setTimeout(()=>{
+    if(!isBuddyTheme())return;
+    el.classList.remove("play"); void el.offsetWidth; el.classList.add("play");
+    setTimeout(()=>el.classList.remove("play"),10500);
+  },delay);
+}
+function maybeUrgentBookingEgg(){
+  if(!isBuddyTheme()||!TRIP?.bookingTasks?.length)return;
+  const now=Date.now();
+  const urgent=TRIP.bookingTasks.find(t=>{
+    if(taskDone(t)||!t.deadline)return false;
+    const diff=new Date(t.deadline).getTime()-now;
+    return diff>0&&diff<=24*3600000;
+  });
+  if(!urgent)return;
+  const key=`buddyUrgent:${urgent.id}:${localDateKey()}`;
+  try{if(localStorage.getItem(key))return;localStorage.setItem(key,"1")}catch{}
+  const el=$("#usagiUrgentEgg"); if(!el)return;
+  setTimeout(()=>{
+    if(!isBuddyTheme())return;
+    el.classList.remove("play"); void el.offsetWidth; el.classList.add("play");
+    setTimeout(()=>el.classList.remove("play"),2100);
+  },1800);
 }
 
 function normalizeCloud(val){
@@ -214,7 +271,7 @@ async function chooseDecision(id, option){
   saveLocal("decisions",state.decisions);
   if(state.cloud){try{await setCloud("decisions",state.decisions)}catch{}}
   renderSchedule();
-  buddyCelebrate("決定好啦！","./usagi_success.png?v=420");
+  buddyCelebrate("決定好啦！","./usagi_success.png?v=430");
 }
 function renderDecisionCards(day){
   const ids=day.decisionIds||[];
@@ -224,7 +281,7 @@ function renderDecisionCards(day){
     const selected=selectedDecision(id);
     const checklist=(d.checklist||[]).length?`<div class="decision-checks">${d.checklist.map(x=>`<div>□ ${esc(x)}</div>`).join("")}</div>`:"";
     return `<section class="decision-card">
-      <img class="decision-usagi-art buddy-only-art" src="./usagi_think.png?v=420" alt="烏薩奇">
+      <img class="decision-usagi-art buddy-only-art" src="./usagi_think.png?v=430" alt="烏薩奇">
       <div class="decision-kicker">行程選擇</div>
       <h3>${esc(d.title)}</h3>
       <p>${esc(d.hint||"")}</p>
@@ -311,6 +368,7 @@ function renderSchedule(){
   $("#daySubtitle").textContent=d.subtitle;
   renderDayBrief(d);
   renderDayStamp();
+  renderDailyBuddy();
   $("#decisionArea").innerHTML=renderDecisionCards(d);
   const visibleEvents=d.events.filter(eventVisible);
   $("#timeline").innerHTML=visibleEvents.map((e,i)=>`
@@ -398,7 +456,7 @@ async function toggleBookingTask(id){
   renderBookings();
   if(!wasDone){
     const allDone=TRIP.bookingTasks.every(taskDone);
-    buddyCelebrate(allDone?"全部搞定！":"完成一項！",allDone?"./buddy_celebrate.png?v=420":"./usagi_success.png?v=420");
+    buddyCelebrate(allDone?"全部搞定！":"完成一項！",allDone?"./buddy_celebrate.png?v=430":"./usagi_success.png?v=430");
   }
 }
 function bookingTaskCard(t){
@@ -588,7 +646,7 @@ function setDisplayTheme(theme){
   if(!["travel","sea","wa","buddy"].includes(theme))return;
   try{localStorage.setItem(DISPLAY_THEME_KEY,theme)}catch{}
   applyDisplaySettings();
-  if(theme==="buddy")setTimeout(()=>buddySparkBurst(50,32),120);
+  if(theme==="buddy"){setTimeout(()=>buddySparkBurst(50,32),120);setTimeout(()=>maybePurinWalkEgg(),900)}
 }
 function setFontSize(size){
   if(!["standard","large","xlarge"].includes(size))return;
@@ -609,7 +667,7 @@ function bind(){
     const decision=e.target.closest("[data-decision-id]");if(decision){await chooseDecision(decision.dataset.decisionId,decision.dataset.decisionOption);return}
     const task=e.target.closest("[data-task-id]");if(task){await toggleBookingTask(task.dataset.taskId);return}
     for(const [attr,key,render] of [["data-check-food","foods",renderFood],["data-check-shopping","shopping",renderShopping]]){
-      const x=e.target.closest(`[${attr}]`);if(x){const id=x.getAttribute(attr);const before=state[key].find(i=>i.id===id)?.checked;await toggleItem(key,id);render();if(!before)buddyCelebrate(key==="foods"?"收進美食清單！":"買到啦！",key==="foods"?"./purin_clap.png?v=420":"./buddy_success.png?v=420");return}
+      const x=e.target.closest(`[${attr}]`);if(x){const id=x.getAttribute(attr);const before=state[key].find(i=>i.id===id)?.checked;await toggleItem(key,id);render();if(!before)buddyCelebrate(key==="foods"?"收進美食清單！":"買到啦！",key==="foods"?"./purin_clap.png?v=430":"./buddy_success.png?v=430");return}
     }
     for(const [attr,key,render] of [["data-delete-food","foods",renderFood],["data-delete-shopping","shopping",renderShopping],["data-delete-expense","expenses",renderExpenses]]){
       const x=e.target.closest(`[${attr}]`);if(x){await deleteItem(key,x.getAttribute(attr));render();toast("已刪除");return}
@@ -617,10 +675,28 @@ function bind(){
   });
   const heroEgg=$("#buddyHeroEgg");
   if(heroEgg){
-    let taps=0,tapTimer=null,holdTimer=null;
+    const heroImg=heroEgg.querySelector("img");
+    const heroGallery=[
+      "./buddy_hero.png?v=430",
+      "./buddy_celebrate.png?v=430",
+      "./buddy_chill.png?v=430",
+      "./buddy_eat.png?v=430",
+      "./buddy_success.png?v=430"
+    ];
+    let heroIndex=0,taps=0,tapTimer=null,holdTimer=null;
     const resetTap=()=>{clearTimeout(tapTimer);tapTimer=setTimeout(()=>taps=0,1200)};
-    heroEgg.addEventListener("click",()=>{taps++;resetTap();if(taps>=5){taps=0;buddyCelebrate("旅伴集合！","./buddy_celebrate.png?v=420")}});
-    ["pointerdown","touchstart"].forEach(ev=>heroEgg.addEventListener(ev,()=>{clearTimeout(holdTimer);holdTimer=setTimeout(()=>buddyCelebrate("找到隱藏彩蛋 ♡","./buddy_celebrate.png?v=420"),900)},{passive:true}));
+    heroEgg.addEventListener("click",()=>{
+      heroIndex=(heroIndex+1)%heroGallery.length;
+      if(heroImg){
+        heroImg.classList.remove("swap");
+        void heroImg.offsetWidth;
+        heroImg.src=heroGallery[heroIndex];
+        heroImg.classList.add("swap");
+      }
+      taps++;resetTap();
+      if(taps>=5){taps=0;buddyCelebrate("旅伴集合！","./buddy_celebrate.png?v=430")}
+    });
+    ["pointerdown","touchstart"].forEach(ev=>heroEgg.addEventListener(ev,()=>{clearTimeout(holdTimer);holdTimer=setTimeout(()=>buddyCelebrate("找到隱藏彩蛋 ♡","./buddy_success.png?v=430"),900)},{passive:true}));
     ["pointerup","pointercancel","pointerleave","touchend"].forEach(ev=>heroEgg.addEventListener(ev,()=>clearTimeout(holdTimer),{passive:true}));
   }
   $("#buddyCelebration")?.addEventListener("click",()=>$("#buddyCelebration").classList.remove("show"));
@@ -769,6 +845,7 @@ async function bootTrip(content,user,{offline=false}={}){
   bind();
   renderAll();
   showPrivateApp();
+  setTimeout(()=>{maybePurinWalkEgg();maybeUrgentBookingEgg()},650);
   const email=$("#accountEmail"); if(email) email.textContent=user?.email||"離線已授權裝置";
   if(offline){
     state.cloud=false;
@@ -865,7 +942,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=420",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=430",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });
