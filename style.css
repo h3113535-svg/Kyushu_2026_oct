@@ -732,7 +732,7 @@ html[data-theme="buddy"] .decision-card{
   position:relative;
 }
 html[data-theme="buddy"] .decision-card:before{
-  content:"🐰";
+  content:none;
   position:absolute;
   right:10px;top:-18px;
   font-size:30px;
@@ -774,7 +774,7 @@ html[data-theme="buddy"] .planned-food-card{
   background:#FFF9DA;
 }
 html[data-theme="buddy"] .buddy-food-card:nth-child(3n+1):after{
-  content:"🍮";
+  content:none;
   position:absolute;
   right:9px;bottom:7px;
   font-size:20px;
@@ -803,7 +803,7 @@ html[data-theme="buddy"] .buddy-task-pending{
   background:#FFF8F7;
 }
 html[data-theme="buddy"] .buddy-task-pending:after{
-  content:"🐰";
+  content:none;
   position:absolute;
   right:8px;top:8px;
   font-size:17px;
@@ -2190,3 +2190,111 @@ html[data-theme="buddy"][data-font-size="xlarge"] .day-title{
 html[data-theme="buddy"][data-font-size="xlarge"] .day-art-cluster{width:92px!important}
 html[data-theme="buddy"][data-font-size="xlarge"] .day-buddy-slot{width:62px!important;height:62px!important}
 html[data-theme="buddy"][data-font-size="xlarge"] .food-nearby-trigger-copy small{white-space:normal}
+
+
+/* =========================================================
+   v4.5.0 — Buddy Journey / dual traveler art direction
+   ========================================================= */
+/* Never draw generic emoji characters as decorative substitutes. */
+html[data-theme="buddy"] .decision-card::before,
+html[data-theme="buddy"] .decision-card:before,
+html[data-theme="buddy"] .buddy-task-pending::after,
+html[data-theme="buddy"] .buddy-task-pending:after,
+html[data-theme="buddy"] .buddy-food-card:nth-child(3n+1)::after,
+html[data-theme="buddy"] .buddy-food-card:nth-child(3n+1):after{
+  content:none!important;display:none!important;
+}
+
+/* Small character taps: interaction, not constant animation. */
+html[data-theme="buddy"] .buddy-reactable{cursor:pointer;touch-action:manipulation}
+html[data-theme="buddy"] .buddy-boop{animation:buddyBoop .38s cubic-bezier(.2,.86,.25,1.18)!important}
+@keyframes buddyBoop{0%{transform:scale(1)}45%{transform:scale(1.10) translateY(-3px)}100%{transform:scale(1)}}
+
+/* Daily header = two travelers, never a duplicate D6 thinking Usagi. */
+html[data-theme="buddy"] .day-title{padding-right:158px!important;min-height:94px}
+html[data-theme="buddy"] .day-art-cluster{width:154px!important;height:92px!important;right:0!important}
+html[data-theme="buddy"] .day-buddy-slot{right:34px!important;width:118px!important;height:88px!important;bottom:0!important}
+html[data-theme="buddy"] .day-buddy-pair{width:118px;height:88px;display:flex;align-items:flex-end;justify-content:center;gap:0;position:relative}
+html[data-theme="buddy"] .day-buddy-pair img{animation:none!important;opacity:1!important;object-fit:contain;filter:drop-shadow(0 5px 7px rgba(83,62,44,.10))}
+html[data-theme="buddy"] .day-buddy-purin{width:61px;height:72px;margin-right:-7px;z-index:1}
+html[data-theme="buddy"] .day-buddy-usagi{width:55px;height:69px;margin-left:-4px;z-index:2}
+html[data-theme="buddy"] .day-stamp{width:37px!important;height:37px!important;bottom:7px!important;right:0!important;opacity:.82}
+html[data-theme="buddy"] .day-stamp>img:first-child{max-width:32px!important;max-height:31px!important}
+
+/* Decision uses only the real Usagi image; daily header supplies Purin companionship. */
+html[data-theme="buddy"] .decision-card{padding-top:18px!important}
+html[data-theme="buddy"] .decision-usagi-art{right:14px!important;top:12px!important;width:72px!important;max-height:78px!important}
+
+/* Booking: outer diary page and inner tasks need visible breathing room. */
+html[data-theme="buddy"] #bookingPanel{padding:20px 18px 22px!important;border-radius:24px!important}
+html[data-theme="buddy"] #bookingPanel .booking-head-v42{margin:0 0 14px!important;padding-bottom:14px;border-bottom:1px dashed #ead5bf}
+html[data-theme="buddy"] #bookingPanel .privacy-note{margin:0 0 20px!important;padding:12px 14px!important}
+html[data-theme="buddy"] #bookingPanel .task-section{margin:0 0 24px!important}
+html[data-theme="buddy"] #bookingPanel .task-section:last-child{margin-bottom:0!important}
+html[data-theme="buddy"] #bookingPanel .task-section-title{margin:0 3px 12px!important}
+html[data-theme="buddy"] #bookingPanel .task-stack{gap:12px!important}
+html[data-theme="buddy"] #bookingPanel .task-card{padding:14px 14px!important;gap:12px!important;border-radius:17px!important;box-shadow:0 4px 11px rgba(86,62,43,.035)}
+html[data-theme="buddy"] #bookingPanel .task-countdown{margin-top:9px!important;padding:6px 10px!important}
+html[data-theme="buddy"] #bookingPanel .completed-section{padding-top:4px;border-top:1px dashed #eadfd2}
+html[data-theme="buddy"] .booking-buddy-pair{width:142px!important;height:82px!important;display:flex!important;align-items:flex-end;justify-content:flex-end;gap:0;position:relative}
+html[data-theme="buddy"] .booking-purin-art{width:58px;height:66px;object-fit:contain;margin-right:-12px;z-index:1}
+html[data-theme="buddy"] .booking-ticket-art{width:35px!important;height:35px!important;object-fit:contain;position:absolute;left:47px;bottom:3px;z-index:3}
+html[data-theme="buddy"] .booking-usagi-art{width:70px!important;height:76px!important;object-fit:contain;z-index:2}
+
+/* Food header: concise hierarchy instead of paragraph-heavy copy. */
+html[data-theme="buddy"] .food-heading-v45{display:grid!important;grid-template-columns:minmax(0,1fr) 150px!important;gap:14px!important;align-items:center!important;padding:8px 4px 17px!important}
+html[data-theme="buddy"] .food-heading-v45 h2{font-size:29px!important;margin:4px 0 10px!important;line-height:1.15}
+html[data-theme="buddy"] .food-heading-tags{display:flex;flex-wrap:wrap;gap:6px}
+html[data-theme="buddy"] .food-heading-tags span{font-size:9px;font-weight:900;padding:5px 8px;border-radius:99px;background:#fff4c7;border:1px solid #ead390;color:#875b2c;white-space:nowrap}
+html[data-theme="buddy"] .food-heading-v45 .buddy-food-duo{width:145px!important;height:118px!important;object-fit:contain;justify-self:end;filter:drop-shadow(0 7px 9px rgba(85,62,42,.09))}
+html[data-theme="buddy"] .food-plan-title{margin-bottom:4px}
+
+/* Planned food cards: schedule badge + clear restaurant hierarchy. */
+html[data-theme="buddy"] .planned-food-list{gap:11px!important}
+html[data-theme="buddy"] .food-plan-card-v45{display:grid!important;grid-template-columns:58px minmax(0,1fr)!important;gap:13px!important;align-items:stretch;padding:13px!important;background:#fffdf6!important;border:1px solid #ead9ae!important;border-radius:17px!important}
+html[data-theme="buddy"] .food-schedule-badge{border-radius:13px;background:#fff0b8;border:1px solid #ead077;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:65px;padding:7px 4px;color:#80562b}
+html[data-theme="buddy"] .food-schedule-badge b{font-family:Georgia,serif;font-size:15px;line-height:1}
+html[data-theme="buddy"] .food-schedule-badge span{font-size:10px;font-weight:900;margin-top:7px}
+html[data-theme="buddy"] .food-plan-main{min-width:0}
+html[data-theme="buddy"] .food-plan-name-row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+html[data-theme="buddy"] .food-plan-name-row h4{font-size:14px;line-height:1.35;margin:1px 0 0;color:var(--ink)}
+html[data-theme="buddy"] .food-plan-detail{font-size:10.5px;line-height:1.55;color:#777067;margin:6px 0 0}
+html[data-theme="buddy"] .food-plan-card-v45 .food-status{flex:0 0 auto;font-size:8.5px;padding:4px 7px}
+html[data-theme="buddy"] .food-plan-card-v45 .food-map-row{margin-top:8px}
+
+/* Every tool panel gets both travelers without turning into a sticker wall. */
+html[data-theme="buddy"] .buddy-panel-pair{display:flex!important;align-items:flex-end!important;gap:0!important}
+html[data-theme="buddy"] .buddy-panel-pair .panel-character-art{width:48px!important;height:58px!important;margin:0 -7px 0 0!important;object-fit:contain}
+html[data-theme="buddy"] .buddy-panel-pair .panel-character-art:nth-child(2){margin-left:-4px!important;z-index:2}
+html[data-theme="buddy"] .buddy-panel-pair .shopping-art,
+html[data-theme="buddy"] .buddy-panel-pair .expense-art{width:38px!important;height:38px!important;margin-left:-4px!important;opacity:.86}
+html[data-theme="buddy"] .expense-usagi{width:44px!important;height:58px!important}
+html[data-theme="buddy"] .notes-chill{cursor:pointer}
+
+/* Food quick search = two buddies. */
+html[data-theme="buddy"] .food-nearby-sheet{position:relative;overflow:hidden;padding-bottom:95px!important}
+html[data-theme="buddy"] .food-sheet-buddies{position:absolute;right:10px;bottom:-6px;width:150px;height:96px;display:flex;align-items:flex-end;justify-content:flex-end}
+html[data-theme="buddy"] .food-sheet-buddies img{object-fit:contain;filter:drop-shadow(0 5px 7px rgba(85,62,42,.09))}
+html[data-theme="buddy"] .food-sheet-purin{position:static!important;width:76px!important;height:82px!important;margin-right:-13px!important}
+html[data-theme="buddy"] .food-sheet-usagi{width:68px;height:82px;z-index:2}
+
+@media(max-width:430px){
+  html[data-theme="buddy"] .day-title{padding-right:140px!important}
+  html[data-theme="buddy"] .day-art-cluster{width:137px!important}
+  html[data-theme="buddy"] .day-buddy-slot{width:106px!important;right:29px!important}
+  html[data-theme="buddy"] .day-buddy-pair{width:106px}
+  html[data-theme="buddy"] .day-buddy-purin{width:55px;height:67px}
+  html[data-theme="buddy"] .day-buddy-usagi{width:50px;height:65px}
+  html[data-theme="buddy"] #bookingPanel{padding:17px 14px 19px!important}
+  html[data-theme="buddy"] .booking-buddy-pair{width:118px!important}
+  html[data-theme="buddy"] .booking-purin-art{width:50px;height:58px}
+  html[data-theme="buddy"] .booking-usagi-art{width:60px!important;height:67px!important}
+  html[data-theme="buddy"] .booking-ticket-art{left:39px!important;width:30px!important;height:30px!important}
+  html[data-theme="buddy"] .food-heading-v45{grid-template-columns:minmax(0,1fr) 112px!important;gap:8px!important}
+  html[data-theme="buddy"] .food-heading-v45 .buddy-food-duo{width:108px!important;height:96px!important}
+  html[data-theme="buddy"] .food-heading-v45 h2{font-size:26px!important}
+  html[data-theme="buddy"] .food-heading-tags{gap:4px}
+  html[data-theme="buddy"] .food-heading-tags span{font-size:8px;padding:4px 6px}
+  html[data-theme="buddy"] .food-plan-card-v45{grid-template-columns:52px minmax(0,1fr)!important;gap:10px!important;padding:11px!important}
+  html[data-theme="buddy"] .food-schedule-badge{min-height:60px}
+}

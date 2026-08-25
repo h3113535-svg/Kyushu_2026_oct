@@ -17,7 +17,9 @@ const BUDDY_FAST_ASSETS=[
   "./daily-d1.webp?v=440","./daily-d2.webp?v=440","./daily-d3.webp?v=440","./daily-d4.webp?v=440","./daily-d5.webp?v=440",
   "./daily-d6.webp?v=440","./daily-d7.webp?v=440","./daily-d8.webp?v=440","./daily-d9.webp?v=440","./daily-d10.webp?v=440",
   "./stamp-plane.webp?v=440","./stamp-train.webp?v=440","./stamp-onsen.webp?v=440","./stamp-camera.webp?v=440",
-  "./ui-cloud.webp?v=440","./ui-coffee.webp?v=440","./ui-suitcase.webp?v=440","./ui-purin-tip.webp?v=440","./hotel-purin.webp?v=440"
+  "./ui-cloud.webp?v=440","./ui-coffee.webp?v=440","./ui-suitcase.webp?v=440","./ui-purin-tip.webp?v=440","./hotel-purin.webp?v=440",
+  "./mini-purin-clap.webp?v=450","./mini-purin-hero.webp?v=450","./mini-purin-lie.webp?v=450","./mini-purin-surprise.webp?v=450",
+  "./mini-usagi-point.webp?v=450","./mini-usagi-excited.webp?v=450","./mini-usagi-success.webp?v=450","./mini-usagi-sticker.webp?v=450"
 ];
 const buddyFastImageCache=[];
 function preloadBuddyFastAssets(){
@@ -165,6 +167,25 @@ function buddyCelebrate(text="完成！",image="./buddy_success.png?v=430"){
   img.src=image; label.textContent=text; wrap.classList.remove("show"); void wrap.offsetWidth; wrap.classList.add("show"); buddySparkBurst(50,42);
   clearTimeout(buddyCelebrate._t); buddyCelebrate._t=setTimeout(()=>wrap.classList.remove("show"),1350);
 }
+function buddyReact(kind,el){
+  if(!isBuddyTheme())return;
+  if(el){el.classList.remove("buddy-boop");void el.offsetWidth;el.classList.add("buddy-boop");setTimeout(()=>el.classList.remove("buddy-boop"),420)}
+  const now=Date.now();
+  buddyReact.last=buddyReact.last||{kind:"",time:0};
+  const prev=buddyReact.last;
+  if(kind==="duo"){
+    toast("今天也一起走 ♡");buddySparkBurst(50,44);buddyReact.last={kind:"",time:0};return;
+  }
+  if(prev.kind && prev.kind!==kind && now-prev.time<1800){
+    toast("布丁狗 × 烏薩奇：一起出發！");buddySparkBurst(50,44);buddyReact.last={kind:"",time:0};return;
+  }
+  const purinLines=["慢慢走也很好 ♡","先吃飽再出發！","今天也要舒服旅行。"];
+  const usagiLines=["出發！！","往這邊！","好耶！繼續走！"];
+  const list=kind==="purin"?purinLines:usagiLines;
+  toast(list[Math.floor(Math.random()*list.length)]);
+  buddyReact.last={kind,time:now};
+}
+
 function buddyPeek(kind="purin"){
   if(!isBuddyTheme())return;
   const layer=$("#buddyPeekLayer"); if(!layer)return;
@@ -190,23 +211,26 @@ function renderDayStamp(){
 }
 function dailyBuddyAsset(index){
   const list=[
-    ["./daily-d1.webp?v=440","旅伴出發"],
-    ["./daily-d2.webp?v=440","烏薩奇指路"],
-    ["./daily-d3.webp?v=440","烏薩奇興奮"],
-    ["./daily-d4.webp?v=440","旅伴悠閒"],
-    ["./daily-d5.webp?v=440","布丁狗驚喜"],
-    ["./daily-d6.webp?v=440","烏薩奇思考"],
-    ["./daily-d7.webp?v=440","烏薩奇完成"],
-    ["./daily-d8.webp?v=440","布丁狗開心"],
-    ["./daily-d9.webp?v=440","旅伴成功"],
-    ["./daily-d10.webp?v=440","布丁狗休息"]
+    ["./mini-purin-clap.webp?v=450","./mini-usagi-excited.webp?v=450","出發啦"],
+    ["./mini-purin-hero.webp?v=450","./mini-usagi-point.webp?v=450","一起逛街"],
+    ["./mini-purin-clap.webp?v=450","./mini-usagi-excited.webp?v=450","海邊散步"],
+    ["./mini-purin-lie.webp?v=450","./mini-usagi-sticker.webp?v=450","慢慢逛"],
+    ["./mini-purin-surprise.webp?v=450","./mini-usagi-point.webp?v=450","山路出發"],
+    ["./mini-purin-hero.webp?v=450","./mini-usagi-point.webp?v=450","往高千穗"],
+    ["./mini-purin-clap.webp?v=450","./mini-usagi-success.webp?v=450","高千穗日"],
+    ["./mini-purin-surprise.webp?v=450","./mini-usagi-excited.webp?v=450","阿蘇火山"],
+    ["./mini-purin-clap.webp?v=450","./mini-usagi-excited.webp?v=450","GUNDAM 日"],
+    ["./mini-purin-lie.webp?v=450","./mini-usagi-sticker.webp?v=450","最後一天"]
   ];
   return list[index%list.length];
 }
 function renderDailyBuddy(){
   const el=$("#dayBuddySlot"); if(!el)return;
-  const [src,alt]=dailyBuddyAsset(state.dayIndex);
-  el.innerHTML=`<img src="${src}" alt="${esc(alt)}">`;
+  const [purin,usagi,label]=dailyBuddyAsset(state.dayIndex);
+  el.innerHTML=`<div class="day-buddy-pair" aria-label="${esc(label)}">
+    <img class="day-buddy-purin buddy-reactable" data-buddy-react="purin" src="${purin}" alt="布丁狗">
+    <img class="day-buddy-usagi buddy-reactable" data-buddy-react="usagi" src="${usagi}" alt="烏薩奇">
+  </div>`;
 }
 
 function updateWeatherBuddy(hasRain=false){
@@ -302,7 +326,7 @@ function renderDecisionCards(day){
     const selected=selectedDecision(id);
     const checklist=(d.checklist||[]).length?`<div class="decision-checks">${d.checklist.map(x=>`<div>□ ${esc(x)}</div>`).join("")}</div>`:"";
     return `<section class="decision-card">
-      <img class="decision-usagi-art buddy-only-art" src="./usagi_think.png?v=430" alt="烏薩奇">
+      <img class="decision-usagi-art buddy-only-art buddy-reactable" data-buddy-react="usagi" src="./usagi_think.png?v=430" alt="烏薩奇">
       <div class="decision-kicker">行程選擇</div>
       <h3>${esc(d.title)}</h3>
       <p>${esc(d.hint||"")}</p>
@@ -339,10 +363,10 @@ function buddyRole(e){
 
 function buddyDecorForEvent(e){
   const text=`${e.category||""} ${e.title||""} ${e.status||""}`;
-  if(/早餐|午餐|晚餐|咖啡|甜點|住宿|休息|飯店|泡湯|Buffet|放空/.test(text)) return "🍮";
+  if(/早餐|午餐|晚餐|咖啡|甜點|住宿|休息|飯店|泡湯|Buffet|放空/.test(text)) return "";
   if(/Marine World|水族館|海豹|海豚/.test(text)) return "🐬";
   if(/夕陽|日落|百道|海/.test(text)) return "☁️";
-  if(/搶票|預約|固定|強制|決策|還車|租車|GUNDAM|購物|補貨/.test(text)) return "🐰";
+  if(/搶票|預約|固定|強制|決策|還車|租車|GUNDAM|購物|補貨/.test(text)) return "";
   return "";
 }
 function renderBuddyDashboard(day, visibleEvents){
@@ -465,15 +489,16 @@ async function renderWeather(d){
 
 function renderFood(){
   $("#plannedFood").innerHTML=TRIP.plannedFood.map(i=>`
-    <div class="planned-food-card buddy-food-card">
-      <div class="planned-food-head">
-        <span class="food-day">${esc(i.day)} · ${esc(i.time)}</span>
-        <span class="food-status">${esc(i.status)}</span>
+    <article class="planned-food-card buddy-food-card food-plan-card-v45">
+      <div class="food-schedule-badge">
+        <b>${esc(i.day)}</b><span>${esc(i.time)}</span>
       </div>
-      <div class="list-title">${esc(i.title)}</div>
-      <div class="list-meta">${esc(i.detail||"")}</div>
-      ${(i.maps||[]).length?`<div class="food-map-row">${i.maps.map((m,idx)=>`<a class="mini-btn" target="_blank" rel="noopener" href="${mapSearch(m)}">地圖${i.maps.length>1?` ${idx+1}`:""}</a>`).join("")}</div>`:""}
-    </div>`).join("");
+      <div class="food-plan-main">
+        <div class="food-plan-name-row"><h4>${esc(i.title)}</h4><span class="food-status">${esc(i.status)}</span></div>
+        ${i.detail?`<p class="food-plan-detail">${esc(i.detail)}</p>`:""}
+        ${(i.maps||[]).length?`<div class="food-map-row">${i.maps.map((m,idx)=>`<a class="mini-btn" target="_blank" rel="noopener" href="${mapSearch(m)}">地圖${i.maps.length>1?` ${idx+1}`:""} ↗</a>`).join("")}</div>`:""}
+      </div>
+    </article>`).join("");
   $("#foodQuick").innerHTML=TRIP.foodQuick.map(f=>`<a target="_blank" rel="noopener" class="food-chip" href="${mapSearch(f.query)}"><span>${f.icon}</span>${esc(f.label)} ↗</a>`).join("");
   $("#foodList").innerHTML=state.foods.length?state.foods.map(i=>`
     <div class="list-item ${i.checked?"checked":""}">
@@ -709,6 +734,8 @@ function setFontSize(size){
 function bind(){
   if(appBound)return; appBound=true;
   document.addEventListener("click",async e=>{
+    const buddyReaction=e.target.closest("[data-buddy-react]");
+    if(buddyReaction){buddyReact(buddyReaction.dataset.buddyReact,buddyReaction);}
     const themeChoice=e.target.closest("[data-theme-choice]");if(themeChoice){setDisplayTheme(themeChoice.dataset.themeChoice);return}
     const fontChoice=e.target.closest("[data-font-choice]");if(fontChoice){setFontSize(fontChoice.dataset.fontChoice);return}
     const d=e.target.closest("[data-day]");if(d){state.dayIndex=Number(d.dataset.day);renderDays();renderSchedule();return}
@@ -1001,7 +1028,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=440",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=450",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });

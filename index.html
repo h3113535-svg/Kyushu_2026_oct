@@ -16,7 +16,7 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=440" />
+  <link rel="stylesheet" href="./style.css?v=450" />
   <title>私人旅程</title>
   <meta name="app-version" content="4.3.0" />
 </head>
@@ -91,13 +91,15 @@
       </section>
 
       <section id="foodView" class="view">
-        <div class="section-heading section-heading-with-art clean-section-art">
-          <div>
-            <span class="eyebrow">餐飲安排</span>
-            <h2>餐廳與吃飯計畫</h2>
-            <p>先看已安排／候選餐廳；臨時不知道吃什麼時，再用「附近找吃的」。</p>
+        <div class="section-heading section-heading-with-art food-heading-v45">
+          <div class="food-heading-copy">
+            <span class="eyebrow">美食手帳</span>
+            <h2>餐飲安排</h2>
+            <div class="food-heading-tags" aria-label="美食功能">
+              <span>已訂餐廳</span><span>候選清單</span><span>附近搜尋</span>
+            </div>
           </div>
-          <img class="buddy-food-duo buddy-only-art" src="./buddy_eat.png?v=430" alt="布丁狗與烏薩奇吃東西" />
+          <img class="buddy-food-duo buddy-only-art buddy-reactable" data-buddy-react="duo" src="./buddy_eat.png?v=430" alt="布丁狗與烏薩奇吃東西" />
         </div>
         <button type="button" class="food-nearby-trigger" id="foodNearbyOpen">
           <span class="food-nearby-trigger-icon buddy-only-art"><img src="./ui-coffee.webp?v=440" alt=""></span>
@@ -106,7 +108,7 @@
         </button>
 
         <div class="card">
-          <div class="card-title-row"><div><div class="eyebrow">已安排／候選</div><h3>已安排／候選</h3></div></div>
+          <div class="card-title-row food-plan-title"><div><div class="eyebrow">用餐計畫</div><h3>已安排與候選</h3></div></div>
           <div class="food-decor buddy-only-art"><img src="./purin_pudding.png?v=430" alt=""><img src="./purin_spoon.png?v=430" alt=""></div><div id="plannedFood" class="planned-food-list"></div>
         </div>
 
@@ -140,7 +142,11 @@
         <div id="bookingPanel" class="tool-panel active">
           <div class="panel-heading panel-heading-with-art buddy-panel-head booking-head-v42">
             <div><span class="eyebrow">待辦與搶票</span><h3>訂位／搶票倒數任務</h3></div>
-            <div class="panel-art-stack buddy-only-art"><img class="booking-ticket-art" src="./travel_ticket.png?v=431" alt=""><img class="booking-usagi-art" src="./usagi_dash.png?v=431" alt="烏薩奇衝刺"></div>
+            <div class="panel-art-stack buddy-only-art booking-buddy-pair">
+              <img class="booking-purin-art buddy-reactable" data-buddy-react="purin" src="./purin_surprise.png?v=430" alt="布丁狗提醒">
+              <img class="booking-ticket-art" src="./travel_ticket.png?v=431" alt="">
+              <img class="booking-usagi-art buddy-reactable" data-buddy-react="usagi" src="./usagi_dash.png?v=431" alt="烏薩奇衝刺">
+            </div>
           </div>
           <p class="privacy-note">私人 QR Code、完整訂位編號不要寫進公開 GitHub 原始碼；可放在記事或你自己的受保護雲端連結。</p>
           <div id="bookingList" class="list-stack"></div>
@@ -149,7 +155,12 @@
         <div id="shoppingPanel" class="tool-panel">
           <div class="panel-heading buddy-panel-head">
             <div><span class="eyebrow">採買</span><h3>購物清單</h3></div>
-            <div class="panel-actions-with-art"><img class="panel-character-art buddy-only-art" src="./usagi_point.png?v=430" alt=""><img class="shopping-art buddy-only-art" src="./travel_shopping.png?v=430" alt=""><button class="icon-btn" data-open-modal="shopping" aria-label="新增購物">＋</button></div>
+            <div class="panel-actions-with-art buddy-panel-pair">
+              <img class="panel-character-art buddy-only-art buddy-reactable" data-buddy-react="purin" src="./purin_clap.png?v=430" alt="布丁狗拍手">
+              <img class="panel-character-art buddy-only-art buddy-reactable" data-buddy-react="usagi" src="./usagi_point.png?v=430" alt="烏薩奇指路">
+              <img class="shopping-art buddy-only-art" src="./travel_shopping.png?v=430" alt="">
+              <button class="icon-btn" data-open-modal="shopping" aria-label="新增購物">＋</button>
+            </div>
           </div>
           <div id="shoppingSummary" class="member-pills"></div>
           <div id="shoppingList" class="list-stack"></div>
@@ -158,14 +169,19 @@
         <div id="expensePanel" class="tool-panel">
           <div class="panel-heading buddy-panel-head">
             <div><span class="eyebrow">分帳</span><h3>旅費記帳</h3></div>
-            <div class="panel-actions-with-art"><img class="panel-character-art expense-character buddy-only-art" src="./purin_surprise.png?v=430" alt=""><img class="expense-art buddy-only-art" src="./travel_coffee.png?v=430" alt=""><button class="icon-btn" data-open-modal="expense" aria-label="新增支出">＋</button></div>
+            <div class="panel-actions-with-art buddy-panel-pair">
+              <img class="panel-character-art expense-character buddy-only-art buddy-reactable" data-buddy-react="purin" src="./purin_surprise.png?v=430" alt="布丁狗驚訝">
+              <img class="panel-character-art expense-usagi buddy-only-art buddy-reactable" data-buddy-react="usagi" src="./usagi_sticker.png?v=430" alt="烏薩奇">
+              <img class="expense-art buddy-only-art" src="./travel_coffee.png?v=430" alt="">
+              <button class="icon-btn" data-open-modal="expense" aria-label="新增記帳">＋</button>
+            </div>
           </div>
           <div id="expenseSummary" class="summary-card"></div>
           <div id="expenseList" class="list-stack"></div>
         </div>
 
         <div id="notePanel" class="tool-panel">
-          <div class="panel-heading"><div><span class="eyebrow">旅行備忘</span><h3>旅行記事</h3></div></div><div class="notes-chill buddy-only-art"><img src="./buddy_chill.png?v=430" alt="布丁狗與烏薩奇休息"></div>
+          <div class="panel-heading"><div><span class="eyebrow">旅行備忘</span><h3>旅行記事</h3></div></div><div class="notes-chill buddy-only-art buddy-reactable" data-buddy-react="duo"><img src="./buddy_chill.png?v=430" alt="布丁狗與烏薩奇休息"></div>
           <textarea id="notesArea" class="notes-area" placeholder="行前提醒、臨時備註、想買的東西…"></textarea>
           <button type="button" class="primary-btn" id="firebaseTestBtn" style="margin-top:10px">測試 Firebase 連線</button>
           <div id="noteStatus" class="save-status">輸入後自動儲存</div>
@@ -238,7 +254,10 @@
       </div>
       <p>選一個類別，直接用 Google Maps 搜尋你現在附近。</p>
       <div id="foodQuick" class="chip-grid food-quick-sheet-grid"></div>
-      <img class="food-sheet-purin buddy-only-art" src="./purin_peek_edge.png?v=430" alt="" aria-hidden="true">
+      <div class="food-sheet-buddies buddy-only-art" aria-hidden="true">
+        <img class="food-sheet-purin buddy-reactable" data-buddy-react="purin" src="./purin_peek_edge.png?v=430" alt="">
+        <img class="food-sheet-usagi buddy-reactable" data-buddy-react="usagi" src="./usagi_point.png?v=430" alt="">
+      </div>
     </div>
   </dialog>
 
@@ -264,6 +283,6 @@
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=430"></script>
-  <script defer src="./app.js?v=440"></script>
+  <script defer src="./app.js?v=450"></script>
 </body>
 </html>
