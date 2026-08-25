@@ -1,6 +1,6 @@
-const CACHE = "kyushu-private-v4.6.1";
+const CACHE = "kyushu-private-v4.6.2";
 const SHELL = [
-  "./","./index.html","./style.css?v=461","./app.js?v=461",
+  "./","./index.html","./style.css?v=462","./app.js?v=462",
   "./manifest.json","./firebase-config.js?v=430","./icon-192.png","./icon-512.png",
   "./buddy_hero.png","./buddy_celebrate.png","./buddy_chill.png","./buddy_eat.png","./buddy_success.png",
   "./purin_peek_edge.png","./purin_walk.png","./usagi_peek.png","./usagi_dash.png","./usagi_success.png","./usagi_weather.png",
@@ -22,7 +22,7 @@ const SHELL = [
   "./day-scene-08.webp?v=460",
   "./day-scene-09.webp?v=460",
   "./day-scene-10.webp?v=460",
-  "./weather-rain-usagi.webp?v=460",
+  "./usagi_weather.png?v=462",
   "./booking-check-purin.webp?v=460",
   "./booking-dash-usagi.webp?v=460",
   "./hotel-return-duo.webp?v=460"];

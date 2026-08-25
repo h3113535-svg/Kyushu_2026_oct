@@ -16,7 +16,7 @@ const pollers = new Set();
 const BUDDY_FAST_ASSETS=[
   "./day-scene-01.webp?v=460","./day-scene-02.webp?v=460","./day-scene-03.webp?v=460","./day-scene-04.webp?v=460","./day-scene-05.webp?v=460",
   "./day-scene-06.webp?v=460","./day-scene-07.webp?v=460","./day-scene-08.webp?v=460","./day-scene-09.webp?v=460","./day-scene-10.webp?v=460",
-  "./weather-rain-usagi.webp?v=460","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
+  "./usagi_weather.png?v=462","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
   "./ui-cloud.webp?v=440","./ui-coffee.webp?v=440","./ui-suitcase.webp?v=440","./ui-purin-tip.webp?v=440"
 ];
 const buddyFastImageCache=[];
@@ -214,7 +214,7 @@ function renderDailyScene(){
 function updateWeatherBuddy(hasRain=false){
   const el=$("#weatherBuddySlot"); if(!el)return;
   el.classList.toggle("is-rain",!!hasRain);
-  el.innerHTML=`<img class="weather-usagi-rain buddy-reactable" data-buddy-react="usagi" src="./weather-rain-usagi.webp?v=460" alt="雨衣烏薩奇">`;
+  el.innerHTML=`<img class="weather-usagi-rain buddy-reactable" data-buddy-react="usagi" src="./usagi_weather.png?v=462" alt="雨衣烏薩奇">`;
 }
 
 
