@@ -2054,3 +2054,13 @@ html[data-theme="buddy"][data-font-size="xlarge"] .day-buddy-slot{width:70px;hei
   html[data-theme="buddy"] .purin-walk-egg,
   html[data-theme="buddy"] .usagi-urgent-egg{display:none!important}
 }
+
+
+/* =========================================================
+   v4.3.1 — instant daily mascot + cleaned animation assets
+   ========================================================= */
+html[data-theme="buddy"] .day-buddy-slot img{
+  animation:none!important;
+  opacity:1!important;
+  transform:none!important;
+}

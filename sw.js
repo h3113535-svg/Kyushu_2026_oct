@@ -1,6 +1,6 @@
-const CACHE = "kyushu-private-v4.2.0";
+const CACHE = "kyushu-private-v4.3.1";
 const SHELL = [
-  "./","./index.html","./style.css?v=430","./app.js?v=430",
+  "./","./index.html","./style.css?v=431","./app.js?v=431",
   "./manifest.json","./firebase-config.js?v=430","./icon-192.png","./icon-512.png",
   "./buddy_celebrate.png",
   "./buddy_chill.png",
