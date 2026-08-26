@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.1 Travel Guide Content */
+/* Private travel PWA · Firebase Auth gated content · v5.3.3 Guide Notes Reliability */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -14,6 +14,8 @@ let appBound = false;
 
 let lastError = "";
 const pollers = new Set();
+let cloudReconnectInFlight = false;
+const GUIDE_DEVICE_ID_KEY = "kyushu-private:guide-device-id";
 
 const BUDDY_FAST_ASSETS=[
   "./day-scene-v52-01.webp?v=520","./day-scene-v52-02.webp?v=520","./day-scene-v52-03.webp?v=520","./day-scene-v52-04.webp?v=520","./day-scene-v52-05.webp?v=520",
@@ -138,11 +140,41 @@ function createState(){
     dayIndex:0, view:"schedule", tool:"booking", shoppingMember:"全部",
     foods:loadLocal("foods",[]), shopping:loadLocal("shopping",[]), expenses:loadLocal("expenses",[]),
     taskStatus:loadLocal("taskStatus",{}), decisions:loadLocal("decisions",{}),
-    notes:loadLocal("notes",""), guideNotes:loadLocal("guideNotes",{}), cloud:false, noteTimer:null
+    notes:loadLocal("notes",""),
+    guideNotes:normalizeGuideNotesMap(loadLocal("guideNotes",{})),
+    guideNotePending:loadLocal("guideNotePending",{}),
+    guideNoteTimer:null, guideNoteSyncing:false,
+    cloud:false, noteTimer:null
   };
 }
 function loadLocal(key,fallback){try{const v=localStorage.getItem(storeKey(key));return v===null?fallback:JSON.parse(v)}catch{return fallback}}
 function saveLocal(key,value){localStorage.setItem(storeKey(key),JSON.stringify(value))}
+function guideDeviceId(){
+  try{
+    let id=localStorage.getItem(GUIDE_DEVICE_ID_KEY);
+    if(!id){id=`dev-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`;localStorage.setItem(GUIDE_DEVICE_ID_KEY,id)}
+    return id;
+  }catch{return "device"}
+}
+function normalizeGuideNoteRecord(value){
+  if(typeof value==="string")return {text:value,updatedAt:0,deviceId:"legacy",deleted:false};
+  if(!value||typeof value!=="object")return null;
+  return {
+    text:typeof value.text==="string"?value.text:"",
+    updatedAt:Number(value.updatedAt||0),
+    deviceId:String(value.deviceId||"legacy"),
+    deleted:!!value.deleted
+  };
+}
+function normalizeGuideNotesMap(raw){
+  const out={};
+  if(!raw||typeof raw!=="object")return out;
+  for(const [key,value] of Object.entries(raw)){
+    const rec=normalizeGuideNoteRecord(value);
+    if(rec)out[key]=rec;
+  }
+  return out;
+}
 function uid(){return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`}
 function esc(v=""){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
 function mapSearch(q){return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`}
@@ -772,8 +804,8 @@ function guideKeyFor(kind,title,dayIndex=state?.dayIndex||0){
 }
 function guideEntries(){
   const raw=TRIP?.guides;
-  if(Array.isArray(raw))return raw.filter(Boolean);
-  if(raw&&typeof raw==="object")return Object.values(raw).filter(Boolean);
+  if(Array.isArray(raw))return raw.filter(Boolean).map((g,i)=>({...g,_guideId:g?._guideId||g?.id||g?.key||`guide-${i}`}));
+  if(raw&&typeof raw==="object")return Object.entries(raw).filter(([,g])=>!!g).map(([id,g])=>({...g,_guideId:g?._guideId||g?.id||id}));
   return [];
 }
 function guideMatchScore(entry,dayIndex,text){
@@ -833,9 +865,12 @@ function buildEventGuide(e){
     const key=`${s.label}:${s.items.join("|")}`;
     if(!seen.has(key)){seen.add(key);unique.push(s)}
   }
+  const legacyKey=guideKeyFor("event",e?.title||"行程");
+  const stableKey=saved?._guideId||saved?.id||legacyKey;
   return {
     kind:"event",
-    key:guideKeyFor("event",e?.title||"行程"),
+    key:stableKey,
+    legacyKey:stableKey===legacyKey?"":legacyKey,
     title:saved?.title||e?.title||"行程攻略",
     meta:`D${state.dayIndex+1} · ${e?.time||TRIP.days[state.dayIndex]?.shortDate||""}`,
     mascot:saved?.mascot||eventGuideMascot(e),
@@ -854,8 +889,10 @@ function buildDayGuide(){
   if(Array.isArray(d?.brief)&&d.brief.length)sections.push({label:"今日提醒",items:d.brief});
   if(d?.rainPlan)sections.push({label:"雨天備案",items:[d.rainPlan]});
   if(!sections.length)sections.push({label:"今日總覽",items:[d?.subtitle||d?.title||"今天慢慢玩就好。"]});
+  const legacyKey=guideKeyFor("day",d?.title||`D${state.dayIndex+1}`);
+  const stableKey=saved?._guideId||saved?.id||legacyKey;
   return {
-    kind:"day",key:guideKeyFor("day",d?.title||`D${state.dayIndex+1}`),
+    kind:"day",key:stableKey,legacyKey:stableKey===legacyKey?"":legacyKey,
     title:saved?.title||`D${state.dayIndex+1} ${d?.title||"今日攻略"}`,
     meta:`${d?.shortDate||""} · 今日總攻略`, mascot:saved?.mascot||"duo",
     sections,map:saved?.map||"",searches:Array.isArray(saved?.searches)?saved.searches:[],
@@ -865,17 +902,131 @@ function buildDayGuide(){
 function renderGuideSections(sections){
   return sections.map(s=>`<section class="guide-section"><h4>${esc(s.label)}</h4><ul>${s.items.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></section>`).join("");
 }
+function setGuideSaveStatus(text,status="idle"){
+  const el=$("#guideSaveStatus");if(!el)return;
+  el.textContent=text;el.dataset.state=status;
+}
+function guideNoteRecord(key){return normalizeGuideNoteRecord(state?.guideNotes?.[key])}
+function guideNoteText(key){const rec=guideNoteRecord(key);return rec&&!rec.deleted?rec.text:""}
+function persistGuideNotesLocal(){
+  saveLocal("guideNotes",state.guideNotes||{});
+  saveLocal("guideNotePending",state.guideNotePending||{});
+}
+function migrateLegacyGuideNote(data){
+  if(!data?.key||!data?.legacyKey||state.guideNotes?.[data.key])return;
+  const legacy=guideNoteRecord(data.legacyKey);if(!legacy||legacy.deleted||!legacy.text)return;
+  state.guideNotes[data.key]={...legacy};
+  state.guideNotePending=data?._cloudStableExists?state.guideNotePending:{...(state.guideNotePending||{}),[data.key]:legacy.updatedAt||1};
+  persistGuideNotesLocal();
+}
+function markGuideNoteLocal(key,text){
+  if(!key)return null;
+  const now=Date.now();
+  const record={text:String(text||""),updatedAt:now,deviceId:guideDeviceId(),deleted:!String(text||"").trim()};
+  state.guideNotes=state.guideNotes||{};
+  state.guideNotePending=state.guideNotePending||{};
+  state.guideNotes[key]=record;
+  state.guideNotePending[key]=now;
+  persistGuideNotesLocal();
+  return record;
+}
+function pendingGuideNoteCount(){return Object.keys(state?.guideNotePending||{}).length}
+function activeGuideMatches(key){return !!activeGuideContext&&activeGuideContext.key===key}
+async function syncGuideNoteByKey(key,{showStatus=true}={}){
+  if(!key||!state?.guideNotes?.[key])return false;
+  const record=normalizeGuideNoteRecord(state.guideNotes[key]);if(!record)return false;
+  if(!state.cloud||!navigator.onLine){
+    if(showStatus&&activeGuideMatches(key))setGuideSaveStatus("已存本機・等待網路同步","pending");
+    return false;
+  }
+  const expectedAt=record.updatedAt;
+  try{
+    await updateCloud("guideNotes",key,record);
+    const current=normalizeGuideNoteRecord(state.guideNotes[key]);
+    if(current&&current.updatedAt===expectedAt){
+      delete state.guideNotePending[key];persistGuideNotesLocal();
+      if(showStatus&&activeGuideMatches(key))setGuideSaveStatus("✓ 雲端同步完成","synced");
+    }else if(showStatus&&activeGuideMatches(key)){
+      setGuideSaveStatus("有較新的修改・同步中…","pending");
+      queueGuideNoteSync(key,160);
+    }
+    return true;
+  }catch(err){
+    state.cloud=false;
+    $("#syncPill")?.classList.remove("cloud");
+    if($("#syncText"))$("#syncText").textContent="同步暫停・稍後重試";
+    if(showStatus&&activeGuideMatches(key))setGuideSaveStatus("已存本機・等待重新同步","pending");
+    if(navigator.onLine)setTimeout(()=>resumeCloudAfterOnline(),1800);
+    return false;
+  }
+}
+function queueGuideNoteSync(key,delay=800){
+  clearTimeout(state.guideNoteTimer);
+  state.guideNoteTimer=setTimeout(()=>syncGuideNoteByKey(key),delay);
+}
+async function flushGuideNoteEditor({sync=true}={}){
+  if(!activeGuideContext)return;
+  const area=$("#guideNoteArea");if(!area)return;
+  const key=activeGuideContext.key;
+  const current=guideNoteText(key);
+  if(area.value!==current)markGuideNoteLocal(key,area.value);
+  if(sync)await syncGuideNoteByKey(key);
+}
+function mergeGuideNotesFromCloud(raw,{syncPending=true}={}){
+  const remote=normalizeGuideNotesMap(raw);
+  const local=state.guideNotes||{};
+  const pending=state.guideNotePending||{};
+  const keys=new Set([...Object.keys(local),...Object.keys(remote)]);
+  for(const key of keys){
+    const l=normalizeGuideNoteRecord(local[key]);
+    const r=normalizeGuideNoteRecord(remote[key]);
+    if(pending[key]){
+      if(r&&r.updatedAt>Number(l?.updatedAt||0)){
+        local[key]=r;delete pending[key];
+      }else if(r&&l&&r.updatedAt===l.updatedAt&&r.deviceId===l.deviceId){
+        local[key]=r;delete pending[key];
+      }
+      continue;
+    }
+    if(r&&(!l||r.updatedAt>=l.updatedAt))local[key]=r;
+    else if(l&&!r&&l.updatedAt>0)pending[key]=l.updatedAt;
+    else if(l&&r&&l.updatedAt>r.updatedAt)pending[key]=l.updatedAt;
+  }
+  state.guideNotes=local;state.guideNotePending=pending;persistGuideNotesLocal();
+  if(activeGuideContext&&document.activeElement!==$("#guideNoteArea")){
+    const area=$("#guideNoteArea");if(area)area.value=guideNoteText(activeGuideContext.key);
+  }
+  if(activeGuideContext){
+    const key=activeGuideContext.key;
+    if(pending[key])setGuideSaveStatus("已存本機・等待同步","pending");
+    else setGuideSaveStatus(guideNoteText(key)?"✓ 雲端同步完成":"已開啟自動儲存","synced");
+  }
+  if(syncPending)syncPendingGuideNotes();
+}
+async function syncPendingGuideNotes(){
+  if(!state||state.guideNoteSyncing||!state.cloud||!navigator.onLine)return;
+  state.guideNoteSyncing=true;
+  try{
+    for(const key of Object.keys(state.guideNotePending||{})){
+      if(!state.cloud||!navigator.onLine)break;
+      await syncGuideNoteByKey(key,{showStatus:activeGuideMatches(key)});
+    }
+  }finally{state.guideNoteSyncing=false}
+}
 function openGuide(data){
   const modal=$("#guideModal"); if(!modal||!data)return;
   activeGuideContext=data;
+  migrateLegacyGuideNote(data);
   const art=guideMascot(data.mascot);
   const mascot=$("#guideMascot"); mascot.src=art.src;mascot.alt=art.alt;
   $("#guideTitle").textContent=data.title;
   $("#guideMeta").textContent=data.meta||"";
   $("#guideSections").innerHTML=renderGuideSections(data.sections||[]);
-  const note=state.guideNotes?.[data.key]||"";
+  const note=guideNoteText(data.key);
   $("#guideNoteArea").value=note;
-  $("#guideSaveStatus").textContent=note?"已有私人備忘":"輸入後按儲存";
+  if(state.guideNotePending?.[data.key])setGuideSaveStatus("已存本機・等待同步","pending");
+  else if(note)setGuideSaveStatus(state.cloud?"✓ 雲端同步完成":"本機已有備忘","synced");
+  else setGuideSaveStatus("已開啟自動儲存",state.cloud?"synced":"idle");
   const acts=[];
   if(data.map)acts.push(`<a class="guide-action primary" target="_blank" rel="noopener" href="${mapSearch(data.map)}">Google Maps 搜尋 ↗</a>`);
   for(const s of data.searches||[])if(s?.query)acts.push(`<a class="guide-action" target="_blank" rel="noopener" href="${mapSearch(s.query)}">${esc(s.label||"搜尋")} ↗</a>`);
@@ -885,18 +1036,16 @@ function openGuide(data){
   try{localStorage.setItem(GUIDE_COACH_KEY,"1")}catch{}
   hideGuideCoach();
 }
-function closeGuide(){const m=$("#guideModal");if(m?.open)m.close();activeGuideContext=null}
+async function closeGuide(){
+  await flushGuideNoteEditor({sync:true});
+  const m=$("#guideModal");if(m?.open)m.close();activeGuideContext=null;
+}
 async function saveGuideNote(){
   if(!activeGuideContext)return;
-  const value=$("#guideNoteArea").value.trim();
-  state.guideNotes=state.guideNotes||{};
-  if(value)state.guideNotes[activeGuideContext.key]=value;else delete state.guideNotes[activeGuideContext.key];
-  saveLocal("guideNotes",state.guideNotes);
-  $("#guideSaveStatus").textContent="本機已儲存";
-  if(state.cloud){
-    try{await setCloud("guideNotes",state.guideNotes);$("#guideSaveStatus").textContent="✓ 雲端已同步"}
-    catch(err){$("#guideSaveStatus").textContent=`雲端同步失敗：${err.message}`}
-  }
+  const area=$("#guideNoteArea");if(!area)return;
+  markGuideNoteLocal(activeGuideContext.key,area.value);
+  setGuideSaveStatus(state.cloud?"同步中…":"已存本機・等待網路同步",state.cloud?"saving":"pending");
+  await syncGuideNoteByKey(activeGuideContext.key);
 }
 function hideGuideCoach(){const c=$("#guideCoach");if(c)c.hidden=true}
 function maybeShowGuideCoach(){
@@ -1303,9 +1452,16 @@ function bind(){
     syncDots();
   }
   $("#buddyCelebration")?.addEventListener("click",()=>$("#buddyCelebration").classList.remove("show"));
-  $("#guideClose")?.addEventListener("click",closeGuide);
+  $("#guideClose")?.addEventListener("click",()=>closeGuide());
   $("#guideSaveBtn")?.addEventListener("click",saveGuideNote);
+  $("#guideNoteArea")?.addEventListener("input",e=>{
+    if(!activeGuideContext)return;
+    markGuideNoteLocal(activeGuideContext.key,e.target.value);
+    if(state.cloud&&navigator.onLine){setGuideSaveStatus("本機已儲存・同步中…","saving");queueGuideNoteSync(activeGuideContext.key,800)}
+    else setGuideSaveStatus("已存本機・等待網路同步","pending");
+  });
   $("#guideModal")?.addEventListener("click",e=>{if(e.target===$("#guideModal"))closeGuide()});
+  $("#guideModal")?.addEventListener("cancel",e=>{e.preventDefault();closeGuide()});
   $("#foodNearbyOpen")?.addEventListener("click",()=>$("#foodNearbyModal")?.showModal());
   $("#foodNearbyClose")?.addEventListener("click",()=>$("#foodNearbyModal")?.close());
   $("#foodNearbyModal")?.addEventListener("click",e=>{if(e.target===$("#foodNearbyModal"))$("#foodNearbyModal").close()});
@@ -1361,6 +1517,7 @@ function bind(){
       }
     },650);
   });
+  window.addEventListener("pagehide",()=>{if(activeGuideContext)flushGuideNoteEditor({sync:false})},{once:false});
   const logoutBtn=$("#logoutBtn");
   if(logoutBtn) logoutBtn.addEventListener("click", async()=>{
     try{ await firebase.auth().signOut(); }catch{}
@@ -1369,31 +1526,90 @@ function bind(){
   });
 }
 
+function stopCloudPollers(){for(const stop of [...pollers]){try{stop()}catch{}}}
 async function connectCloud(){
+  stopCloudPollers();
   const ok=await initFirebase();
   if(!ok){
     state.cloud=false;
-    $("#syncPill").classList.remove("cloud");
-    $("#syncText").textContent="Firebase 未連線";
+    $("#syncPill")?.classList.remove("cloud");
+    if($("#syncText"))$("#syncText").textContent="Firebase 未連線";
     const msg=getLastFirebaseError();
-    if(msg) $("#noteStatus").textContent=`⚠ Firebase 未連線：${msg}`;
-    return;
+    if(msg&&$("#noteStatus")) $("#noteStatus").textContent=`⚠ Firebase 未連線：${msg}`;
+    if(activeGuideContext)setGuideSaveStatus("已存本機・等待重新同步","pending");
+    if(navigator.onLine)setTimeout(()=>resumeCloudAfterOnline(),2500);
+    return false;
   }
   state.cloud=true;
-  $("#syncPill").classList.add("cloud");
-  $("#syncText").textContent="Firebase 已連線";
+  $("#syncPill")?.classList.add("cloud");
+  if($("#syncText"))$("#syncText").textContent="Firebase 已連線";
+
+  // Guide notes are merged before polling. Pending offline edits are never blindly overwritten.
+  try{
+    const remoteGuideNotes=await request(pathFor("guideNotes"),{method:"GET"});
+    mergeGuideNotesFromCloud(remoteGuideNotes,{syncPending:false});
+  }catch(err){console.warn("Guide notes initial merge failed",err)}
+  await syncPendingGuideNotes();
+
   const mappings=[
     ["foods",v=>{if(v!==null){state.foods=normalizeCloud(v);saveLocal("foods",state.foods);renderFood()}}],
     ["shopping",v=>{if(v!==null){state.shopping=normalizeCloud(v);saveLocal("shopping",state.shopping);renderShopping()}}],
     ["expenses",v=>{if(v!==null){state.expenses=normalizeCloud(v);saveLocal("expenses",state.expenses);renderExpenses()}}],
     ["taskStatus",v=>{if(v && typeof v==="object"){state.taskStatus=v;saveLocal("taskStatus",v);renderBookings()}}],
     ["decisions",v=>{if(v && typeof v==="object"){state.decisions=v;saveLocal("decisions",v);renderSchedule()}}],
-    ["guideNotes",v=>{if(v && typeof v==="object"){state.guideNotes=v;saveLocal("guideNotes",v)}}],
+    ["guideNotes",v=>mergeGuideNotesFromCloud(v)],
     ["notes",v=>{if(typeof v==="string" && document.activeElement!==$("#notesArea")){state.notes=v;saveLocal("notes",v);renderNotes()}}]
   ];
   mappings.forEach(([k,cb])=>{try{subscribe(k,cb)}catch{}});
+  if(activeGuideContext){
+    const key=activeGuideContext.key;
+    if(state.guideNotePending?.[key])setGuideSaveStatus("已存本機・同步中…","saving");
+    else setGuideSaveStatus(guideNoteText(key)?"✓ 雲端同步完成":"已開啟自動儲存","synced");
+  }
+  return true;
 }
 
+
+async function ensureFirebaseSessionForReconnect(){
+  if(!window.KYUSHU_FIREBASE_CONFIG||!window.firebase?.initializeApp)return false;
+  try{
+    if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
+    await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
+    if(firebase.auth().currentUser){currentAuthUser=firebase.auth().currentUser;return true}
+    const user=await new Promise(resolve=>{
+      let done=false,timer=null,unsub=()=>{};
+      const finish=u=>{if(done)return;done=true;clearTimeout(timer);try{unsub()}catch{};resolve(u||null)};
+      unsub=firebase.auth().onAuthStateChanged(finish,()=>finish(null));
+      timer=setTimeout(()=>finish(firebase.auth().currentUser),5000);
+    });
+    if(user){currentAuthUser=user;return true}
+  }catch(err){console.warn("Firebase reconnect auth failed",err)}
+  return false;
+}
+async function resumeCloudAfterOnline(){
+  if(!state||!navigator.onLine||cloudReconnectInFlight)return;
+  cloudReconnectInFlight=true;
+  try{
+    if($("#syncText"))$("#syncText").textContent="正在重新連線…";
+    const ready=await ensureFirebaseSessionForReconnect();
+    if(!ready){
+      state.cloud=false;
+      if($("#syncText"))$("#syncText").textContent="需重新登入才能同步";
+      if(activeGuideContext)setGuideSaveStatus("本機已儲存・登入後再同步","pending");
+      return;
+    }
+    await connectCloud();
+  }finally{cloudReconnectInFlight=false}
+}
+function enterOfflineMode(){
+  if(!state)return;
+  state.cloud=false;stopCloudPollers();
+  $("#syncPill")?.classList.remove("cloud");
+  if($("#syncText"))$("#syncText").textContent="離線模式";
+  if(activeGuideContext)setGuideSaveStatus("已存本機・等待網路同步","pending");
+}
+window.addEventListener("online",()=>resumeCloudAfterOnline());
+window.addEventListener("offline",()=>enterOfflineMode());
 
 function setAuthStatus(message,kind=""){
   const el=$("#authStatus");
@@ -1552,7 +1768,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=531",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=533",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });

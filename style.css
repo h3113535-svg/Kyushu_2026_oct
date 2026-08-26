@@ -2828,3 +2828,22 @@ html[data-theme="buddy"] .guide-hold-target.guide-ready::after{transform:scaleX(
   .guide-sheet{max-height:90dvh;padding-left:13px;padding-right:13px}.guide-head{grid-template-columns:52px 1fr 36px}.guide-mascot-wrap{width:52px;height:52px}.guide-head-copy h3{font-size:18px}.guide-section{padding:11px 12px}.guide-section li{font-size:12.5px}.guide-coach small{white-space:normal}
 }
 @media(prefers-reduced-motion:reduce){.guide-hold-target.guide-pressing::after,.guide-coach{animation:none!important}}
+
+
+/* =========================================================
+   v5.3.3 — Guide Notes Reliability
+   ========================================================= */
+.guide-note-actions #guideSaveStatus{display:inline-flex;align-items:center;gap:6px;font-weight:800;transition:color .18s ease}
+.guide-note-actions #guideSaveStatus::before{content:"";width:7px;height:7px;border-radius:50%;background:#b9b0a5;box-shadow:0 0 0 3px rgba(185,176,165,.12)}
+.guide-note-actions #guideSaveStatus[data-state="saving"]{color:#8a6b28}
+.guide-note-actions #guideSaveStatus[data-state="saving"]::before{background:#e1b54b;animation:guideSyncPulse .9s ease-in-out infinite}
+.guide-note-actions #guideSaveStatus[data-state="pending"]{color:#9b6a3f}
+.guide-note-actions #guideSaveStatus[data-state="pending"]::before{background:#d4935a}
+.guide-note-actions #guideSaveStatus[data-state="synced"]{color:#58745d}
+.guide-note-actions #guideSaveStatus[data-state="synced"]::before{background:#72a47a}
+.guide-note-actions #guideSaveStatus[data-state="error"]{color:#a55252}
+.guide-note-actions #guideSaveStatus[data-state="error"]::before{background:#c96b6b}
+#guideNoteArea{transition:border-color .18s ease,box-shadow .18s ease}
+#guideNoteArea:focus{border-color:rgba(183,145,83,.65);box-shadow:0 0 0 3px rgba(211,176,111,.12)}
+@keyframes guideSyncPulse{0%,100%{transform:scale(.82);opacity:.65}50%{transform:scale(1.18);opacity:1}}
+@media(prefers-reduced-motion:reduce){.guide-note-actions #guideSaveStatus[data-state="saving"]::before{animation:none}}

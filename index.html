@@ -16,9 +16,9 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=530" />
+  <link rel="stylesheet" href="./style.css?v=533" />
   <title>私人旅程</title>
-  <meta name="app-version" content="5.3.1" />
+  <meta name="app-version" content="5.3.3" />
   <link rel="preload" as="image" href="./day-scene-v52-01.webp?v=520" fetchpriority="high">
 </head>
 <body>
@@ -265,11 +265,11 @@
       </div>
       <div id="guideSections" class="guide-sections"></div>
       <section class="guide-personal-note">
-        <div class="guide-note-title"><b>我的備忘</b><small>只存在你的私人旅程資料</small></div>
-        <textarea id="guideNoteArea" placeholder="例如：BEAMS 在新館 12F、這間先買限定色、到現場記得問店員…"></textarea>
+        <div class="guide-note-title"><b>我的備忘</b><small>自動儲存・離線可寫・登入後跨裝置同步</small></div>
+        <textarea id="guideNoteArea" placeholder="例如：BEAMS 在新館 2F、看到限定色先確認尺寸、到現場記得問店員…"></textarea>
         <div class="guide-note-actions">
-          <span id="guideSaveStatus">輸入後按儲存</span>
-          <button type="button" id="guideSaveBtn" class="mini-btn guide-save-btn">儲存備忘</button>
+          <span id="guideSaveStatus" data-state="idle">已開啟自動儲存</span>
+          <button type="button" id="guideSaveBtn" class="mini-btn guide-save-btn">立即同步</button>
         </div>
       </section>
       <div id="guideActions" class="guide-actions"></div>
@@ -323,6 +323,6 @@
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=430"></script>
-  <script defer src="./app.js?v=531"></script>
+  <script defer src="./app.js?v=533"></script>
 </body>
 </html>
