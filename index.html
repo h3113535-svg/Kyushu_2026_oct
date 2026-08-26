@@ -16,9 +16,9 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=520" />
+  <link rel="stylesheet" href="./style.css?v=530" />
   <title>私人旅程</title>
-  <meta name="app-version" content="5.2.0" />
+  <meta name="app-version" content="5.3.0" />
   <link rel="preload" as="image" href="./day-scene-v52-01.webp?v=520" fetchpriority="high">
 </head>
 <body>
@@ -250,6 +250,41 @@
   </dialog>
 
 
+
+  <dialog id="guideModal" class="guide-modal">
+    <div class="guide-sheet">
+      <div class="guide-drag-handle" aria-hidden="true"></div>
+      <div class="guide-head">
+        <div class="guide-mascot-wrap buddy-only-art"><img id="guideMascot" src="./usagi_point.png?v=430" alt="烏薩奇"></div>
+        <div class="guide-head-copy">
+          <span class="eyebrow" id="guideKicker">旅伴小攻略</span>
+          <h3 id="guideTitle">景點攻略</h3>
+          <small id="guideMeta"></small>
+        </div>
+        <button type="button" class="close-btn" id="guideClose" aria-label="關閉">×</button>
+      </div>
+      <div id="guideSections" class="guide-sections"></div>
+      <section class="guide-personal-note">
+        <div class="guide-note-title"><b>我的備忘</b><small>只存在你的私人旅程資料</small></div>
+        <textarea id="guideNoteArea" placeholder="例如：BEAMS 在新館 12F、這間先買限定色、到現場記得問店員…"></textarea>
+        <div class="guide-note-actions">
+          <span id="guideSaveStatus">輸入後按儲存</span>
+          <button type="button" id="guideSaveBtn" class="mini-btn guide-save-btn">儲存備忘</button>
+        </div>
+      </section>
+      <div id="guideActions" class="guide-actions"></div>
+      <div class="guide-footer-buddies buddy-only-art" aria-hidden="true">
+        <img src="./purin_tip.png?v=430" alt="">
+        <img src="./usagi_point.png?v=430" alt="">
+      </div>
+    </div>
+  </dialog>
+
+  <div id="guideCoach" class="guide-coach buddy-only-art" hidden>
+    <img src="./usagi_point.png?v=430" alt="">
+    <span><b>旅伴小攻略</b><small>按住行程卡約 0.75 秒，放開後查看</small></span>
+  </div>
+
   <dialog id="foodNearbyModal" class="food-nearby-modal">
     <div class="food-nearby-sheet">
       <div class="food-nearby-sheet-head">
@@ -288,6 +323,6 @@
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=430"></script>
-  <script defer src="./app.js?v=520"></script>
+  <script defer src="./app.js?v=530"></script>
 </body>
 </html>

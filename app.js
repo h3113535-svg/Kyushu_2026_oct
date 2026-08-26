@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.2.0 Daily Scene Unity */
+/* Private travel PWA · Firebase Auth gated content · v5.3.0 Travel Guide Layer */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -138,7 +138,7 @@ function createState(){
     dayIndex:0, view:"schedule", tool:"booking", shoppingMember:"全部",
     foods:loadLocal("foods",[]), shopping:loadLocal("shopping",[]), expenses:loadLocal("expenses",[]),
     taskStatus:loadLocal("taskStatus",{}), decisions:loadLocal("decisions",{}),
-    notes:loadLocal("notes",""), cloud:false, noteTimer:null
+    notes:loadLocal("notes",""), guideNotes:loadLocal("guideNotes",{}), cloud:false, noteTimer:null
   };
 }
 function loadLocal(key,fallback){try{const v=localStorage.getItem(storeKey(key));return v===null?fallback:JSON.parse(v)}catch{return fallback}}
@@ -758,6 +758,181 @@ function eventBuddyHtml(e,index){
   return `<button type="button" class="event-buddy buddy-only-art buddy-reactable" data-buddy-react="${b.kind}" data-buddy-context="${b.context}" aria-label="和${who}聊聊"><img src="${b.img}" alt="${who}"></button>`;
 }
 
+
+const GUIDE_COACH_KEY="kyushu-guide-coach-v53";
+let activeGuideContext=null;
+
+function guideHash(text=""){
+  let h=2166136261;
+  for(const ch of String(text)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}
+  return (h>>>0).toString(36);
+}
+function guideKeyFor(kind,title,dayIndex=state?.dayIndex||0){
+  return `${kind}:d${dayIndex+1}:${guideHash(title||kind)}`;
+}
+function guideEntries(){
+  const raw=TRIP?.guides;
+  if(Array.isArray(raw))return raw.filter(Boolean);
+  if(raw&&typeof raw==="object")return Object.values(raw).filter(Boolean);
+  return [];
+}
+function guideMatches(entry,dayIndex,text){
+  if(Number(entry?.day||0) && Number(entry.day)!==dayIndex+1)return false;
+  const hay=String(text||"").toLowerCase();
+  const terms=Array.isArray(entry?.match)?entry.match:[entry?.match].filter(Boolean);
+  return !terms.length || terms.some(t=>hay.includes(String(t).toLowerCase()));
+}
+function privateGuideForEvent(e){
+  const text=[e?.title,e?.nav,e?.category,e?.note].filter(Boolean).join(" ");
+  return guideEntries().find(g=>g.type!=="day"&&guideMatches(g,state.dayIndex,text))||null;
+}
+function privateGuideForDay(){
+  return guideEntries().find(g=>g.type==="day"&&Number(g.day)===state.dayIndex+1)||null;
+}
+function guideMascot(kind="duo"){
+  if(kind==="purin")return {src:"./purin_tip.png?v=430",alt:"布丁狗"};
+  if(kind==="usagi")return {src:"./usagi_point.png?v=430",alt:"烏薩奇"};
+  return {src:"./buddy_hero.png?v=430",alt:"布丁狗與烏薩奇"};
+}
+function eventGuideMascot(e){
+  const text=`${e?.category||""} ${e?.title||""}`;
+  if(/餐|咖啡|甜點|吃|飯店|住宿|休息|泡湯/i.test(text))return "purin";
+  if(/購物|店|PARCO|Canal|AMU|LaLaport|預約|交通|票|車|機場/i.test(text))return "usagi";
+  return "duo";
+}
+function normalizeGuideSections(sections=[]){
+  return (Array.isArray(sections)?sections:[]).map(s=>({
+    label:String(s?.label||"小提醒"),
+    items:(Array.isArray(s?.items)?s.items:[s?.items]).filter(Boolean).map(String)
+  })).filter(s=>s.items.length);
+}
+function fallbackEventSections(e){
+  const sections=[];
+  const summary=[e?.time,e?.category,e?.status,e?.duration].filter(Boolean).join(" · ");
+  if(summary)sections.push({label:"這一站",items:[summary]});
+  if(e?.note)sections.push({label:"備忘",items:[e.note]});
+  if(Array.isArray(e?.tips)&&e.tips.length)sections.push({label:"注意事項",items:e.tips});
+  if(e?.backup)sections.push({label:"Plan B",items:[e.backup]});
+  return sections;
+}
+function buildEventGuide(e){
+  const saved=privateGuideForEvent(e);
+  const sections=[...normalizeGuideSections(saved?.sections),...fallbackEventSections(e)];
+  const unique=[]; const seen=new Set();
+  for(const s of sections){
+    const key=`${s.label}:${s.items.join("|")}`;
+    if(!seen.has(key)){seen.add(key);unique.push(s)}
+  }
+  return {
+    kind:"event",
+    key:guideKeyFor("event",e?.title||"行程"),
+    title:saved?.title||e?.title||"行程攻略",
+    meta:`D${state.dayIndex+1} · ${e?.time||TRIP.days[state.dayIndex]?.shortDate||""}`,
+    mascot:saved?.mascot||eventGuideMascot(e),
+    sections:unique.length?unique:[{label:"這一站",items:["目前沒有額外攻略；你可以先把自己的備忘存進下方。"]}],
+    map:saved?.map||e?.nav||e?.title||"",
+    searches:Array.isArray(saved?.searches)?saved.searches:[],
+    links:Array.isArray(e?.links)?e.links:[]
+  };
+}
+function buildDayGuide(){
+  const d=TRIP.days[state.dayIndex];
+  const saved=privateGuideForDay();
+  const sections=[...normalizeGuideSections(saved?.sections)];
+  if(d?.alert)sections.push({label:"今天先注意",items:[d.alert]});
+  if(Array.isArray(d?.brief)&&d.brief.length)sections.push({label:"今日提醒",items:d.brief});
+  if(d?.rainPlan)sections.push({label:"雨天備案",items:[d.rainPlan]});
+  if(!sections.length)sections.push({label:"今日總覽",items:[d?.subtitle||d?.title||"今天慢慢玩就好。"]});
+  return {
+    kind:"day",key:guideKeyFor("day",d?.title||`D${state.dayIndex+1}`),
+    title:saved?.title||`D${state.dayIndex+1} ${d?.title||"今日攻略"}`,
+    meta:`${d?.shortDate||""} · 今日總攻略`, mascot:saved?.mascot||"duo",
+    sections,map:saved?.map||"",searches:Array.isArray(saved?.searches)?saved.searches:[],links:[]
+  };
+}
+function renderGuideSections(sections){
+  return sections.map(s=>`<section class="guide-section"><h4>${esc(s.label)}</h4><ul>${s.items.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></section>`).join("");
+}
+function openGuide(data){
+  const modal=$("#guideModal"); if(!modal||!data)return;
+  activeGuideContext=data;
+  const art=guideMascot(data.mascot);
+  const mascot=$("#guideMascot"); mascot.src=art.src;mascot.alt=art.alt;
+  $("#guideTitle").textContent=data.title;
+  $("#guideMeta").textContent=data.meta||"";
+  $("#guideSections").innerHTML=renderGuideSections(data.sections||[]);
+  const note=state.guideNotes?.[data.key]||"";
+  $("#guideNoteArea").value=note;
+  $("#guideSaveStatus").textContent=note?"已有私人備忘":"輸入後按儲存";
+  const acts=[];
+  if(data.map)acts.push(`<a class="guide-action primary" target="_blank" rel="noopener" href="${mapSearch(data.map)}">Google Maps 搜尋 ↗</a>`);
+  for(const s of data.searches||[])if(s?.query)acts.push(`<a class="guide-action" target="_blank" rel="noopener" href="${mapSearch(s.query)}">${esc(s.label||"搜尋")} ↗</a>`);
+  for(const l of data.links||[])if(l?.url)acts.push(`<a class="guide-action" target="_blank" rel="noopener" href="${esc(l.url)}">${esc(l.label||"開啟連結")} ↗</a>`);
+  $("#guideActions").innerHTML=acts.join("");
+  modal.showModal();
+  try{localStorage.setItem(GUIDE_COACH_KEY,"1")}catch{}
+  hideGuideCoach();
+}
+function closeGuide(){const m=$("#guideModal");if(m?.open)m.close();activeGuideContext=null}
+async function saveGuideNote(){
+  if(!activeGuideContext)return;
+  const value=$("#guideNoteArea").value.trim();
+  state.guideNotes=state.guideNotes||{};
+  if(value)state.guideNotes[activeGuideContext.key]=value;else delete state.guideNotes[activeGuideContext.key];
+  saveLocal("guideNotes",state.guideNotes);
+  $("#guideSaveStatus").textContent="本機已儲存";
+  if(state.cloud){
+    try{await setCloud("guideNotes",state.guideNotes);$("#guideSaveStatus").textContent="✓ 雲端已同步"}
+    catch(err){$("#guideSaveStatus").textContent=`雲端同步失敗：${err.message}`}
+  }
+}
+function hideGuideCoach(){const c=$("#guideCoach");if(c)c.hidden=true}
+function maybeShowGuideCoach(){
+  let used=false;try{used=localStorage.getItem(GUIDE_COACH_KEY)==="1"}catch{}
+  const c=$("#guideCoach");if(!c||used){if(c)c.hidden=true;return}
+  c.hidden=false;clearTimeout(maybeShowGuideCoach._t);maybeShowGuideCoach._t=setTimeout(()=>{if(c)c.hidden=true},6500);
+}
+
+function bindSafeHold(el,handler,{ms=750,move=10,allowInteractiveRoot=false}={}){
+  if(!el||el.dataset.safeHoldBound==="1")return;
+  el.dataset.safeHoldBound="1";el.classList.add("guide-hold-target");
+  let timer=null,startX=0,startY=0,startScroll=0,pointerId=null,ready=false,cancelled=false,suppressClick=false;
+  const clear=()=>{clearTimeout(timer);timer=null;ready=false;cancelled=true;el.classList.remove("guide-pressing","guide-ready")};
+  el.addEventListener("pointerdown",e=>{
+    if(e.button!==undefined&&e.button!==0)return;
+    const interactive=e.target.closest?.("a,button,input,textarea,select,label,[data-no-guide-hold]");
+    if(interactive&&!(allowInteractiveRoot&&interactive===el))return;
+    startX=e.clientX;startY=e.clientY;startScroll=window.scrollY;pointerId=e.pointerId;ready=false;cancelled=false;suppressClick=false;
+    el.classList.add("guide-pressing");
+    clearTimeout(timer);
+    timer=setTimeout(()=>{
+      if(cancelled||Math.abs(window.scrollY-startScroll)>6)return clear();
+      ready=true;el.classList.remove("guide-pressing");el.classList.add("guide-ready");
+      try{navigator.vibrate?.(12)}catch{}
+    },ms);
+  },{passive:true});
+  el.addEventListener("pointermove",e=>{
+    if(pointerId!==e.pointerId||cancelled)return;
+    const dist=Math.hypot(e.clientX-startX,e.clientY-startY);
+    if(dist>move||Math.abs(window.scrollY-startScroll)>6)clear();
+  },{passive:true});
+  el.addEventListener("pointerup",e=>{
+    if(pointerId!==e.pointerId)return;
+    clearTimeout(timer);timer=null;
+    const ok=ready&&!cancelled&&Math.hypot(e.clientX-startX,e.clientY-startY)<=move&&Math.abs(window.scrollY-startScroll)<=6;
+    el.classList.remove("guide-pressing","guide-ready");ready=false;cancelled=true;pointerId=null;
+    if(ok){suppressClick=true;handler(e);setTimeout(()=>suppressClick=false,350)}
+  },{passive:true});
+  ["pointercancel","pointerleave"].forEach(ev=>el.addEventListener(ev,clear,{passive:true}));
+  el.addEventListener("click",e=>{if(suppressClick){e.preventDefault();e.stopImmediatePropagation();suppressClick=false}},true);
+  el.addEventListener("contextmenu",e=>{if(el.classList.contains("guide-pressing")||el.classList.contains("guide-ready"))e.preventDefault()});
+}
+function bindGuideTargets(visibleEvents=[]){
+  $$("#timeline .event-card").forEach((card,i)=>bindSafeHold(card,()=>openGuide(buildEventGuide(visibleEvents[i]))));
+  const dayScene=$("#daySceneCard");if(dayScene)bindSafeHold(dayScene,()=>openGuide(buildDayGuide()),{allowInteractiveRoot:true});
+  maybeShowGuideCoach();
+}
+
 function renderSchedule(){
   const d=TRIP.days[state.dayIndex];
   renderWeather(d);
@@ -772,7 +947,7 @@ function renderSchedule(){
     <article class="event ${buddyRole(e)?`buddy-${buddyRole(e)}`:""}">
       <span class="event-dot"></span>
       ${i>0 && e.travel?`<div class="travel">${esc(e.transport||"→")} ${esc(e.travel)}</div>`:""}
-      <div class="event-card">
+      <div class="event-card" data-guide-enabled="1">
         <div class="event-top"><h3 class="event-title">${esc(e.title)}</h3><span class="tag">${esc(e.category||"行程")}</span></div>
         <div class="event-time">${esc(e.time)}</div>
         ${renderEventExtras(e)}
@@ -785,6 +960,7 @@ function renderSchedule(){
     </article>`).join("");
   renderHotelReturnCard();
   renderWeather(d);
+  requestAnimationFrame(()=>bindGuideTargets(visibleEvents));
 }
 async function renderWeather(d){
   const card=$("#weatherCard");card.classList.add("skeleton");
@@ -1104,11 +1280,20 @@ function bind(){
     const resetTap=()=>{clearTimeout(tapTimer);tapTimer=setTimeout(()=>taps=0,1200)};
     heroEgg.addEventListener("click",()=>{if(holdTriggered){holdTriggered=false;return;}setHero(heroIndex+1);taps++;resetTap();if(taps>=5){taps=0;buddyCelebrate(BUDDY_DIALOG.egg[1],"./buddy_celebrate.png?v=430","duo")}});
     $$("#buddyHeroDots [data-hero-index]").forEach(dot=>dot.addEventListener("click",()=>setHero(Number(dot.dataset.heroIndex))));
-    heroEgg.addEventListener("pointerdown",()=>{holdTriggered=false;clearTimeout(holdTimer);holdTimer=setTimeout(()=>{holdTriggered=true;buddyCelebrate(BUDDY_DIALOG.egg[0],"./buddy_success.png?v=430","duo")},900)});
-    ["pointerup","pointercancel","pointerleave"].forEach(ev=>heroEgg.addEventListener(ev,()=>clearTimeout(holdTimer)));
+    const heroHoldEggs=[
+      {text:"鴨寶幫，九州出發！",image:"./buddy_celebrate.png?v=430",tone:"duo"},
+      {text:"我們是鴨寶幫！",image:"./buddy_success.png?v=430",tone:"duo"},
+      {text:"嗚拉呀哈呀哈嗚拉～",image:"./usagi_dash.png?v=431",tone:"booking"},
+      {text:"先吃飽再出發！",image:"./purin_clap.png?v=430",tone:"food"},
+      {text:"旅行正式開始 ♡",image:"./buddy_hero.png?v=430",tone:"duo"}
+    ];
+    bindSafeHold(heroEgg,()=>{holdTriggered=false;const egg=pickLine(heroHoldEggs);buddyCelebrate(egg.text,egg.image,egg.tone)},{ms:760,move:11,allowInteractiveRoot:true});
     syncDots();
   }
   $("#buddyCelebration")?.addEventListener("click",()=>$("#buddyCelebration").classList.remove("show"));
+  $("#guideClose")?.addEventListener("click",closeGuide);
+  $("#guideSaveBtn")?.addEventListener("click",saveGuideNote);
+  $("#guideModal")?.addEventListener("click",e=>{if(e.target===$("#guideModal"))closeGuide()});
   $("#foodNearbyOpen")?.addEventListener("click",()=>$("#foodNearbyModal")?.showModal());
   $("#foodNearbyClose")?.addEventListener("click",()=>$("#foodNearbyModal")?.close());
   $("#foodNearbyModal")?.addEventListener("click",e=>{if(e.target===$("#foodNearbyModal"))$("#foodNearbyModal").close()});
@@ -1191,6 +1376,7 @@ async function connectCloud(){
     ["expenses",v=>{if(v!==null){state.expenses=normalizeCloud(v);saveLocal("expenses",state.expenses);renderExpenses()}}],
     ["taskStatus",v=>{if(v && typeof v==="object"){state.taskStatus=v;saveLocal("taskStatus",v);renderBookings()}}],
     ["decisions",v=>{if(v && typeof v==="object"){state.decisions=v;saveLocal("decisions",v);renderSchedule()}}],
+    ["guideNotes",v=>{if(v && typeof v==="object"){state.guideNotes=v;saveLocal("guideNotes",v)}}],
     ["notes",v=>{if(typeof v==="string" && document.activeElement!==$("#notesArea")){state.notes=v;saveLocal("notes",v);renderNotes()}}]
   ];
   mappings.forEach(([k,cb])=>{try{subscribe(k,cb)}catch{}});
@@ -1354,7 +1540,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=520",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=530",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });
