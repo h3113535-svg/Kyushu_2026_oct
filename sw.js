@@ -1,6 +1,6 @@
-const CACHE = "kyushu-private-v4.7.0";
+const CACHE = "kyushu-private-v4.8.0";
 const SHELL = [
-  "./","./index.html","./style.css?v=470","./app.js?v=470",
+  "./","./index.html","./style.css?v=480","./app.js?v=480",
   "./manifest.json","./firebase-config.js?v=430","./icon-192.png","./icon-512.png",
   "./buddy_hero.png","./buddy_celebrate.png","./buddy_chill.png","./buddy_eat.png","./buddy_success.png",
   "./purin_peek_edge.png","./purin_walk.png","./usagi_peek.png","./usagi_dash.png","./usagi_success.png","./usagi_weather.png","./weather-rain-usagi-v47.webp",

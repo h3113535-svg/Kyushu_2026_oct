@@ -2490,3 +2490,152 @@ html[data-theme="buddy"] .weather-buddy-slot.is-rain .weather-usagi-rain{
 @media (max-width:520px){
   html[data-theme="buddy"] .weather-usagi-rain{width:72px!important;height:101px!important}
 }
+
+
+/* =========================================================
+   v4.8.0 — Buddy Talk Trail
+   More tappable companions + anchored dialogue bubbles
+   ========================================================= */
+
+/* Dialogue is shown beside the character that was actually tapped. */
+html[data-theme="buddy"] .buddy-speech-bubble{
+  position:fixed;
+  z-index:120;
+  max-width:min(224px,calc(100vw - 24px));
+  padding:10px 13px;
+  border:1px solid #eadbc5;
+  border-radius:17px 17px 17px 7px;
+  background:rgba(255,253,247,.98);
+  color:#584536;
+  box-shadow:0 10px 28px rgba(78,58,43,.18);
+  font-size:12px;
+  font-weight:900;
+  line-height:1.45;
+  text-align:center;
+  opacity:0;
+  pointer-events:none;
+  transform:translate(-50%,-100%) translateY(8px) scale(.94);
+  transform-origin:50% 100%;
+  transition:opacity .16s ease,transform .18s cubic-bezier(.2,.8,.2,1);
+}
+html[data-theme="buddy"] .buddy-speech-bubble::after{
+  content:"";
+  position:absolute;
+  left:50%;
+  bottom:-6px;
+  width:11px;height:11px;
+  background:inherit;
+  border-right:1px solid #eadbc5;
+  border-bottom:1px solid #eadbc5;
+  transform:translateX(-50%) rotate(45deg);
+}
+html[data-theme="buddy"] .buddy-speech-bubble.below{
+  transform:translate(-50%,0) translateY(-8px) scale(.94);
+  transform-origin:50% 0;
+  border-radius:7px 17px 17px 17px;
+}
+html[data-theme="buddy"] .buddy-speech-bubble.below::after{
+  top:-6px;bottom:auto;
+  border:0;border-left:1px solid #eadbc5;border-top:1px solid #eadbc5;
+}
+html[data-theme="buddy"] .buddy-speech-bubble.show{
+  opacity:1;
+  transform:translate(-50%,-100%) translateY(0) scale(1);
+}
+html[data-theme="buddy"] .buddy-speech-bubble.show.below{
+  transform:translate(-50%,0) translateY(0) scale(1);
+}
+html[data-theme="buddy"] .buddy-speech-bubble[data-tone="weather"]{background:#f2f8fd;border-color:#cfe0ee;color:#506e88}
+html[data-theme="buddy"] .buddy-speech-bubble[data-tone="food"]{background:#fff4f3;border-color:#efd5d1;color:#865e59}
+html[data-theme="buddy"] .buddy-speech-bubble[data-tone="booking"]{background:#fff8e8;border-color:#ecdcae;color:#755f39}
+html[data-theme="buddy"] .buddy-speech-bubble[data-tone="shop"]{background:#fff3f8;border-color:#efd5e1;color:#875b70}
+html[data-theme="buddy"] .buddy-speech-bubble[data-tone="money"]{background:#fff9ee;border-color:#e9ddc5;color:#6f604b}
+html[data-theme="buddy"] .buddy-speech-bubble[data-tone="note"]{background:#faf4fc;border-color:#e5d8e9;color:#75637a}
+html[data-theme="buddy"] .buddy-speech-bubble[data-tone="hotel"]{background:#f8f5fc;border-color:#ded6eb;color:#695f79}
+
+/* Every itinerary event now has one small travel companion.
+   It lives in a dedicated footer lane, so it never overlaps itinerary copy. */
+html[data-theme="buddy"] .event-footer{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin-top:11px;
+}
+html[data-theme="buddy"] .event-footer .nav-link{
+  flex:1;
+  min-width:0;
+  margin-top:0!important;
+}
+html[data-theme="buddy"] .event-footer.buddy-only-footer{
+  justify-content:flex-end;
+}
+html[data-theme="buddy"] .event-buddy{
+  flex:0 0 45px;
+  width:45px;
+  height:45px;
+  padding:2px;
+  border:1px solid #eadfc9;
+  border-radius:15px;
+  background:linear-gradient(145deg,#fffef8,#fff7e8);
+  box-shadow:0 4px 11px rgba(82,62,45,.07);
+  cursor:pointer;
+  overflow:hidden;
+  -webkit-tap-highlight-color:transparent;
+}
+html[data-theme="buddy"] .event-buddy img{
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  display:block;
+  pointer-events:none;
+  filter:drop-shadow(0 3px 4px rgba(84,63,46,.08));
+}
+html[data-theme="buddy"] .event-buddy:active{transform:scale(.93)}
+html[data-theme="buddy"] .event:nth-child(even) .event-buddy{transform:rotate(1.5deg)}
+html[data-theme="buddy"] .event:nth-child(odd) .event-buddy{transform:rotate(-1.5deg)}
+html[data-theme="buddy"] .event:nth-child(even) .event-buddy:active,
+html[data-theme="buddy"] .event:nth-child(odd) .event-buddy:active{transform:scale(.93) rotate(0deg)}
+
+/* Dialogue-specific character motion. */
+html[data-theme="buddy"] .buddy-react-soft{animation:buddySoftTalk .56s ease both!important}
+html[data-theme="buddy"] .buddy-react-chaos{animation:buddyChaosTalk .54s cubic-bezier(.22,.8,.24,1.25) both!important}
+html[data-theme="buddy"] .buddy-react-question{animation:buddyQuestionTalk .58s ease both!important}
+html[data-theme="buddy"] .buddy-react-pop{animation:buddyPopTalk .46s ease both!important}
+@keyframes buddySoftTalk{
+  0%,100%{transform:translateY(0) scale(1)}
+  45%{transform:translateY(-4px) scale(1.035)}
+  70%{transform:translateY(-1px) scale(1.015)}
+}
+@keyframes buddyChaosTalk{
+  0%{transform:translateX(0) rotate(0) scale(1)}
+  24%{transform:translateX(-4px) rotate(-4deg) scale(1.06)}
+  48%{transform:translateX(5px) rotate(5deg) scale(1.08)}
+  72%{transform:translateX(-2px) rotate(-2deg) scale(1.04)}
+  100%{transform:translateX(0) rotate(0) scale(1)}
+}
+@keyframes buddyQuestionTalk{
+  0%,100%{transform:rotate(0) scale(1)}
+  35%{transform:rotate(-5deg) scale(1.035)}
+  65%{transform:rotate(4deg) scale(1.02)}
+}
+@keyframes buddyPopTalk{
+  0%,100%{transform:scale(1)}
+  50%{transform:scale(1.075)}
+}
+
+/* The cover range is intentionally compact and fixed to 10/09–10/18. */
+html[data-theme="buddy"] #heroPrivateDate{white-space:nowrap}
+
+@media(max-width:430px){
+  html[data-theme="buddy"] .event-footer{gap:7px}
+  html[data-theme="buddy"] .event-buddy{flex-basis:41px;width:41px;height:41px;border-radius:14px}
+  html[data-theme="buddy"] .buddy-speech-bubble{font-size:11.5px;max-width:min(210px,calc(100vw - 22px))}
+}
+
+@media(prefers-reduced-motion:reduce){
+  html[data-theme="buddy"] .buddy-speech-bubble,
+  html[data-theme="buddy"] .buddy-react-soft,
+  html[data-theme="buddy"] .buddy-react-chaos,
+  html[data-theme="buddy"] .buddy-react-question,
+  html[data-theme="buddy"] .buddy-react-pop{animation:none!important;transition:none!important}
+}

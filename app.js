@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v4.7.0 Buddy Dialogue */
+/* Private travel PWA · Firebase Auth gated content · v4.8.0 Buddy Talk Trail */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -224,9 +224,19 @@ const BUDDY_DIALOG={
     late:["今天已經走很多了。","明天再繼續！","晚安 ♡"]
   }
 };
+const dialogueDecks=new WeakMap();
 function pickLine(list,fallback=""){
   if(!Array.isArray(list)||!list.length)return fallback;
-  return list[Math.floor(Math.random()*list.length)];
+  let deck=dialogueDecks.get(list);
+  if(!deck||!deck.length){
+    deck=Array.from({length:list.length},(_,i)=>i);
+    for(let i=deck.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [deck[i],deck[j]]=[deck[j],deck[i]];
+    }
+    dialogueDecks.set(list,deck);
+  }
+  return list[deck.pop()];
 }
 function japanHour(){
   try{
@@ -250,6 +260,45 @@ function toast(msg,tone=""){
   clearTimeout(toast._t);
   toast._t=setTimeout(()=>{t.classList.remove("show");setTimeout(()=>{t.dataset.tone=""},220)},1900);
 }
+
+function showBuddySpeech(el,msg,tone="duo"){
+  const bubble=$("#buddySpeechBubble");
+  if(!bubble||!el){toast(msg,tone);return;}
+  const rect=el.getBoundingClientRect();
+  const vw=Math.max(document.documentElement.clientWidth||0,window.innerWidth||0);
+  const safeHalf=Math.min(112,Math.max(82,(vw-24)/2));
+  const center=rect.left+rect.width/2;
+  const x=Math.max(12+safeHalf,Math.min(vw-12-safeHalf,center));
+  const below=rect.top<118;
+  bubble.textContent=msg;
+  bubble.dataset.tone=tone||"duo";
+  bubble.classList.remove("show","below");
+  bubble.style.left=`${x}px`;
+  bubble.style.top=`${below?Math.min(rect.bottom+9,window.innerHeight-90):Math.max(rect.top-9,62)}px`;
+  if(below)bubble.classList.add("below");
+  void bubble.offsetWidth;
+  bubble.classList.add("show");
+  clearTimeout(showBuddySpeech._t);
+  showBuddySpeech._t=setTimeout(()=>{
+    bubble.classList.remove("show","below");
+    setTimeout(()=>{bubble.dataset.tone="";bubble.textContent=""},180);
+  },3000);
+}
+function buddyMoodFor(kind,msg=""){
+  if(kind==="usagi"&&/(蛤|哼～|噗嚕)/.test(msg))return "question";
+  if(kind==="usagi"&&/(嗚拉|呀哈|衝|！！|!)/.test(msg))return "chaos";
+  if(kind==="purin")return "soft";
+  return "pop";
+}
+function animateBuddyMood(el,kind,msg){
+  if(!el)return;
+  const mood=buddyMoodFor(kind,msg);
+  ["buddy-react-soft","buddy-react-chaos","buddy-react-question","buddy-react-pop"].forEach(c=>el.classList.remove(c));
+  void el.offsetWidth;
+  el.classList.add(`buddy-react-${mood}`);
+  setTimeout(()=>el.classList.remove(`buddy-react-${mood}`),620);
+}
+
 function isBuddyTheme(){return document.documentElement.dataset.theme==="buddy"}
 function buddySparkBurst(x=50,y=45,tone="duo"){
   if(!isBuddyTheme()) return;
@@ -336,26 +385,47 @@ function buddyDialogueFor(kind,context){
 function buddyReact(kind,el){
   if(!isBuddyTheme())return;
   const context=inferBuddyContext(el);
-  if(el){
-    el.classList.remove("buddy-boop");void el.offsetWidth;el.classList.add("buddy-boop");
-    setTimeout(()=>el.classList.remove("buddy-boop"),420);
-  }
+  const tone=buddyToneForContext(context)||"duo";
   const now=Date.now();
   buddyReact.last=buddyReact.last||{kind:"",time:0,context:""};
   const prev=buddyReact.last;
+
   if(kind==="duo"){
-    const tone=buddyToneForContext(context)||"duo";
-    toast(buddyDialogueFor("duo",context),tone);buddySparkBurst(50,44,tone);
-    buddyReact.last={kind:"",time:0,context:""};return;
+    const msg=buddyDialogueFor("duo",context);
+    animateBuddyMood(el,"duo",msg);
+    showBuddySpeech(el,msg,tone);
+    buddySparkBurst(50,44,tone);
+    buddyReact.last={kind:"",time:0,context:""};
+    return;
   }
+
   if(prev.kind && prev.kind!==kind && now-prev.time<1800){
-    toast(pickLine(BUDDY_DIALOG.duo),"duo");buddySparkBurst(50,44,"duo");
-    buddyReact.last={kind:"",time:0,context:""};return;
+    const msg=pickLine(BUDDY_DIALOG.duo);
+    animateBuddyMood(el,"duo",msg);
+    showBuddySpeech(el,msg,"duo");
+    buddySparkBurst(50,44,"duo");
+    buddyReact.last={kind:"",time:0,context:""};
+    return;
   }
-  const tone=buddyToneForContext(context);
-  toast(buddyDialogueFor(kind,context),tone);
-  if(context)buddySparkBurst(50,44,tone||"duo");
+
+  const msg=buddyDialogueFor(kind,context);
+  animateBuddyMood(el,kind,msg);
+  showBuddySpeech(el,msg,tone);
+  if(context||kind==="usagi")buddySparkBurst(50,44,tone);
   buddyReact.last={kind,time:now,context};
+
+  // Timeline companions unlock one explicit duo easter egg after enough taps in a day.
+  if(el?.classList?.contains("event-buddy")){
+    const key=`buddyTrail:${state.dayIndex}:${localDateKey()}`;
+    buddyReact.trail=buddyReact.trail||{};
+    const count=(buddyReact.trail[key]||0)+1;
+    buddyReact.trail[key]=count;
+    if(count===5){
+      setTimeout(()=>{
+        buddyCelebrate("我們是鴨寶幫！","./buddy_celebrate.png?v=430","duo");
+      },520);
+    }
+  }
 }
 
 function buddyPeek(kind="purin"){
@@ -593,6 +663,36 @@ function renderHotelReturnCard(){
   box.innerHTML=`<div class="hotel-return-copy"><span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ 導航回飯店</a></div><div class="hotel-return-art buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="hotel"><img src="./hotel-return-duo.webp?v=460" alt="布丁狗與烏薩奇回飯店休息"></div>`;
 }
 
+
+const EVENT_BUDDY_ASSETS={
+  purin:["./mini-purin-hero.webp","./mini-purin-clap.webp","./mini-purin-surprise.webp","./mini-purin-lie.webp"],
+  usagi:["./mini-usagi-excited.webp","./mini-usagi-point.webp","./mini-usagi-success.webp","./mini-usagi-sticker.webp"]
+};
+function eventBuddySpec(e,index){
+  const text=`${e.category||""} ${e.title||""} ${e.status||""} ${e.note||""}`;
+  let kind=index%2===0?"purin":"usagi";
+  let context="day";
+
+  if(/早餐|午餐|晚餐|咖啡|甜點|餐廳|Buffet|赤牛|牛排|燒鳥|すき焼き|美食|吃/.test(text)){
+    kind="purin";context="food";
+  }else if(/購物|補貨|PARCO|天神|大名|Canal|AMU|LaLaport|GUNDAM|店|逛/.test(text)){
+    kind="usagi";context="shop";
+  }else if(/住宿|飯店|Hotel|Check-in|入住|泡湯|大浴場|休息|放空|星空/.test(text)){
+    kind="purin";context="hotel";
+  }else if(/預約|搶|新幹線|由布院之森|租車|還車|航班|機場|划船|報到|固定|必守|交通/.test(text)){
+    kind="usagi";context="booking";
+  }
+
+  const pool=EVENT_BUDDY_ASSETS[kind];
+  const img=pool[(state.dayIndex+index)%pool.length];
+  return {kind,context,img};
+}
+function eventBuddyHtml(e,index){
+  const b=eventBuddySpec(e,index);
+  const who=b.kind==="purin"?"布丁狗":"烏薩奇";
+  return `<button type="button" class="event-buddy buddy-only-art buddy-reactable" data-buddy-react="${b.kind}" data-buddy-context="${b.context}" aria-label="和${who}聊聊"><img src="${b.img}" alt="${who}"></button>`;
+}
+
 function renderSchedule(){
   const d=TRIP.days[state.dayIndex];
   renderWeather(d);
@@ -612,7 +712,10 @@ function renderSchedule(){
         <div class="event-time">${esc(e.time)}</div>
         ${renderEventExtras(e)}
         ${e.note?`<div class="event-note">${esc(e.note)}</div>`:""}
-        ${e.noNav?"":`<a class="nav-link" target="_blank" rel="noopener" href="${mapNav(e.nav||e.title,weatherMode(e))}">↗ Google Maps 導航</a>`}
+        <div class="event-footer ${e.noNav?"buddy-only-footer":""}">
+          ${e.noNav?"":`<a class="nav-link" target="_blank" rel="noopener" href="${mapNav(e.nav||e.title,weatherMode(e))}">↗ Google Maps 導航</a>`}
+          ${eventBuddyHtml(e,i)}
+        </div>
       </div>
     </article>`).join("");
   renderHotelReturnCard();
@@ -1062,10 +1165,9 @@ function cachedTrip(){
   }catch{return null}
 }
 function formatTripDate(){
-  const start=TRIP?.startDate||OFFICIAL_TRIP_START;
-  const end=TRIP?.endDate||OFFICIAL_TRIP_END;
-  const fmt=s=>{const d=new Date(`${s}T00:00:00+09:00`);return `${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")}`};
-  return `${fmt(start)} — ${fmt(end)}`;
+  // Authoritative trip range: 2026/10/09–2026/10/18.
+  // Do not let stale Firebase metadata override the cover date.
+  return "10.09 — 10.18";
 }
 function applyPrivateTripMeta(){
   const title=$("#heroPrivateTitle"); if(title) title.textContent=TRIP.heroTitle||TRIP.title||"私人旅程";
@@ -1186,7 +1288,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=470",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=480",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });
