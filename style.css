@@ -2639,3 +2639,36 @@ html[data-theme="buddy"] #heroPrivateDate{white-space:nowrap}
   html[data-theme="buddy"] .buddy-react-question,
   html[data-theme="buddy"] .buddy-react-pop{animation:none!important;transition:none!important}
 }
+
+
+/* =========================================================
+   v4.9.0 — Usagi Voice
+   Guaranteed catchphrases + matching temporary expressions
+   ========================================================= */
+html[data-theme="buddy"] .buddy-speech-bubble[data-tone="voice"]{
+  background:#fff9d9;
+  border-color:#ebcf72;
+  color:#674c2f;
+  box-shadow:0 10px 28px rgba(120,87,36,.19);
+}
+html[data-theme="buddy"] .buddy-speech-bubble[data-tone="voice"]::before{
+  content:"✦";
+  position:absolute;
+  right:10px;
+  top:-9px;
+  font-size:15px;
+  color:#e9b91f;
+  transform:rotate(10deg);
+}
+html[data-theme="buddy"] img.usagi-voice-face{
+  object-fit:contain!important;
+  animation:usagiVoiceFace .38s cubic-bezier(.2,.85,.2,1.2) both;
+}
+@keyframes usagiVoiceFace{
+  0%{opacity:.35;transform:scale(.78) rotate(-4deg)}
+  65%{opacity:1;transform:scale(1.08) rotate(2deg)}
+  100%{opacity:1;transform:scale(1) rotate(0)}
+}
+@media(prefers-reduced-motion:reduce){
+  html[data-theme="buddy"] img.usagi-voice-face{animation:none!important}
+}

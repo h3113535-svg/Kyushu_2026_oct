@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v4.8.0 Buddy Talk Trail */
+/* Private travel PWA · Firebase Auth gated content · v4.9.0 Usagi Voice */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -224,6 +224,55 @@ const BUDDY_DIALOG={
     late:["今天已經走很多了。","明天再繼續！","晚安 ♡"]
   }
 };
+const USAGI_VOICE_LINES=[
+  "蛤？","嗚拉","呀哈！","嗚拉呀哈呀哈嗚拉～","哼～？","噗嚕"
+];
+const USAGI_VOICE_ART={
+  "蛤？":"./usagi_think.png?v=430",
+  "嗚拉":"./usagi_excited.png?v=430",
+  "呀哈！":"./usagi_success.png?v=430",
+  "嗚拉呀哈呀哈嗚拉～":"./usagi_dash.png?v=430",
+  "哼～？":"./usagi_think.png?v=430",
+  "噗嚕":"./usagi_sticker.png?v=430"
+};
+const usagiVoiceState={tapCount:0};
+const usagiVoiceImageState=new WeakMap();
+
+function isUsagiVoiceLine(msg){
+  return USAGI_VOICE_LINES.includes(msg);
+}
+function pickUsagiVoice(){
+  return pickLine(USAGI_VOICE_LINES,"呀哈！");
+}
+function shouldUseUsagiVoice(context=""){
+  // v4.9: the special Usagi sounds must be discoverable, not buried by context.
+  // Every second Usagi tap is guaranteed to use the voice deck.
+  usagiVoiceState.tapCount+=1;
+  return usagiVoiceState.tapCount%2===0;
+}
+function flashUsagiVoiceArt(el,msg,context=""){
+  if(!el||!isUsagiVoiceLine(msg)||context==="weather")return;
+  const img=el.matches?.("img")?el:el.querySelector?.("img");
+  if(!img)return;
+  const next=USAGI_VOICE_ART[msg];
+  if(!next)return;
+
+  const prev=usagiVoiceImageState.get(img);
+  if(prev?.timer)clearTimeout(prev.timer);
+  const original=prev?.original||img.getAttribute("src");
+  usagiVoiceImageState.set(img,{original,timer:null});
+
+  img.classList.add("usagi-voice-face");
+  img.src=next;
+  const timer=setTimeout(()=>{
+    const state=usagiVoiceImageState.get(img);
+    if(state?.original)img.src=state.original;
+    img.classList.remove("usagi-voice-face");
+    usagiVoiceImageState.delete(img);
+  },1450);
+  usagiVoiceImageState.set(img,{original,timer});
+}
+
 const dialogueDecks=new WeakMap();
 function pickLine(list,fallback=""){
   if(!Array.isArray(list)||!list.length)return fallback;
@@ -385,7 +434,7 @@ function buddyDialogueFor(kind,context){
 function buddyReact(kind,el){
   if(!isBuddyTheme())return;
   const context=inferBuddyContext(el);
-  const tone=buddyToneForContext(context)||"duo";
+  const baseTone=buddyToneForContext(context)||"duo";
   const now=Date.now();
   buddyReact.last=buddyReact.last||{kind:"",time:0,context:""};
   const prev=buddyReact.last;
@@ -393,8 +442,8 @@ function buddyReact(kind,el){
   if(kind==="duo"){
     const msg=buddyDialogueFor("duo",context);
     animateBuddyMood(el,"duo",msg);
-    showBuddySpeech(el,msg,tone);
-    buddySparkBurst(50,44,tone);
+    showBuddySpeech(el,msg,baseTone);
+    buddySparkBurst(50,44,baseTone);
     buddyReact.last={kind:"",time:0,context:""};
     return;
   }
@@ -408,8 +457,18 @@ function buddyReact(kind,el){
     return;
   }
 
-  const msg=buddyDialogueFor(kind,context);
+  let msg;
+  let tone=baseTone;
+
+  if(kind==="usagi" && shouldUseUsagiVoice(context)){
+    msg=pickUsagiVoice();
+    tone="voice";
+  }else{
+    msg=buddyDialogueFor(kind,context);
+  }
+
   animateBuddyMood(el,kind,msg);
+  if(kind==="usagi")flashUsagiVoiceArt(el,msg,context);
   showBuddySpeech(el,msg,tone);
   if(context||kind==="usagi")buddySparkBurst(50,44,tone);
   buddyReact.last={kind,time:now,context};
@@ -1288,7 +1347,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=480",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=490",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });
