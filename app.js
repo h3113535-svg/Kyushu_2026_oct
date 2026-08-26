@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.0 Travel Guide Layer */
+/* Private travel PWA · Firebase Auth gated content · v5.3.1 Travel Guide Content */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -776,15 +776,25 @@ function guideEntries(){
   if(raw&&typeof raw==="object")return Object.values(raw).filter(Boolean);
   return [];
 }
-function guideMatches(entry,dayIndex,text){
-  if(Number(entry?.day||0) && Number(entry.day)!==dayIndex+1)return false;
+function guideMatchScore(entry,dayIndex,text){
+  if(Number(entry?.day||0) && Number(entry.day)!==dayIndex+1)return -1;
   const hay=String(text||"").toLowerCase();
-  const terms=Array.isArray(entry?.match)?entry.match:[entry?.match].filter(Boolean);
-  return !terms.length || terms.some(t=>hay.includes(String(t).toLowerCase()));
+  const terms=(Array.isArray(entry?.match)?entry.match:[entry?.match]).filter(Boolean).map(x=>String(x).toLowerCase());
+  const excludes=(Array.isArray(entry?.exclude)?entry.exclude:[entry?.exclude]).filter(Boolean).map(x=>String(x).toLowerCase());
+  if(excludes.some(t=>hay.includes(t)))return -1;
+  if(!terms.length)return Number(entry?.priority||0);
+  const hits=terms.filter(t=>hay.includes(t));
+  if(!hits.length)return -1;
+  const specificity=Math.max(...hits.map(t=>t.length));
+  return Number(entry?.priority||0)*1000 + specificity*10 + hits.length;
 }
 function privateGuideForEvent(e){
-  const text=[e?.title,e?.nav,e?.category,e?.note].filter(Boolean).join(" ");
-  return guideEntries().find(g=>g.type!=="day"&&guideMatches(g,state.dayIndex,text))||null;
+  const text=[e?.title,e?.nav,e?.category,e?.note,e?.status].filter(Boolean).join(" ");
+  return guideEntries()
+    .filter(g=>g.type!=="day")
+    .map(g=>({g,score:guideMatchScore(g,state.dayIndex,text)}))
+    .filter(x=>x.score>=0)
+    .sort((a,b)=>b.score-a.score)[0]?.g||null;
 }
 function privateGuideForDay(){
   return guideEntries().find(g=>g.type==="day"&&Number(g.day)===state.dayIndex+1)||null;
@@ -832,7 +842,8 @@ function buildEventGuide(e){
     sections:unique.length?unique:[{label:"這一站",items:["目前沒有額外攻略；你可以先把自己的備忘存進下方。"]}],
     map:saved?.map||e?.nav||e?.title||"",
     searches:Array.isArray(saved?.searches)?saved.searches:[],
-    links:Array.isArray(e?.links)?e.links:[]
+    links:[...(Array.isArray(saved?.links)?saved.links:[]),...(Array.isArray(e?.links)?e.links:[])]
+      .filter((x,i,a)=>x?.url&&a.findIndex(y=>y?.url===x.url)===i)
   };
 }
 function buildDayGuide(){
@@ -847,7 +858,8 @@ function buildDayGuide(){
     kind:"day",key:guideKeyFor("day",d?.title||`D${state.dayIndex+1}`),
     title:saved?.title||`D${state.dayIndex+1} ${d?.title||"今日攻略"}`,
     meta:`${d?.shortDate||""} · 今日總攻略`, mascot:saved?.mascot||"duo",
-    sections,map:saved?.map||"",searches:Array.isArray(saved?.searches)?saved.searches:[],links:[]
+    sections,map:saved?.map||"",searches:Array.isArray(saved?.searches)?saved.searches:[],
+    links:Array.isArray(saved?.links)?saved.links:[]
   };
 }
 function renderGuideSections(sections){
@@ -1540,7 +1552,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=530",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=531",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });
