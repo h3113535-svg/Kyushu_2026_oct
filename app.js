@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v4.9.0 Usagi Voice */
+/* Private travel PWA · Firebase Auth gated content · v5.0.0 Home Hero Refresh */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -1075,6 +1075,7 @@ function bind(){
   if(heroEgg){
     const heroImg=heroEgg.querySelector("img");
     const heroGallery=[
+      "./hero-cover-v50.webp?v=500",
       "./buddy_hero.png?v=430",
       "./buddy_celebrate.png?v=430",
       "./buddy_chill.png?v=430",
@@ -1347,7 +1348,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=490",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=500",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });

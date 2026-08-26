@@ -16,9 +16,9 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=490" />
+  <link rel="stylesheet" href="./style.css?v=500" />
   <title>私人旅程</title>
-  <meta name="app-version" content="4.9.0" />
+  <meta name="app-version" content="5.0.0" />
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -44,7 +44,7 @@
           <div class="hero-route" id="heroPrivateRoute"></div>
         </div>
         <button type="button" class="buddy-hero-art buddy-only-art" id="buddyHeroEgg" aria-label="旅伴彩蛋">
-          <img src="./buddy_hero.png?v=430" alt="布丁狗與烏薩奇" />
+          <img src="./hero-cover-v50.webp?v=500" alt="布丁狗與烏薩奇旅行首頁圖" />
         </button>
       </div>
     </header>
@@ -54,6 +54,7 @@
       <button type="button" data-hero-index="2" aria-label="第 3 張旅伴貼紙"></button>
       <button type="button" data-hero-index="3" aria-label="第 4 張旅伴貼紙"></button>
       <button type="button" data-hero-index="4" aria-label="第 5 張旅伴貼紙"></button>
+      <button type="button" data-hero-index="5" aria-label="第 6 張旅伴貼紙"></button>
     </div>
 
     <main>
@@ -284,6 +285,6 @@
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=430"></script>
-  <script defer src="./app.js?v=490"></script>
+  <script defer src="./app.js?v=500"></script>
 </body>
 </html>
