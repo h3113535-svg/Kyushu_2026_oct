@@ -2689,3 +2689,90 @@ html[data-theme="buddy"] .buddy-hero-dots{margin-top:6px}
   html[data-theme="buddy"] .buddy-hero-art{width:min(98%,560px);height:288px;bottom:-3px}
   html[data-theme="buddy"] .buddy-hero-copy{width:min(94%,470px)}
 }
+
+
+/* =========================================================
+   v5.1.0 — Hero Polish
+   ========================================================= */
+html[data-theme="buddy"] .hero{
+  min-height:505px!important;
+  background:
+    radial-gradient(circle at 14% 27%,rgba(255,255,255,.72) 0 4%,transparent 4.5%),
+    radial-gradient(circle at 85% 30%,rgba(255,255,255,.56) 0 3.2%,transparent 3.7%),
+    linear-gradient(180deg,#d9eef9 0 38%,#eef6e9 38% 56%,#fff1bf 56% 100%)!important;
+}
+html[data-theme="buddy"] .buddy-hero-v42{max-width:680px;min-height:470px}
+html[data-theme="buddy"] .buddy-hero-copy{
+  width:min(94%,500px);padding:12px 20px 13px;border-radius:26px;
+  background:rgba(255,253,248,.90);border:1px solid rgba(224,197,140,.82);
+  box-shadow:0 12px 32px rgba(91,66,43,.095);
+}
+html[data-theme="buddy"] .buddy-hero-copy .buddy-season{
+  display:inline-flex;align-items:center;justify-content:center;padding:4px 9px;border-radius:999px;
+  background:#fff0bd;color:#93602e;font-size:10px;letter-spacing:.15em;
+}
+html[data-theme="buddy"] .buddy-hero-copy h1{margin:5px 0 5px!important}
+html[data-theme="buddy"] .buddy-hero-copy .hero-date{font-size:14px;margin:3px 0 3px;color:#7b5034}
+html[data-theme="buddy"] .buddy-hero-copy .hero-route{font-size:11.5px;color:#6f6259;letter-spacing:.025em}
+html[data-theme="buddy"] .hero-submeta{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:6px;color:#a07b55;font-size:9.5px;font-weight:900;letter-spacing:.08em}
+html[data-theme="buddy"] .hero-submeta i{width:3px;height:3px;border-radius:50%;background:#d1a764}
+html[data-theme="buddy"] .buddy-hero-art{width:min(97%,610px);height:320px;bottom:-5px;filter:drop-shadow(0 16px 18px rgba(89,65,44,.14))}
+html[data-theme="buddy"] .buddy-hero-art img{object-fit:contain;object-position:center bottom}
+html[data-theme="buddy"] .buddy-hero-tapcue{
+  position:absolute;z-index:7;left:50%;bottom:5px;transform:translateX(-50%);
+  padding:6px 10px;border-radius:999px;background:rgba(255,253,247,.88);border:1px solid rgba(224,199,154,.78);
+  color:rgba(103,75,54,.66);font-size:9px;font-weight:900;letter-spacing:.035em;white-space:nowrap;
+  box-shadow:0 5px 12px rgba(83,61,45,.06);backdrop-filter:blur(8px);pointer-events:none;
+}
+html[data-theme="buddy"] .settings-btn{top:max(14px,env(safe-area-inset-top))!important;right:14px!important;z-index:12!important}
+html[data-theme="buddy"] .buddy-hero-dots{margin:8px auto 2px!important;gap:7px!important}
+html[data-theme="buddy"] .buddy-hero-dots button{width:7px!important;height:7px!important;opacity:.42}
+html[data-theme="buddy"] .buddy-hero-dots button.active{width:19px!important;border-radius:999px!important;opacity:1}
+@media(max-width:640px){
+  html[data-theme="buddy"] .hero{min-height:480px!important;padding-top:22px!important}
+  html[data-theme="buddy"] .buddy-hero-v42{min-height:447px}
+  html[data-theme="buddy"] .buddy-hero-art{width:min(99%,590px);height:302px;bottom:-2px}
+  html[data-theme="buddy"] .buddy-hero-copy{width:min(94%,475px);padding:11px 16px 12px}
+  html[data-theme="buddy"] .buddy-hero-tapcue{bottom:3px;font-size:8.5px}
+}
+
+
+/* =========================================================
+   v5.2.0 — Daily Scene Unity
+   ========================================================= */
+html[data-theme="buddy"] .day-title-v46{padding:5px 3px 10px!important;gap:4px!important}
+html[data-theme="buddy"] .day-title-v46 .day-title-main{gap:9px}
+html[data-theme="buddy"] .day-title-v46 #dayNumber{
+  display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:22px;padding:0 8px;
+  border-radius:999px;background:#fff0bd;color:#8a5a32;font-size:10px;letter-spacing:.06em;font-weight:900;
+}
+html[data-theme="buddy"] .day-scene-card{
+  aspect-ratio:30/19;height:auto!important;min-height:0!important;margin:0 0 15px;padding:8px;
+  border:1px solid #eadbc0;border-radius:25px;
+  background:linear-gradient(145deg,rgba(255,253,247,.98),rgba(249,252,255,.98));
+  box-shadow:0 10px 26px rgba(76,56,39,.08),inset 0 0 0 1px rgba(255,255,255,.72);
+}
+html[data-theme="buddy"] .day-scene-card::before{
+  inset:8px;border-radius:18px;height:auto;background:linear-gradient(to top,rgba(255,250,239,.20),transparent 33%);
+  border:1px solid rgba(225,211,185,.35);
+}
+html[data-theme="buddy"] .day-scene-card::after{
+  content:"✦ 點圖和旅伴聊聊";position:absolute;z-index:3;right:15px;top:13px;
+  padding:5px 8px;border-radius:999px;background:rgba(255,253,247,.86);border:1px solid rgba(226,205,165,.72);
+  color:rgba(103,76,55,.58);font-size:8px;font-weight:900;letter-spacing:.02em;backdrop-filter:blur(6px);
+  pointer-events:none;
+}
+html[data-theme="buddy"] .day-scene-card>img{
+  position:relative;z-index:1;width:100%;height:100%;object-fit:contain;object-position:center center;
+  transform:none!important;filter:drop-shadow(0 7px 10px rgba(76,57,43,.055));
+}
+html[data-theme="buddy"] .day-scene-card:active>img{transform:scale(.988)!important}
+html[data-theme="buddy"] .day-scene-progress{left:23px;right:23px;bottom:13px;z-index:4}
+html[data-theme="buddy"] .day-scene-progress i{height:3px;background:rgba(137,108,73,.11)}
+html[data-theme="buddy"] .day-scene-progress em{background:linear-gradient(90deg,#e5bb52,#efcb73)}
+@media(max-width:430px){
+  html[data-theme="buddy"] .day-scene-card{padding:6px;border-radius:22px}
+  html[data-theme="buddy"] .day-scene-card::before{inset:6px;border-radius:16px}
+  html[data-theme="buddy"] .day-scene-card::after{right:11px;top:10px;font-size:7.5px;padding:4px 7px}
+  html[data-theme="buddy"] .day-scene-progress{left:18px;right:18px;bottom:10px}
+}

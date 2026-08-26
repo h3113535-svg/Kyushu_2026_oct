@@ -16,9 +16,10 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=500" />
+  <link rel="stylesheet" href="./style.css?v=520" />
   <title>私人旅程</title>
-  <meta name="app-version" content="5.0.0" />
+  <meta name="app-version" content="5.2.0" />
+  <link rel="preload" as="image" href="./day-scene-v52-01.webp?v=520" fetchpriority="high">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -42,10 +43,12 @@
           <h1 id="heroPrivateTitle">私人旅程</h1>
           <div class="hero-date" id="heroPrivateDate"></div>
           <div class="hero-route" id="heroPrivateRoute"></div>
+          <div class="hero-submeta buddy-only-art" aria-label="旅程摘要"><span>10天9夜</span><i></i><span>旅伴手帳</span></div>
         </div>
         <button type="button" class="buddy-hero-art buddy-only-art" id="buddyHeroEgg" aria-label="旅伴彩蛋">
-          <img src="./hero-cover-v50.webp?v=500" alt="布丁狗與烏薩奇旅行首頁圖" />
+          <img src="./hero-cover-v51.webp?v=510" alt="布丁狗與烏薩奇旅行首頁圖" />
         </button>
+        <div class="buddy-hero-tapcue buddy-only-art" aria-hidden="true">✦ 點旅伴換首頁圖・長按有彩蛋</div>
       </div>
     </header>
     <div class="buddy-hero-dots buddy-only-art" id="buddyHeroDots" aria-label="旅伴貼紙切換">
@@ -82,7 +85,7 @@
           <p id="daySubtitle"></p>
         </section>
         <button type="button" id="daySceneCard" class="day-scene-card buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="day" aria-label="今日旅伴主題插畫">
-          <img id="daySceneImage" src="./day-scene-01.webp?v=460" alt="布丁狗與烏薩奇今日旅行">
+          <img id="daySceneImage" src="./day-scene-v52-01.webp?v=520" alt="布丁狗與烏薩奇今日旅行">
           <span class="day-scene-progress"><i><em id="daySceneProgressBar"></em></i></span>
         </button>
         <section id="dayBrief" class="day-brief"></section>
@@ -285,6 +288,6 @@
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=430"></script>
-  <script defer src="./app.js?v=500"></script>
+  <script defer src="./app.js?v=520"></script>
 </body>
 </html>

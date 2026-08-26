@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.0.0 Home Hero Refresh */
+/* Private travel PWA · Firebase Auth gated content · v5.2.0 Daily Scene Unity */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -16,8 +16,8 @@ let lastError = "";
 const pollers = new Set();
 
 const BUDDY_FAST_ASSETS=[
-  "./day-scene-01.webp?v=460","./day-scene-02.webp?v=460","./day-scene-03.webp?v=460","./day-scene-04.webp?v=460","./day-scene-05.webp?v=460",
-  "./day-scene-06.webp?v=460","./day-scene-07.webp?v=460","./day-scene-08.webp?v=460","./day-scene-09.webp?v=460","./day-scene-10.webp?v=460",
+  "./day-scene-v52-01.webp?v=520","./day-scene-v52-02.webp?v=520","./day-scene-v52-03.webp?v=520","./day-scene-v52-04.webp?v=520","./day-scene-v52-05.webp?v=520",
+  "./day-scene-v52-06.webp?v=520","./day-scene-v52-07.webp?v=520","./day-scene-v52-08.webp?v=520","./day-scene-v52-09.webp?v=520","./day-scene-v52-10.webp?v=520",
   "./weather-rain-usagi-v47.webp?v=470","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
   "./ui-cloud.webp?v=440","./ui-coffee.webp?v=440","./ui-suitcase.webp?v=440","./ui-purin-tip.webp?v=440"
 ];
@@ -25,10 +25,16 @@ const buddyFastImageCache=[];
 function preloadBuddyFastAssets(){
   if(preloadBuddyFastAssets.started)return;
   preloadBuddyFastAssets.started=true;
-  BUDDY_FAST_ASSETS.forEach(src=>{
-    const img=new Image(); img.decoding="async"; img.src=src; buddyFastImageCache.push(img);
+  const load=(src,priority="auto")=>{
+    const img=new Image(); img.decoding="async";
+    try{img.fetchPriority=priority}catch{}
+    img.src=src; buddyFastImageCache.push(img);
     if(img.decode) img.decode().catch(()=>{});
-  });
+  };
+  BUDDY_FAST_ASSETS.slice(0,2).forEach(src=>load(src,"high"));
+  const rest=()=>BUDDY_FAST_ASSETS.slice(2).forEach(src=>load(src,"low"));
+  if("requestIdleCallback" in window) requestIdleCallback(rest,{timeout:1200});
+  else setTimeout(rest,450);
 }
 preloadBuddyFastAssets();
 
@@ -502,7 +508,7 @@ function buddyPeek(kind="purin"){
   buddyPeek._timer=setTimeout(()=>{layer.classList.remove("show");setTimeout(()=>{layer.className="buddy-peek-layer buddy-only-art";layer.innerHTML=""},480)},2400);
 }
 function dailySceneAsset(index){
-  return `./day-scene-${String(index+1).padStart(2,"0")}.webp?v=460`;
+  return `./day-scene-v52-${String(index+1).padStart(2,"0")}.webp?v=520`;
 }
 function renderDailyScene(){
   const img=$("#daySceneImage"), bar=$("#daySceneProgressBar");
@@ -1075,7 +1081,7 @@ function bind(){
   if(heroEgg){
     const heroImg=heroEgg.querySelector("img");
     const heroGallery=[
-      "./hero-cover-v50.webp?v=500",
+      "./hero-cover-v51.webp?v=510",
       "./buddy_hero.png?v=430",
       "./buddy_celebrate.png?v=430",
       "./buddy_chill.png?v=430",
@@ -1232,7 +1238,7 @@ function formatTripDate(){
 function applyPrivateTripMeta(){
   const title=$("#heroPrivateTitle"); if(title) title.textContent=TRIP.heroTitle||TRIP.title||"私人旅程";
   const date=$("#heroPrivateDate"); if(date) date.textContent=formatTripDate();
-  const route=$("#heroPrivateRoute"); if(route) route.textContent=TRIP.heroRoute||"";
+  const route=$("#heroPrivateRoute"); if(route) route.textContent=TRIP.heroRoute||"福岡・由布院・阿蘇・高千穗・熊本";
   const season=$("#heroPrivateSeason"); if(season) season.textContent="2026・秋";
   document.title="私人旅程";
 }
@@ -1348,7 +1354,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=500",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=520",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });
