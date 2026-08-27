@@ -2040,16 +2040,26 @@ html[data-theme="buddy"] .purin-walk-egg.play{animation:purinWalkAcross 10s line
 }
 
 html[data-theme="buddy"] .usagi-urgent-egg{
-  display:block;position:fixed;z-index:86;right:-155px;bottom:84px;width:132px;height:132px;
+  display:flex;align-items:flex-end;gap:8px;position:fixed;z-index:86;right:-286px;bottom:84px;width:272px;height:124px;
   pointer-events:none;opacity:0;
 }
-html[data-theme="buddy"] .usagi-urgent-egg img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 8px 10px rgba(72,56,44,.12))}
-html[data-theme="buddy"] .usagi-urgent-egg.play{animation:usagiUrgentDash 1.65s cubic-bezier(.18,.75,.23,1) both}
+html[data-theme="buddy"] .usagi-urgent-egg img{width:118px;height:118px;flex:0 0 118px;object-fit:contain;filter:drop-shadow(0 8px 10px rgba(72,56,44,.12))}
+html[data-theme="buddy"] .usagi-urgent-egg-text{
+  align-self:center;max-width:146px;padding:10px 14px;border-radius:18px;background:rgba(255,250,244,.97);
+  border:2px solid rgba(107,76,59,.9);color:#6b4c3b;font-weight:900;font-size:15px;line-height:1.15;letter-spacing:.01em;
+  white-space:nowrap;box-shadow:0 10px 18px rgba(84,63,48,.16);
+}
+html[data-theme="buddy"] .usagi-urgent-egg.play{animation:usagiUrgentDash 2.15s cubic-bezier(.18,.75,.23,1) both}
 @keyframes usagiUrgentDash{
   0%{opacity:0;transform:translateX(0) rotate(-5deg)}
-  12%{opacity:1}
-  70%{opacity:1;transform:translateX(calc(-100vw - 90px)) rotate(3deg)}
-  100%{opacity:0;transform:translateX(calc(-100vw - 230px)) rotate(5deg)}
+  10%{opacity:1}
+  74%{opacity:1;transform:translateX(calc(-100vw - 120px)) rotate(3deg)}
+  100%{opacity:0;transform:translateX(calc(-100vw - 340px)) rotate(5deg)}
+}
+@media (max-width:560px){
+  html[data-theme="buddy"] .usagi-urgent-egg{right:-246px;bottom:78px;width:236px;height:108px;gap:6px}
+  html[data-theme="buddy"] .usagi-urgent-egg img{width:102px;height:102px;flex-basis:102px}
+  html[data-theme="buddy"] .usagi-urgent-egg-text{max-width:128px;padding:8px 11px;font-size:13px;border-radius:16px}
 }
 
 html[data-theme="buddy"] .buddy-hero-art img.swap{animation:buddyHeroSwap .34s cubic-bezier(.2,.86,.25,1.08) both}
@@ -2573,6 +2583,34 @@ html[data-theme="buddy"] .buddy-speech-bubble.show{
 html[data-theme="buddy"] .buddy-speech-bubble.show.below{
   transform:translate(-50%,0) translateY(0) scale(1);
 }
+html[data-theme="buddy"] .buddy-speech-bubble.side-left{
+  text-align:left;
+  transform:translate(-100%,-50%) translateX(-8px) scale(.94);
+  transform-origin:100% 50%;
+  border-radius:17px 8px 17px 17px;
+}
+html[data-theme="buddy"] .buddy-speech-bubble.show.side-left{
+  transform:translate(-100%,-50%) translateX(0) scale(1);
+}
+html[data-theme="buddy"] .buddy-speech-bubble.side-left::after{
+  left:auto;right:-6px;top:50%;bottom:auto;
+  border-right:1px solid #eadbc5;border-bottom:1px solid #eadbc5;
+  transform:translateY(-50%) rotate(-45deg);
+}
+html[data-theme="buddy"] .buddy-speech-bubble.side-right{
+  text-align:left;
+  transform:translate(0,-50%) translateX(8px) scale(.94);
+  transform-origin:0 50%;
+  border-radius:8px 17px 17px 17px;
+}
+html[data-theme="buddy"] .buddy-speech-bubble.show.side-right{
+  transform:translate(0,-50%) translateX(0) scale(1);
+}
+html[data-theme="buddy"] .buddy-speech-bubble.side-right::after{
+  left:-6px;top:50%;bottom:auto;
+  border-right:1px solid #eadbc5;border-bottom:1px solid #eadbc5;
+  transform:translateY(-50%) rotate(135deg);
+}
 html[data-theme="buddy"] .buddy-speech-bubble[data-tone="weather"]{background:#f2f8fd;border-color:#cfe0ee;color:#506e88}
 html[data-theme="buddy"] .buddy-speech-bubble[data-tone="food"]{background:#fff4f3;border-color:#efd5d1;color:#865e59}
 html[data-theme="buddy"] .buddy-speech-bubble[data-tone="booking"]{background:#fff8e8;border-color:#ecdcae;color:#755f39}
@@ -2658,6 +2696,8 @@ html[data-theme="buddy"] #heroPrivateDate{white-space:nowrap}
   html[data-theme="buddy"] .event-footer{gap:7px}
   html[data-theme="buddy"] .event-buddy{flex-basis:41px;width:41px;height:41px;border-radius:14px}
   html[data-theme="buddy"] .buddy-speech-bubble{font-size:11.5px;max-width:min(210px,calc(100vw - 22px))}
+  html[data-theme="buddy"] .buddy-speech-bubble.side-left,
+  html[data-theme="buddy"] .buddy-speech-bubble.side-right{max-width:min(190px,calc(100vw - 34px))}
 }
 
 @media(prefers-reduced-motion:reduce){

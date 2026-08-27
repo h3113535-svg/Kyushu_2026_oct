@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.10 Egg Stability + Typography Fix */
+/* Private travel PWA · Firebase Auth gated content · v5.3.12 Day Buddy Speech Position Fix */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -22,6 +22,7 @@ const BUDDY_FAST_ASSETS=[
   "./day-scene-v52-06.webp?v=520","./day-scene-v52-07.webp?v=520","./day-scene-v52-08.webp?v=520","./day-scene-v52-09.webp?v=520","./day-scene-v52-10.webp?v=520",
   "./weather-rain-usagi-v47.webp?v=470","./weather-sunny-usagi-v536.webp?v=536","./weather-teruteru-usagi-v536.webp?v=536","./weather-cloudy-usagi-v536.webp?v=536","./weather-thunder-usagi-v536.webp?v=536","./weather-snow-usagi-v536.webp?v=536","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
   "./egg-sendoff-v539.png?v=539","./egg-cry-v539.png?v=539","./egg-home-sleep-v539.png?v=539",
+  "./duck_gang.png?v=5311","./seal_gang.png?v=5311",
   "./ui-cloud.webp?v=440","./ui-coffee.webp?v=440","./ui-suitcase.webp?v=440","./ui-purin-tip.webp?v=440"
 ];
 const buddyFastImageCache=[];
@@ -1063,10 +1064,8 @@ function flashUsagiVoiceArt(el,msg,context=""){
 }
 
 const HERO_EGG_POOL=[
-  {type:"classic",text:"鴨寶幫，九州出發！",image:"./buddy_celebrate.png?v=430",tone:"duo"},
-  {type:"classic",text:"我們是鴨寶幫！",image:"./buddy_success.png?v=430",tone:"duo"},
-  {type:"classic",text:"嗚拉呀哈呀哈嗚拉～",image:"./usagi_dash.png?v=431",tone:"booking"},
-  {type:"classic",text:"先吃飽再出發！",image:"./purin_clap.png?v=430",tone:"food"},
+  {type:"classic",text:"我們是鴨寶幫！",image:"./duck_gang.png?v=5311",tone:"duo"},
+  {type:"classic",text:"我們是海豹幫！",image:"./seal_gang.png?v=5311",tone:"duo"},
   {type:"classic",text:"旅行正式開始 ♡",image:"./buddy_hero.png?v=430",tone:"duo"},
   {
     type:"scene",id:"sendoff",image:"./egg-sendoff-v539.png?v=539",tone:"duo",
@@ -1096,6 +1095,9 @@ const HERO_EGG_POOL=[
     ]
   }
 ];
+
+const PAGE_SWITCH_DASH_EGG_CHANCE=0.12;
+const PAGE_SWITCH_DASH_EGG_COOLDOWN=4*60*1000;
 
 const dialogueDecks=new WeakMap();
 function pickLine(list,fallback=""){
@@ -1137,31 +1139,68 @@ function showBuddySpeech(el,msg,tone="duo"){
   if(!bubble||!el){toast(msg,tone);return;}
   const rect=el.getBoundingClientRect();
   const vw=Math.max(document.documentElement.clientWidth||0,window.innerWidth||0);
-  const safeHalf=Math.min(124,Math.max(88,(vw-24)/2));
-  const center=rect.left+rect.width/2;
-  const x=Math.max(12+safeHalf,Math.min(vw-12-safeHalf,center));
-  const below=rect.top<132;
+  const vh=Math.max(document.documentElement.clientHeight||0,window.innerHeight||0);
   const main=dialogueText(msg);
+
   bubble.innerHTML=`<span class="buddy-speech-main">${esc(main)}</span>`;
   bubble.setAttribute("aria-label",main);
-  bubble.classList.remove("has-hint");
+  bubble.classList.remove("has-hint","show","below","side-left","side-right");
   bubble.dataset.tone=tone||"duo";
-  bubble.classList.remove("show","below");
-  bubble.style.left=`${x}px`;
-  bubble.style.top=`${below?Math.min(rect.bottom+9,window.innerHeight-116):Math.max(rect.top-9,72)}px`;
-  if(below)bubble.classList.add("below");
+  bubble.style.left='-9999px';
+  bubble.style.top='-9999px';
+  bubble.style.visibility='hidden';
+  bubble.style.opacity='0';
+  bubble.classList.add('show');
+  const bw=bubble.offsetWidth||190;
+  const bh=bubble.offsetHeight||58;
+
+  const isEventBuddy=!!el.classList?.contains('event-buddy');
+  if(isEventBuddy){
+    const gap=12;
+    const spaceLeft=Math.max(0,rect.left-14);
+    const spaceRight=Math.max(0,vw-rect.right-14);
+    const preferLeft=rect.left>=vw*0.52;
+    let side='left';
+    if(preferLeft&&spaceLeft>=bw)side='left';
+    else if(spaceRight>=bw)side='right';
+    else if(spaceLeft>=spaceRight)side='left';
+    else side='right';
+
+    const anchorY=Math.max(bh/2+10,Math.min(vh-bh/2-10,rect.top+rect.height/2));
+    const anchorX=side==='left' ? Math.max(bw+10,rect.left-gap) : Math.min(vw-bw-10,rect.right+gap);
+    bubble.style.left=`${Math.round(anchorX)}px`;
+    bubble.style.top=`${Math.round(anchorY)}px`;
+    bubble.classList.add(side==='left'?'side-left':'side-right');
+  }else{
+    const safeHalf=Math.min(124,Math.max(88,(vw-24)/2));
+    const center=rect.left+rect.width/2;
+    const x=Math.max(12+safeHalf,Math.min(vw-12-safeHalf,center));
+    const below=rect.top<132;
+    bubble.style.left=`${Math.round(x)}px`;
+    if(below){
+      bubble.style.top=`${Math.round(Math.max(12,Math.min(vh-bh-12,rect.bottom+9)))}px`;
+      bubble.classList.add('below');
+    }else{
+      bubble.style.top=`${Math.round(Math.max(bh+12,Math.min(vh-12,rect.top-8)))}px`;
+    }
+  }
+
+  bubble.style.visibility='';
+  bubble.style.opacity='';
+  bubble.classList.remove('show');
   void bubble.offsetWidth;
-  bubble.classList.add("show");
+  bubble.classList.add('show');
   clearTimeout(showBuddySpeech._t);
   showBuddySpeech._t=setTimeout(()=>{
-    bubble.classList.remove("show","below");
+    bubble.classList.remove('show','below','side-left','side-right');
     setTimeout(()=>{
-      bubble.dataset.tone="";
-      bubble.textContent="";
-      bubble.removeAttribute("aria-label");
+      bubble.dataset.tone='';
+      bubble.textContent='';
+      bubble.removeAttribute('aria-label');
     },180);
   },3000);
 }
+
 function buddyMoodFor(kind,msg=""){
   const text=dialogueText(msg);
   if(kind==="usagi"&&/(蛤|哼|噗嚕)/.test(text))return "question";
@@ -1532,6 +1571,25 @@ function maybeUrgentBookingEgg(){
     toast(pickLine(BUDDY_DIALOG.booking.urgent),"booking");
     setTimeout(()=>el.classList.remove("play"),2100);
   },1800);
+}
+
+function maybePageSwitchDashEgg(source="view"){
+  if(!isBuddyTheme())return;
+  const el=$("#usagiUrgentEgg"); if(!el||el.classList.contains("play"))return;
+  const key="buddyDashEgg:lastAt";
+  const now=Date.now();
+  let last=0;
+  try{last=Number(localStorage.getItem(key)||0)}catch{}
+  if(now-last<PAGE_SWITCH_DASH_EGG_COOLDOWN)return;
+  const chance=source==="view"?PAGE_SWITCH_DASH_EGG_CHANCE:Math.max(.06,PAGE_SWITCH_DASH_EGG_CHANCE*.72);
+  if(Math.random()>chance)return;
+  try{localStorage.setItem(key,String(now))}catch{}
+  const textEl=el.querySelector(".usagi-urgent-egg-text");
+  if(textEl)textEl.textContent="嗚拉呀哈呀哈嗚拉～";
+  el.classList.remove("play");
+  void el.offsetWidth;
+  el.classList.add("play");
+  setTimeout(()=>el.classList.remove("play"),2200);
 }
 
 function maybeTripStartEgg(){
@@ -2268,6 +2326,7 @@ function renderTools(){renderBookings();renderShopping();renderExpenses();render
 function renderAll(){renderDays();renderSchedule();renderFood();renderTools()}
 
 function switchView(v){
+  const prev=state.view;
   state.view=v;
   $$(".view").forEach(x=>x.classList.toggle("active",x.id===`${v}View`));
   $$(".nav-btn").forEach(x=>x.classList.toggle("active",x.dataset.view===v));
@@ -2275,11 +2334,14 @@ function switchView(v){
   window.scrollTo({top:0,behavior:"smooth"});
   if(v==="food") setTimeout(()=>buddyPeek("purin"),450);
   if(v==="tools") setTimeout(()=>buddyPeek("usagi"),450);
+  if(prev&&prev!==v)setTimeout(()=>maybePageSwitchDashEgg("view"),240);
 }
 function switchTool(t){
+  const prev=state.tool;
   state.tool=t;
   $$(".tool-card").forEach(x=>x.classList.toggle("active",x.dataset.tool===t));
   $$(".tool-panel").forEach(x=>x.classList.toggle("active",x.id===`${t}Panel`));
+  if(prev&&prev!==t)setTimeout(()=>maybePageSwitchDashEgg("tool"),260);
 }
 function localUpsert(key,obj){
   const arr=state[key]; const idx=arr.findIndex(x=>x.id===obj.id);
@@ -2772,7 +2834,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=534",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=5312",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });

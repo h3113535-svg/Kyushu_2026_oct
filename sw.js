@@ -1,9 +1,9 @@
-const CACHE = "kyushu-private-v5.3.10";
+const CACHE = "kyushu-private-v5.3.12";
 const SHELL = [
-  "./","./index.html","./style.css?v=5310","./app.js?v=5310",
+  "./","./index.html","./style.css?v=5312","./app.js?v=5312",
   "./manifest.json","./firebase-config.js?v=430","./icon-192.png","./icon-512.png","./hero-cover-v51.webp?v=510",
   "./buddy_hero.png","./buddy_celebrate.png","./buddy_chill.png","./buddy_eat.png","./buddy_success.png",
-  "./egg-sendoff-v539.png","./egg-cry-v539.png","./egg-home-sleep-v539.png",
+  "./egg-sendoff-v539.png","./egg-cry-v539.png","./egg-home-sleep-v539.png","./duck_gang.png","./seal_gang.png",
   "./purin_peek_edge.png","./purin_walk.png","./usagi_peek.png","./usagi_dash.png","./usagi_success.png","./usagi_weather.png","./weather-rain-usagi-v47.webp",
   "./weather-sunny-usagi-v536.webp","./weather-teruteru-usagi-v536.webp","./weather-cloudy-usagi-v536.webp","./weather-thunder-usagi-v536.webp","./weather-snow-usagi-v536.webp",
   "./travel_shopping.png","./travel_ticket.png",
