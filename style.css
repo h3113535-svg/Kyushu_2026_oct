@@ -1871,13 +1871,34 @@ html[data-theme="buddy"] .buddy-celebration{display:flex;position:fixed;inset:0;
 html[data-theme="buddy"] .buddy-celebration.show{opacity:1;visibility:visible;pointer-events:auto}
 html[data-theme="buddy"] .buddy-celebrate-card{background:rgba(255,253,247,.96);border:1px solid #ECD49A;border-radius:28px;padding:14px 20px 13px;box-shadow:0 22px 55px rgba(78,59,40,.18);text-align:center;transform:scale(.7) translateY(15px)}
 html[data-theme="buddy"] .buddy-celebration.show .buddy-celebrate-card{animation:buddyCelebratePop .55s cubic-bezier(.2,.9,.25,1.2) both}
+html[data-theme="buddy"] .buddy-egg-stage{position:relative;margin:auto}
 html[data-theme="buddy"] .buddy-celebrate-card img{display:block;width:min(68vw,290px);height:190px;object-fit:contain;margin:auto}
+html[data-theme="buddy"] .buddy-egg-hotspots{position:absolute;inset:0;pointer-events:none}
+html[data-theme="buddy"] .buddy-egg-hotspot{position:absolute;display:block;border:0;background:transparent;padding:0;margin:0;cursor:pointer;pointer-events:auto;border-radius:999px;-webkit-tap-highlight-color:transparent}
+html[data-theme="buddy"] .buddy-egg-hotspot:active{background:rgba(255,255,255,.12)}
+html[data-theme="buddy"] .buddy-egg-speech{position:absolute;z-index:4;max-width:72%;padding:7px 11px;background:rgba(255,253,247,.97);border:1px solid rgba(180,137,91,.35);border-radius:15px;box-shadow:0 7px 18px rgba(78,59,40,.13);font-weight:900;font-size:clamp(12px,3.4vw,16px);line-height:1.28;color:#694331;text-align:center;white-space:normal;opacity:0;visibility:hidden;pointer-events:none;transform:translate(-50%,calc(-100% - 8px)) scale(.94);transform-origin:50% 100%;transition:opacity .12s ease,transform .16s cubic-bezier(.2,.9,.25,1.16)}
+html[data-theme="buddy"] .buddy-egg-speech::after{content:"";position:absolute;left:50%;bottom:-6px;width:10px;height:10px;background:rgba(255,253,247,.97);border-right:1px solid rgba(180,137,91,.35);border-bottom:1px solid rgba(180,137,91,.35);transform:translateX(-50%) rotate(45deg)}
+html[data-theme="buddy"] .buddy-egg-speech.show{opacity:1;visibility:visible;transform:translate(-50%,calc(-100% - 8px)) scale(1)}
+html[data-theme="buddy"] .buddy-celebration.hero-egg .buddy-celebrate-card{cursor:default}
+html[data-theme="buddy"] .buddy-celebration.hero-egg-scene .buddy-celebrate-card{width:min(94vw,620px);padding:10px 10px 12px;border-radius:24px}
+html[data-theme="buddy"] .buddy-celebration.hero-egg-scene .buddy-egg-stage{width:100%;aspect-ratio:4/3;border-radius:18px;overflow:hidden;background:#FFF8E9}
+html[data-theme="buddy"] .buddy-celebration.hero-egg-scene .buddy-egg-stage>img{width:100%;height:100%;object-fit:cover;border-radius:18px}
+html[data-theme="buddy"] .buddy-celebration.hero-egg-scene #buddyCelebrateText{padding:10px 7px 1px;font-size:clamp(16px,4.4vw,21px);line-height:1.25}
+html[data-theme="buddy"] .buddy-celebration.hero-egg-scene .buddy-egg-hotspots{display:block}
+html[data-theme="buddy"] .buddy-celebration:not(.hero-egg-scene) .buddy-egg-hotspots,html[data-theme="buddy"] .buddy-celebration:not(.hero-egg-scene) .buddy-egg-speech{display:none}
 html[data-theme="buddy"] .buddy-celebrate-card div{font-weight:950;font-size:20px;color:#704833;letter-spacing:.05em}
 @keyframes buddyCelebratePop{0%{transform:scale(.68) translateY(20px)}70%{transform:scale(1.05) translateY(-4px)}100%{transform:scale(1) translateY(0)}}
 html[data-theme="buddy"] .buddy-spark-layer{display:block;position:fixed;inset:0;z-index:130;pointer-events:none;overflow:hidden}
 html[data-theme="buddy"] .buddy-spark-layer i{position:absolute;left:var(--x);top:var(--y);font-style:normal;color:#F3C94E;font-size:25px;opacity:0}
 html[data-theme="buddy"] .buddy-spark-layer.play i{animation:buddySpark 1s ease-out calc(var(--i)*.035s) both}
 @keyframes buddySpark{0%{opacity:0;transform:translate(-50%,-50%) scale(.2)}30%{opacity:1}100%{opacity:0;transform:translate(calc(-50% + (var(--i) - 3)*18px),calc(-50% - 75px - (var(--i)%3)*13px)) rotate(90deg) scale(1.15)}}
+
+@media (max-width:430px){
+  html[data-theme="buddy"] .buddy-celebration.hero-egg-scene .buddy-celebrate-card{width:min(95vw,390px);padding:8px 8px 10px;border-radius:21px}
+  html[data-theme="buddy"] .buddy-celebration.hero-egg-scene .buddy-egg-stage{border-radius:15px}
+  html[data-theme="buddy"] .buddy-celebration.hero-egg-scene .buddy-egg-stage>img{border-radius:15px}
+  html[data-theme="buddy"] .buddy-egg-speech{max-width:76%;padding:6px 9px;font-size:12.5px}
+}
 
 /* Soft motion accessibility */
 @media (prefers-reduced-motion:reduce){html[data-theme="buddy"] *{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}
@@ -3042,4 +3063,21 @@ html[data-theme="buddy"] .weather-buddy-button.weather-buddy-pop{
 }
 @media(prefers-reduced-motion:reduce){
   html[data-theme="buddy"] .weather-buddy-button.weather-buddy-pop{animation:none!important}
+}
+
+/* =========================================================
+   v5.3.9 — Interactive Home Eggs
+   Make the pre-forecast cloud leave more breathing room and
+   keep Usagi's speech visually attached to the character.
+   ========================================================= */
+html[data-theme="buddy"] .weather-card.weather-no-forecast .weather-icon{
+  transform:translateX(-18px);
+}
+html[data-theme="buddy"] .weather-buddy-speech{
+  right:68px;
+  top:29px;
+}
+@media(max-width:520px){
+  html[data-theme="buddy"] .weather-card.weather-no-forecast .weather-icon{transform:translateX(-14px)}
+  html[data-theme="buddy"] .weather-buddy-speech{right:60px;top:26px}
 }

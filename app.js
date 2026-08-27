@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.7 Hero + Weather Interaction Cleanup */
+/* Private travel PWA · Firebase Auth gated content · v5.3.9 Interactive Home Eggs */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -21,6 +21,7 @@ const BUDDY_FAST_ASSETS=[
   "./day-scene-v52-01.webp?v=520","./day-scene-v52-02.webp?v=520","./day-scene-v52-03.webp?v=520","./day-scene-v52-04.webp?v=520","./day-scene-v52-05.webp?v=520",
   "./day-scene-v52-06.webp?v=520","./day-scene-v52-07.webp?v=520","./day-scene-v52-08.webp?v=520","./day-scene-v52-09.webp?v=520","./day-scene-v52-10.webp?v=520",
   "./weather-rain-usagi-v47.webp?v=470","./weather-sunny-usagi-v536.webp?v=536","./weather-teruteru-usagi-v536.webp?v=536","./weather-cloudy-usagi-v536.webp?v=536","./weather-thunder-usagi-v536.webp?v=536","./weather-snow-usagi-v536.webp?v=536","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
+  "./egg-sendoff-v539.png?v=539","./egg-cry-v539.png?v=539","./egg-home-sleep-v539.png?v=539",
   "./ui-cloud.webp?v=440","./ui-coffee.webp?v=440","./ui-suitcase.webp?v=440","./ui-purin-tip.webp?v=440"
 ];
 const buddyFastImageCache=[];
@@ -1061,6 +1062,41 @@ function flashUsagiVoiceArt(el,msg,context=""){
   usagiVoiceImageState.set(img,{original,timer});
 }
 
+const HERO_EGG_POOL=[
+  {type:"classic",text:"鴨寶幫，九州出發！",image:"./buddy_celebrate.png?v=430",tone:"duo"},
+  {type:"classic",text:"我們是鴨寶幫！",image:"./buddy_success.png?v=430",tone:"duo"},
+  {type:"classic",text:"嗚拉呀哈呀哈嗚拉～",image:"./usagi_dash.png?v=431",tone:"booking"},
+  {type:"classic",text:"先吃飽再出發！",image:"./purin_clap.png?v=430",tone:"food"},
+  {type:"classic",text:"旅行正式開始 ♡",image:"./buddy_hero.png?v=430",tone:"duo"},
+  {
+    type:"scene",id:"sendoff",image:"./egg-sendoff-v539.png?v=539",tone:"duo",
+    captions:["要玩得開心喔～","記得拍很多照片回來！","家裡交給我們～","鴨寶幫九州玩得開心！","海豹幫看家 (･∞･ﾐэ )Э"],
+    characters:[
+      {id:"quagsire",label:"沼王",lines:["路上小心～","哇～"],hotspot:{left:4,top:28,width:21,height:39}},
+      {id:"rowlet",label:"木木梟",lines:["記得帶伴手禮……！","咕！咕！咕——？（歪頭）"],hotspot:{left:1,top:58,width:23,height:29}},
+      {id:"ditto",label:"百變怪",lines:["我們會在家等你們～","（ • _ • ）"],hotspot:{left:70,top:45,width:19,height:26}}
+    ]
+  },
+  {
+    type:"scene",id:"cry",image:"./egg-cry-v539.png?v=539",tone:"duo",
+    captions:["真的不能一起去嗎……","要記得我們喔……","……伴手禮"],
+    characters:[
+      {id:"quagsire",label:"沼王",lines:["我幫你們看家。","……"],hotspot:{left:4,top:23,width:23,height:33}},
+      {id:"rowlet",label:"木木梟",lines:["嗚……我也想去……","真的……不能塞進行李箱嗎？"],hotspot:{left:18,top:38,width:22,height:28}},
+      {id:"ditto",label:"百變怪",lines:["那我變小一點也不行嗎……","我可以變成行李耶……"],hotspot:{left:4,top:49,width:19,height:22}}
+    ]
+  },
+  {
+    type:"scene",id:"home-sleep",image:"./egg-home-sleep-v539.png?v=539",tone:"hotel",
+    captions:["留守組今日任務：睡覺。","今天也很安靜～","等你們回來再叫我……","今天也很安靜～","看家中……Zzz"],
+    characters:[
+      {id:"quagsire",label:"沼王",lines:["一切正常。","看家中～"],hotspot:{left:17,top:31,width:25,height:32}},
+      {id:"rowlet",label:"木木梟",lines:["Zzz……","我沒有睡……Zzz……","等你們回來再叫我……"],hotspot:{left:28,top:53,width:30,height:28}},
+      {id:"ditto",label:"百變怪",lines:["今天變成沙發","看家好累……","先躺一下"],hotspot:{left:57,top:54,width:19,height:20}}
+    ]
+  }
+];
+
 const dialogueDecks=new WeakMap();
 function pickLine(list,fallback=""){
   if(!Array.isArray(list)||!list.length)return fallback;
@@ -1169,6 +1205,55 @@ function buddyCelebrate(text="完成！",image="./buddy_success.png?v=430",tone=
   img.src=image; label.textContent=dialogueText(text); wrap.dataset.tone=tone; wrap.classList.remove("show"); void wrap.offsetWidth; wrap.classList.add("show"); buddySparkBurst(50,42,tone);
   clearTimeout(buddyCelebrate._t); buddyCelebrate._t=setTimeout(()=>{wrap.classList.remove("show");wrap.dataset.tone=""},1450);
 }
+function clearHeroEggInteractive(){
+  const hotspots=$("#buddyEggHotspots"),speech=$("#buddyEggSpeech");
+  if(hotspots)hotspots.innerHTML="";
+  if(speech){speech.textContent="";speech.classList.remove("show");speech.style.left="";speech.style.top=""}
+}
+function closeHeroEgg(){
+  const wrap=$("#buddyCelebration"); if(!wrap)return;
+  clearTimeout(buddyCelebrate._t);
+  wrap.classList.remove("show","hero-egg","hero-egg-scene");
+  wrap.dataset.heroEgg="";wrap.dataset.scene="";wrap.dataset.tone="";
+  clearHeroEggInteractive();
+}
+function showHeroEggSpeech(scene,charId,button){
+  const speech=$("#buddyEggSpeech"),stage=$("#buddyEggStage");
+  if(!speech||!stage||!button)return;
+  const character=scene.characters?.find(c=>c.id===charId);if(!character)return;
+  speech.textContent=pickLine(character.lines);
+  const br=button.getBoundingClientRect(),sr=stage.getBoundingClientRect();
+  if(!sr.width||!sr.height)return;
+  const x=((br.left+br.width/2-sr.left)/sr.width)*100;
+  const y=((br.top-sr.top)/sr.height)*100;
+  speech.style.left=`${Math.max(18,Math.min(82,x))}%`;
+  speech.style.top=`${Math.max(13,y-1)}%`;
+  speech.classList.remove("show");void speech.offsetWidth;speech.classList.add("show");
+}
+function showHeroEgg(scene){
+  if(!isBuddyTheme()||!scene)return;
+  const wrap=$("#buddyCelebration"),img=$("#buddyCelebrateImg"),label=$("#buddyCelebrateText"),hotspots=$("#buddyEggHotspots");
+  if(!wrap||!img||!label)return;
+  clearTimeout(buddyCelebrate._t);
+  clearHeroEggInteractive();
+  wrap.dataset.heroEgg="1";wrap.dataset.scene=scene.id||"classic";wrap.dataset.tone=scene.tone||"duo";
+  wrap.classList.add("hero-egg");
+  wrap.classList.toggle("hero-egg-scene",scene.type==="scene");
+  img.src=scene.image;
+  label.textContent=scene.type==="scene"?pickLine(scene.captions):dialogueText(scene.text);
+  if(scene.type==="scene"&&hotspots){
+    hotspots.innerHTML=(scene.characters||[]).map(c=>{
+      const h=c.hotspot||{};
+      return `<button type="button" class="buddy-egg-hotspot" data-egg-character="${esc(c.id)}" aria-label="${esc(c.label)}" style="left:${Number(h.left)||0}%;top:${Number(h.top)||0}%;width:${Number(h.width)||10}%;height:${Number(h.height)||10}%"></button>`;
+    }).join("");
+    hotspots.querySelectorAll("[data-egg-character]").forEach(btn=>btn.addEventListener("click",e=>{
+      e.stopPropagation();showHeroEggSpeech(scene,btn.dataset.eggCharacter,btn);
+    }));
+  }
+  wrap.classList.remove("show");void wrap.offsetWidth;wrap.classList.add("show");
+  buddySparkBurst(50,42,scene.tone||"duo");
+}
+
 function inferBuddyContext(el){
   if(!el)return "";
   if(el.dataset?.buddyContext)return el.dataset.buddyContext;
@@ -1986,12 +2071,13 @@ function renderSchedule(){
   requestAnimationFrame(()=>bindGuideTargets(visibleEvents));
 }
 async function renderWeather(d){
-  const card=$("#weatherCard");card.classList.add("skeleton");
+  const card=$("#weatherCard");card.classList.add("skeleton");card.classList.remove("weather-no-forecast");
   $("#weatherLocation").textContent=d.location+" · "+d.shortDate;
   $("#weatherTemp").textContent="載入中";
   $("#weatherDesc").textContent="正在取得旅行日期預報";
   $("#weatherIcon").textContent="☁️";$("#rainBox").innerHTML=""; ensureWeatherBuddy();
   if(typeof getWeather!=="function"){
+    card.classList.add("weather-no-forecast");
     $("#weatherTemp").textContent="—";
     $("#weatherDesc").textContent="尚未進入預報範圍";
     $("#rainBox").textContent="接近旅行日期後再顯示正式天氣資料。";
@@ -2001,6 +2087,7 @@ async function renderWeather(d){
   try{
     const w=await getWeather(d);
     if(w.state!=="forecast"){
+      card.classList.add("weather-no-forecast");
       $("#weatherTemp").textContent="—";
       $("#weatherDesc").textContent=w.message;
       $("#rainBox").innerHTML="進入預報範圍後，這裡會顯示高低溫、降雨機率與預計下雨時段。";
@@ -2331,17 +2418,14 @@ function bind(){
     heroEgg.addEventListener("click",()=>{
       if(swipeIgnoreClick)return;
     });
-    const heroHoldEggs=[
-      {text:"鴨寶幫，九州出發！",image:"./buddy_celebrate.png?v=430",tone:"duo"},
-      {text:"我們是鴨寶幫！",image:"./buddy_success.png?v=430",tone:"duo"},
-      {text:"嗚拉呀哈呀哈嗚拉～",image:"./usagi_dash.png?v=431",tone:"booking"},
-      {text:"先吃飽再出發！",image:"./purin_clap.png?v=430",tone:"food"},
-      {text:"旅行正式開始 ♡",image:"./buddy_hero.png?v=430",tone:"duo"}
-    ];
-    bindSafeHold(heroEgg,()=>{const egg=pickLine(heroHoldEggs);buddyCelebrate(egg.text,egg.image,egg.tone)},{ms:760,move:11,allowInteractiveRoot:true});
+    bindSafeHold(heroEgg,()=>showHeroEgg(pickLine(HERO_EGG_POOL)),{ms:760,move:11,allowInteractiveRoot:true});
     syncDots();
   }
-  $("#buddyCelebration")?.addEventListener("click",()=>$("#buddyCelebration").classList.remove("show"));
+  $("#buddyCelebration")?.addEventListener("click",e=>{
+    const wrap=e.currentTarget;
+    if(wrap.dataset.heroEgg==="1"){if(e.target===wrap)closeHeroEgg();return}
+    wrap.classList.remove("show");
+  });
   $("#guideClose")?.addEventListener("click",()=>closeGuide());
   $("#guideSaveBtn")?.addEventListener("click",saveGuideNote);
   $("#guideNoteArea")?.addEventListener("input",e=>{
