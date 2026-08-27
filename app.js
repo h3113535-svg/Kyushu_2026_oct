@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.3 Guide Notes Reliability */
+/* Private travel PWA · Firebase Auth gated content · v5.3.5 Character Voice Pass */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -139,7 +139,7 @@ function createState(){
   return {
     dayIndex:0, view:"schedule", tool:"booking", shoppingMember:"全部",
     foods:loadLocal("foods",[]), shopping:loadLocal("shopping",[]), expenses:loadLocal("expenses",[]),
-    taskStatus:loadLocal("taskStatus",{}), decisions:loadLocal("decisions",{}),
+    taskStatus:loadLocal("taskStatus",{}), decisions:loadLocal("decisions",{}), decisionDrafts:{},
     notes:loadLocal("notes",""),
     guideNotes:normalizeGuideNotesMap(loadLocal("guideNotes",{})),
     guideNotePending:loadLocal("guideNotePending",{}),
@@ -178,7 +178,7 @@ function normalizeGuideNotesMap(raw){
 function uid(){return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`}
 function esc(v=""){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
 function mapSearch(q){return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`}
-function mapNav(q,mode="driving"){return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}&travelmode=${mode}`}
+function mapNav(q,mode="driving"){return mapSearch(q)}
 function japanToday(){
   const parts=new Intl.DateTimeFormat("en-CA",{timeZone:TRIP?.timezone||"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
   const o=Object.fromEntries(parts.filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
@@ -190,109 +190,854 @@ function initialDay(){
   return idx>=0?idx:0;
 }
 
+const VO=(text,hint="")=>({text,hint});
 const BUDDY_DIALOG={
-  purin:[
-    "慢慢走也很好 ♡","先吃飽再出發！","今天也要舒服旅行～","不急不急，慢慢來。",
-    "休息一下也沒關係 ♡","今天一定會很好玩～","拍張照片再走吧！","要不要先找個地方坐一下？",
-    "好喜歡今天的行程 ♡","旅行就是要開開心心～"
+  "purin":[
+    "一起慢慢走吧～",
+    "今天也想跟你一起出去玩♪",
+    "先看看四周，再決定下一站～",
+    "走累了就坐一下嘛。",
+    "我覺得這裡可以多待一會兒～",
+    "點心時間是不是快到了？",
+    "有舒服的地方就先休息一下♪",
+    "今天的步調剛剛好～",
+    "先拍一張，再慢慢看～",
+    "別急著走嘛，還可以晃一下♪",
+    "我想喝點東西了～",
+    "今天也有好多小發現耶。",
+    "這裡讓人想發呆一下～",
+    "要不要找個舒服的位置坐坐？",
+    "走慢一點也沒關係呀～",
+    "有喜歡的就停下來看看♪",
+    "今天的回憶要好好收著～",
+    "等等一起吃點好吃的吧。",
+    "再散步一下下嘛～",
+    "我開始有點睏了……",
+    "回去以前再晃一下？",
+    "不用把每一站都塞滿喔～",
+    "今天也很適合兩個人慢慢玩♪",
+    "看到好看的地方就停一下～",
+    "先喝一點水，再繼續吧。",
+    "我喜歡這種不趕時間的感覺～",
+    "照片拍好了嗎？我也想看♪",
+    "下一站也一起去吧～",
+    "今天有好好享受旅行嗎？",
+    "這裡的氣氛好舒服喔～",
+    "我想再待五分鐘♪",
+    "慢慢來，旅程還在繼續～"
   ],
-  usagi:[
-    "出發！！","往這邊！","好耶！繼續走！","蛤？","衝啊啊啊！",
-    "嗚拉","呀哈！","嗚拉呀哈呀哈嗚拉～","哼～？","噗嚕"
+  "usagi":[
+    VO("呀哈！",""),
+    VO("呀哈——！",""),
+    VO("嗚拉！",""),
+    VO("嗚拉拉！",""),
+    VO("噗嚕",""),
+    VO("噗嚕……",""),
+    VO("蛤？",""),
+    VO("蛤啊？",""),
+    VO("哼～？",""),
+    VO("呀哈呀哈！",""),
+    VO("嗚拉呀哈！",""),
+    VO("嗚拉拉拉——！",""),
+    VO("呀哈——呀哈！",""),
+    VO("嗚拉！嗚拉！",""),
+    VO("噗嚕！",""),
+    VO("哼？",""),
+    VO("呀哈！嗚拉！",""),
+    VO("嗚拉呀哈呀哈～",""),
+    VO("呀——哈！",""),
+    VO("嗚啦——！",""),
+    VO("蛤——？",""),
+    VO("噗嚕噗嚕",""),
+    VO("呀哈呀哈呀哈！",""),
+    VO("嗚拉拉呀哈！","")
   ],
-  duo:[
-    "今天也一起走 ♡","一起出發！","九州探險中！","今天也要玩得開心！","下一站去哪裡？",
-    "兩個人一起就好玩 ♡","今天又收集到一個回憶！","旅程繼續——！","今天的進度很順利！",
-    "再拍一張再走！","我們是鴨寶幫！"
+  "duo":[
+    "一起去看看吧～　呀哈！",
+    "慢慢走也可以喔～　嗚拉！",
+    "今天也一起玩吧♪　呀哈——！",
+    "先休息一下嘛～　……蛤？",
+    "下一站也一起去～　嗚拉！",
+    "照片拍好了嗎？　呀哈！",
+    "點心時間到了吧～　噗嚕！",
+    "今天的步調很好耶～　嗚拉呀哈！",
+    "再晃一下下～　呀哈！",
+    "累了就休息嘛～　哼～？",
+    "一起把今天玩完吧♪　嗚拉！",
+    "這裡好舒服喔～　呀哈呀哈！",
+    "先看看再決定～　蛤？",
+    "今天也多了一個回憶～　嗚拉！",
+    "慢慢來就好～　呀哈——！",
+    "再拍一張嘛～　噗嚕！",
+    "兩個人一起走最好玩～　嗚拉呀哈！",
+    "今天也不要太趕喔～　呀哈！",
+    "一起回去休息吧～　嗚拉！",
+    "鴨寶幫出發～　呀哈！"
   ],
-  weather:{
-    sunny:["今天適合出去玩！","天氣很好耶 ♡","拍照日！","今天可以放心跑行程～"],
-    rain:["雨雨雨——！！","傘帶了嗎！","下雨也要玩！","雨衣裝備完成！","小心不要淋濕！","雨小一點再衝！！"],
-    cloudy:["陰天也很好拍～","今天慢慢走就好。"]
+  "weather":{
+    "sunny":[
+      VO("呀哈——！","晴天模式。今天可以多留意戶外拍照光線。"),
+      VO("嗚拉！","太陽有出來；記得防曬和補水。"),
+      VO("呀哈呀哈！","戶外段可以照原定節奏走，傍晚再看雲量。"),
+      VO("噗嚕","光線不錯，喜歡的場景可以多拍幾張。"),
+      VO("嗚拉呀哈！","晴天也別把行程塞滿，留一點休息時間。"),
+      VO("呀——哈！","如果傍晚雲量不高，可以留意夕陽。"),
+      VO("嗚啦——！","氣溫高時先找陰影休息，再繼續走。"),
+      VO("哼～？","太陽很亮時，人像可以找側光或陰影。"),
+      VO("呀哈！","今天的戶外行程條件看起來不錯。"),
+      VO("噗嚕！","相機、手機、行動電源都記得帶好。")
+    ],
+    "rain":[
+      VO("蛤？","雨天模式。先看降雨時段，不必整天都切成雨備。"),
+      VO("嗚拉！","短暫陣雨就抓空檔移動，鞋子和相機先顧好。"),
+      VO("噗嚕……","雨勢大的時段優先安排室內或咖啡休息。"),
+      VO("嗚拉拉！","傘和防水袋先放在最好拿的位置。"),
+      VO("呀哈！","雨小一點再走；行程不用為了趕時間硬衝。"),
+      VO("哼～？","如果只是毛毛雨，先看現場體感再決定要不要改。"),
+      VO("蛤啊？","路面濕滑時，自駕和步行都把速度放慢。"),
+      VO("嗚啦——！","有拍照行程的話，等雨停空檔再出手。"),
+      VO("噗嚕","回住宿後記得把鞋襪和外套弄乾。"),
+      VO("嗚拉呀哈！","雨備只是備案，不需要一看到雨就整天取消。")
+    ],
+    "cloudy":[
+      VO("哼～？","陰天光線比較柔和，拍人像反而舒服。"),
+      VO("噗嚕","雲多不一定會下雨，先照原定節奏走。"),
+      VO("呀哈！","沒有大太陽，走戶外會比較輕鬆。"),
+      VO("嗚拉！","傍晚如果雲層變薄，還是有機會看到漂亮天空。"),
+      VO("蛤？","先看降雨機率，不要只看到陰天圖示就改行程。"),
+      VO("噗嚕……","陰天適合慢慢走，也不用一直找陰影。"),
+      VO("嗚拉呀哈！","拍景時可以把天空比例少一點，人物會更突出。"),
+      VO("呀哈呀哈！","體感舒服的話，戶外段可以多留一點時間。"),
+      VO("哼？","雲層變厚時再看看即時降雨。"),
+      VO("嗚啦——！","今天就用柔和光線好好拍。")
+    ],
+    "unknown":[
+      VO("噗嚕……","還沒進入可靠預報範圍，先別把這個當正式天氣。"),
+      VO("蛤？","現在只先陪你等預報；接近旅行日再確認。"),
+      VO("哼～？","天氣還太早，暫時不要因為預估值改行程。"),
+      VO("呀哈！","等進入有效預報範圍後，再切成真正的晴雨版本。"),
+      VO("嗚拉","目前先保留彈性，真正天氣之後再判斷。"),
+      VO("噗嚕","出發前幾天再看降雨時段會比較有意義。")
+    ]
   },
-  food:{
-    purin:["這個看起來好好吃 ♡","先吃再說～","甜點也算正餐吧？","再吃一間嘛。","今天要吃好吃的！","吃飽才有力氣旅行～","這間我可以！","留一點肚子吃甜點 ♡"],
-    usagi:["吃這間！！","下一間！","找吃的！出發！","我還吃得下！！"],
-    complete:["收進美食清單！","今天又吃到一間 ♡","美食成就＋1！"]
+  "food":{
+    "purin":[
+      "聞起來就很好吃耶～",
+      "先坐下來慢慢吃吧♪",
+      "我想先看看招牌是什麼～",
+      "這個拍完照就可以吃了嗎？",
+      "留一點肚子給甜點嘛～",
+      "吃飽再繼續走，剛剛好。",
+      "我覺得這餐可以慢慢吃～",
+      "有布丁的話我想看一下♪",
+      "旅行就是會一直想吃東西嘛～",
+      "先喝一口，再決定下一個要點什麼。",
+      "今天也要吃到開心～",
+      "這間氣氛感覺很舒服耶。",
+      "如果要排太久，我們再想想嘛～",
+      "吃完想找地方坐一下～",
+      "甜甜的東西會讓旅行更開心♪",
+      "先把想吃的都看一遍～",
+      "我好像又有點餓了……",
+      "這個份量兩個人分剛剛好嗎？",
+      "慢慢吃，不要急著趕下一站～",
+      "吃飽了就想發呆一下♪"
+    ],
+    "usagi":[
+      VO("呀哈！","先看是否要排隊、是否有最後點餐時間。"),
+      VO("嗚拉！","想吃的先決定，熱門品項售完就換第二順位。"),
+      VO("噗嚕","先看招牌和限定，再決定要不要加點。"),
+      VO("蛤？","排隊時間太長就比較備案，不必硬等。"),
+      VO("嗚拉拉！","入店前先確認是否只能現金或需要先買券。"),
+      VO("呀哈呀哈！","兩個人想吃不同的可以分著點，多試幾樣。"),
+      VO("哼～？","如果後面還有正餐，甜點先不要點太滿。"),
+      VO("嗚啦——！","吃完先補水，再開始下一段行程。"),
+      VO("噗嚕……","店家快打烊時，先確認最後點餐而不是只看關門時間。"),
+      VO("嗚拉呀哈！","看到限定或季節品項再決定要不要改原本選擇。"),
+      VO("呀——哈！","排隊前先看 Google Maps 最近評論有沒有臨時異動。"),
+      VO("蛤啊？","如果菜單看不懂，先找圖片或日文品名再點。")
+    ],
+    "duo":[
+      "慢慢吃吧～　呀哈！",
+      "甜點也想看～　嗚拉！",
+      "先坐一下嘛～　噗嚕！",
+      "這餐要吃得開心～　呀哈呀哈！",
+      "吃完再出發吧♪　嗚拉！",
+      "有好吃的就一起分～　呀哈！"
+    ],
+    "complete":[
+      "吃到啦～",
+      "美食收集完成♪",
+      "這間記住了～",
+      "今天又多一個好吃的回憶。",
+      "任務完成，開吃！",
+      "這餐可以放心收進回憶裡。",
+      "吃飽啦～",
+      "美食清單少一個。"
+    ]
   },
-  booking:{
-    reminder:["這個記得要預約！","還有一個任務沒完成。","先確認一下時間～","清單確認中 ✓"],
-    urgent:["準備開搶！！","時間到了！！","衝啊啊啊啊！！","手指準備好了嗎！","不可以忘記！！","剩最後一步！"],
-    complete:["搶到了！！","完成一項！","任務完成 ✓","太好了，搞定！"],
-    all:["全部搞定！！","搶票任務全部完成！","可以安心去玩了 ♡"]
+  "booking":{
+    "purin":[
+      "先把時間再看一次吧～",
+      "慢慢確認，不要按錯日期喔。",
+      "確認信有收好嗎？",
+      "帳號先登入，等等會比較輕鬆～",
+      "這個完成就可以放心一點了♪",
+      "先把需要的資料放在手邊～",
+      "日期和人數再看一眼嘛。",
+      "不要急，最後一步再確認一次。",
+      "如果還沒開放，就先設好提醒吧～",
+      "完成後記得截圖或留確認信。",
+      "這項辦完就可以休息一下～",
+      "先確認是日本時間還是台灣時間。",
+      "頁面先準備好就不用慌～",
+      "預約成功之後再把細節記進 App。"
+    ],
+    "usagi":[
+      VO("嗚拉！","先確認日期、時間、人數，再碰最後確認鍵。"),
+      VO("呀哈！","帳號和付款方式先準備好，別到最後一步才找。"),
+      VO("蛤？","開放時間還沒到就先停，不要一直重複送出。"),
+      VO("噗嚕","成功畫面、訂單編號或確認信至少留一份。"),
+      VO("哼～？","看到日本時間時，先換算成台灣時間再設提醒。"),
+      VO("嗚拉拉！","如果頁面有候補或事前申請，先分清楚和正式預約的差別。"),
+      VO("呀哈呀哈！","預約完成後，再回頭檢查日期有沒有跨日或看錯月份。"),
+      VO("嗚啦——！","需要登入的網站先把密碼和驗證方式準備好。"),
+      VO("噗嚕……","付款失敗時先確認訂單是否已成立，避免重複下單。"),
+      VO("嗚拉呀哈！","預約規則會變，出發前再看一次官方資訊。")
+    ],
+    "usagiUrgent":[
+      VO("呀哈——！！","時間到了。先確認頁面已登入，再刷新一次。"),
+      VO("嗚拉！！","不要連點送出；先看目前頁面是否已進到下一步。"),
+      VO("嗚拉拉拉——！","日期、人數、時間只看關鍵欄位，別被其他資訊拖住。"),
+      VO("蛤？！","如果顯示額滿，先看其他時段或官方候補機制。"),
+      VO("呀哈呀哈！","成功後先截圖，再慢慢整理確認信。"),
+      VO("嗚啦——！","付款頁不要返回上一頁，先等結果。"),
+      VO("噗嚕！","卡住時換網路前先確認訂單沒有成立。"),
+      VO("嗚拉呀哈！","剩最後一步也要看清楚日期，不要為了快按錯。")
+    ],
+    "duo":[
+      "慢慢確認～　嗚拉！",
+      "成功就可以放心啦～　呀哈！",
+      "日期再看一次喔～　蛤？",
+      "先準備好，再一起按～　嗚拉！"
+    ],
+    "reminder":[
+      "記得完成這項預約。",
+      "再確認一次日期與時間。",
+      "確認信記得保留。",
+      "需要搶票的頁面先準備好。",
+      "時區再核對一次。",
+      "官方規則出發前再確認。"
+    ],
+    "urgent":[
+      "預約時間接近了。",
+      "頁面與帳號先準備好。",
+      "最後確認日期、人數與付款方式。",
+      "完成後保留確認畫面。"
+    ],
+    "complete":[
+      "完成一項！",
+      "預約已完成。",
+      "這項可以打勾了。",
+      "確認資料收好。",
+      "成功，先放心一件事。",
+      "完成後記得同步到旅程工具。"
+    ],
+    "all":[
+      "預約任務都完成了！",
+      "待辦清空，可以安心一點了。",
+      "出發準備又完成一大段。",
+      "重要預約都收好了。"
+    ]
   },
-  shop:{
-    general:["這間也要逛！","再一家就好！","先進去看一下！","有沒有特殊色！","戰利品搜尋中～","今天是購物日！"],
-    complete:["買到啦！！","戰利品＋1！","這個帶回家 ♡","購物任務完成！"],
-    purin:["買完去喝咖啡吧～","提袋變多了耶…","這個好可愛 ♡"]
+  "shop":{
+    "purin":[
+      "先看看，不用急著決定～",
+      "這個顏色很好看耶♪",
+      "喜歡再試，不喜歡就去下一間～",
+      "逛累了就找咖啡坐一下嘛。",
+      "先把真的喜歡的放在心裡～",
+      "可以再比較一下，不用現在就買。",
+      "這件摸起來舒服嗎？",
+      "如果只是普通喜歡，就先放回去吧～",
+      "看到特別的再停下來就好♪",
+      "提袋變多以前先想一下～",
+      "這個很適合拍照耶。",
+      "兩個人一起看看哪個比較好～",
+      "逛店也不用每間都待很久喔。",
+      "先記價格，等等再決定～",
+      "尺寸合適比勉強買更重要嘛。",
+      "如果沒有喜歡的，我們就去喝東西♪",
+      "這個要不要先拍照記著？",
+      "今天的戰利品不要太重喔～"
+    ],
+    "usagi":[
+      VO("呀哈！","先掃特殊色、限定款和最後尺寸；普通款先不急。"),
+      VO("嗚拉！","沒有喜歡的就快速撤退，把時間留給下一間。"),
+      VO("蛤？","普通色先記價格，不要因為第一間看到就直接買。"),
+      VO("噗嚕","尺寸只剩最後一件時，再判斷是不是本來就想要的。"),
+      VO("嗚拉拉！","試穿前先抓兩三件最有機會的，別一次拿太多。"),
+      VO("呀哈呀哈！","看到特殊配色先拍型號和尺寸，方便後面比較。"),
+      VO("哼～？","價格差不多時，優先考慮真的會常穿的。"),
+      VO("嗚啦——！","五分鐘掃店原則：沒看到喜歡的就走。"),
+      VO("噗嚕……","退稅、庫存和尺寸可以直接問店員，不用自己一直找。"),
+      VO("嗚拉呀哈！","跨店比較時，先留商品照片或完整型號。"),
+      VO("呀——哈！","逛到後段開始累時，只看清單上還缺的品項。"),
+      VO("蛤啊？","如果只是因為『來都來了』想買，先放回去。")
+    ],
+    "duo":[
+      "先看看再決定～　嗚拉！",
+      "喜歡的才帶走♪　呀哈！",
+      "普通款可以再比比看～　哼～？",
+      "逛累了就休息嘛～　噗嚕！"
+    ],
+    "complete":[
+      "買到啦！",
+      "戰利品收下♪",
+      "購物清單少一項。",
+      "成功入手。",
+      "這個真的有喜歡再帶回家。",
+      "找到想要的了。",
+      "戰利品＋1。",
+      "完成一項購物任務。"
+    ]
   },
-  money:[
-    "這筆記下來！","記帳完成 ✓","今天花多少了？","旅費紀錄＋1","欸……又買了？",
-    "旅行就是要花一點嘛 ♡","先記下來，回去再算！","分帳交給我！","錢包還好嗎……","有記就不怕忘記！"
-  ],
-  note:[
-    "先記下來 ♡","等一下不要忘記！","旅行備忘＋1","想到什麼就寫下來～",
-    "這個之後會用到！","今天的回憶也記一下。","收藏今天的小事情 ♡","筆記完成 ✓"
-  ],
-  hotel:{
-    normal:["回飯店囉～","今天辛苦了 ♡","回去躺平！","今天走好多！！","洗澡睡覺！","終於可以休息了～","泡完澡就睡覺吧。","明天再繼續玩 ♡"],
-    late:["已經很晚了耶～","今天到這裡就好。","快回去休息！","晚安，明天見 ♡"]
+  "money":{
+    "purin":[
+      "先記一下，回去就不用想了～",
+      "這筆是誰付的呀？",
+      "旅行花費慢慢記就好。",
+      "收據先收著嘛。",
+      "記完就可以繼續玩了♪",
+      "共同支出要不要一起分？",
+      "先把金額留下來，分類晚點再整理。",
+      "今天花了多少，晚上再看就好～",
+      "有記下來就不怕忘記。",
+      "這筆看起來是兩個人的吧？",
+      "不要一直算啦，先把資料記好～",
+      "日幣金額先照原價輸入就好。",
+      "回飯店再一起看今天花費～",
+      "記帳完成就去休息一下♪"
+    ],
+    "usagi":[
+      VO("嗚拉！","先記付款人、金額和分攤對象，分類可以晚點補。"),
+      VO("呀哈！","共同支出不要只寫總額，記得勾兩個人。"),
+      VO("蛤？","現金找零後立刻記，比晚上回想準。"),
+      VO("噗嚕","信用卡先記日幣原價，實際台幣之後再對帳。"),
+      VO("哼～？","重複記帳前先看同一天有沒有同額紀錄。"),
+      VO("嗚拉拉！","收據可以先拍照，避免小票弄丟。"),
+      VO("呀哈呀哈！","一人先墊付的項目記清楚，最後結算才不會亂。"),
+      VO("噗嚕……","退款或取消的項目不要直接刪，留一筆負數比較好對。")
+    ],
+    "duo":[
+      "先記下來～　嗚拉！",
+      "等等再算也可以～　呀哈！",
+      "誰付的先記好喔～　蛤？",
+      "記完就繼續玩吧♪　嗚拉！"
+    ]
   },
-  day:[
-    ["九州，我們來啦！！","旅行正式開始 ♡","第一站：福岡！"],
-    ["今天火力全開逛街！","購物袋準備好了嗎？","天神 → 大名 → Canal City，出發！"],
-    ["海豹在哪裡！！","今天要看海、拍夕陽 ♡","記得留體力拍夜景！"],
-    ["今天慢慢散步就好～","甜點、散步、泡湯 ♡","由布院 CHILL DAY！"],
-    ["今天來兜風！","山路慢慢開，風景慢慢看。","星空看得到嗎 ♡"],
-    ["阿蘇大冒險繼續！","牛奶、赤牛、出發高千穗！","今天也要一路吃一路玩～"],
-    ["划船成功！！！","今天是高千穗大冒險！","牛排也不能錯過！"],
-    ["火山今天有開嗎？","草千里拍完，前進熊本！","今天移動很多，慢慢來～"],
-    ["鋼彈朝聖日！！","今天要把最後想買的買齊！","夕陽＋鋼彈，拍爆！"],
-    ["最後一天了 QAQ","再逛一下再回家嘛。","九州，下次再見 ♡"]
+  "note":{
+    "purin":[
+      "想到就先寫一點吧～",
+      "不用寫很完整，關鍵字也可以。",
+      "店員剛剛說的先記下來嘛。",
+      "這個回去可能會用到♪",
+      "旅行裡的小事情也值得記～",
+      "先寫下來，晚上再整理。",
+      "如果怕忘記就先放進這裡～",
+      "樓層或位置可以直接記最短版本。",
+      "臨時改行程也沒關係，記一下就好。",
+      "這段以後看到會想起來耶～",
+      "先把重點留住，不用寫作文啦。",
+      "回飯店再慢慢補完整。",
+      "今天的小發現也收進來♪",
+      "備忘寫好了就不用一直記在腦袋裡～"
+    ],
+    "usagi":[
+      VO("嗚拉！","先寫關鍵字：樓層、位置、時間或店員提醒。"),
+      VO("呀哈！","臨時資訊先記，晚上再整理成完整句子。"),
+      VO("蛤？","看到舊資訊時先標日期，避免之後當成最新規則。"),
+      VO("噗嚕","店名容易混淆就把日文原名一起存。"),
+      VO("哼～？","有截圖也補一句文字，之後搜尋會比較快。"),
+      VO("嗚拉拉！","如果是明天一定要做的事，別只放備忘，也加到待辦。"),
+      VO("呀哈呀哈！","地址、樓層、出口編號這種資訊最值得現場記。"),
+      VO("噗嚕……","備忘清空前先確認不是還沒同步到雲端。")
+    ],
+    "duo":[
+      "先記一下吧～　嗚拉！",
+      "關鍵字就可以喔～　呀哈！",
+      "回去再整理嘛～　噗嚕！",
+      "不要讓它從腦袋跑掉～　嗚拉！"
+    ]
+  },
+  "hotel":{
+    "purin":[
+      "回去躺一下吧～",
+      "今天走很多了耶。",
+      "先洗澡，再慢慢整理照片♪",
+      "回房間就可以放空了～",
+      "我想把鞋子脫掉了……",
+      "今天的戰利品先放好嘛。",
+      "手機記得充電喔～",
+      "明天的衣服要不要先放出來？",
+      "泡完澡一定會更想睡～",
+      "今天的照片晚點慢慢看。",
+      "回去喝點水再休息吧。",
+      "我覺得今天可以早一點睡～",
+      "明天的第一站不用現在想太多嘛。",
+      "行李先整理一點點就好。",
+      "今天也辛苦了～",
+      "回到房間就把腳抬高一下♪",
+      "我已經開始想睡覺了……",
+      "今天到這裡就很好了～"
+    ],
+    "usagi":[
+      VO("嗚拉！","回住宿先充手機、行動電源和相機。"),
+      VO("呀哈！","明早要用的票券、錢包和鑰匙先放同一處。"),
+      VO("噗嚕","洗澡前先把濕衣物或鞋子處理好。"),
+      VO("蛤？","明天如果要早起，鬧鐘現在就設。"),
+      VO("哼～？","行李不用全整理，先把明天會用到的拿出來。"),
+      VO("嗚拉拉！","需要下載的票券或地圖趁有 Wi‑Fi 先存離線。"),
+      VO("呀哈呀哈！","今晚有充電，明天就少一個風險。"),
+      VO("噗嚕……","太晚了就不要再臨時加景點。")
+    ],
+    "duo":[
+      "回去休息吧～　嗚拉！",
+      "今天辛苦啦～　呀哈！",
+      "先洗澡再說～　噗嚕！",
+      "明天再繼續玩♪　嗚拉！"
+    ],
+    "latePurin":[
+      "真的很晚了耶……",
+      "今天就到這裡吧～",
+      "快回去睡覺嘛。",
+      "照片明天再看也可以喔～",
+      "先充電，然後躺平♪",
+      "晚安～明天再一起出去玩。",
+      "不要再加行程了啦～",
+      "我已經睏到不想動了……"
+    ],
+    "lateUsagi":[
+      VO("噗嚕……","太晚了。先回住宿，不要再加新行程。"),
+      VO("蛤？","明早有安排的話，現在先設鬧鐘。"),
+      VO("嗚拉","手機和行動電源插上就去睡。"),
+      VO("哼～？","剩下的整理明天再做。"),
+      VO("噗嚕噗嚕","今天到這裡，先恢復體力。")
+    ]
+  },
+  "day":[
+    {
+      "purin":[
+        "第一天到啦～先把自己安頓好吧。",
+        "剛到的晚上不要太趕喔～",
+        "行李放好以後再慢慢開始♪",
+        "第一天有順利抵達就很棒了。",
+        "先吃點東西，讓旅行慢慢開場～",
+        "今天的任務就是舒服地進入旅行模式。"
+      ],
+      "usagi":[
+        VO("呀哈！","第一天先確認網路、手機電量、錢包與重要文件。"),
+        VO("嗚拉！","如果抵達延誤，直接刪掉最低優先度的備案。"),
+        VO("蛤？","先安頓行李，再決定晚上還要做多少。"),
+        VO("噗嚕","第一晚不要為了多跑一站壓縮睡眠。"),
+        VO("嗚拉呀哈！","晚餐太晚就選不用久等的方案。"),
+        VO("哼～？","睡前把明天最重要的一件事確認好。")
+      ],
+      "duo":[
+        "今天也一起走吧～　呀哈！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "第二天也照自己的步調走吧～",
+        "看到喜歡的就多待一下嘛。",
+        "中間記得找地方坐坐♪",
+        "不用一早就把體力用完喔。",
+        "今天也要留一點發呆時間～",
+        "晚上回去再慢慢整理照片。"
+      ],
+      "usagi":[
+        VO("呀哈！","早上先看今天有沒有固定時間，再安排其他彈性項目。"),
+        VO("嗚拉！","中段至少留一次坐下來休息的空檔。"),
+        VO("蛤？","看到需要比較的東西先記資訊，不急著當場決定。"),
+        VO("噗嚕","手機電量掉太快就提早補電。"),
+        VO("嗚拉呀哈！","如果進度落後，先砍最低優先度項目。"),
+        VO("哼～？","晚上有固定安排時，要提早設定離場時間。")
+      ],
+      "duo":[
+        "今天也一起走吧～　嗚拉！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "今天也先看看自己有多少體力～",
+        "下午以前記得休息一下嘛。",
+        "看到好看的光線就停一下♪",
+        "兩個人都要記得入鏡喔。",
+        "不用每一段都走得很快～",
+        "今天也慢慢收集小回憶。"
+      ],
+      "usagi":[
+        VO("呀哈！","上午和下午體力分配平均，不要前半天用光。"),
+        VO("嗚拉！","活動或交通有異動時，以當天官方資訊優先。"),
+        VO("蛤？","拍照前先確認電量和儲存空間。"),
+        VO("噗嚕","傍晚有安排時，下午就開始倒推時間。"),
+        VO("嗚拉呀哈！","累了就直接縮短備案，不要硬撐。"),
+        VO("哼～？","回住宿前先確認最後一段交通。")
+      ],
+      "duo":[
+        "今天也一起走吧～　噗嚕！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "今天就用舒服的速度走～",
+        "喜歡哪裡就多待一下嘛。",
+        "甜點和休息都可以算行程♪",
+        "走累了就坐著看看四周。",
+        "不用追求跑很多地方喔～",
+        "慢慢走才看得到小東西嘛。"
+      ],
+      "usagi":[
+        VO("呀哈！","今天的優先順序是舒服，不是完成數量。"),
+        VO("嗚拉！","排隊時間太長就比較備案。"),
+        VO("蛤？","能休息就真的休息，不要把空白又塞滿。"),
+        VO("噗嚕","固定時間要守，其他彈性項目都可以讓位。"),
+        VO("嗚拉呀哈！","看到想買的先判斷攜帶和保存方式。"),
+        VO("哼～？","前段進度慢時，後段直接減量。")
+      ],
+      "duo":[
+        "今天也一起走吧～　呀哈！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "今天也把步調放穩吧～",
+        "中間記得喝水和伸伸腿。",
+        "安全、舒服最重要喔。",
+        "看到喜歡的景色再停一下～",
+        "有精神再多玩，累了就休息。",
+        "今天也不要把空檔全部塞滿。"
+      ],
+      "usagi":[
+        VO("呀哈！","今天先把安全和體力放在行程數量前面。"),
+        VO("嗚拉！","移動前確認電量、網路和下一個休息點。"),
+        VO("蛤？","每隔一段時間下來活動一下。"),
+        VO("噗嚕","天氣或能見度不好就縮短戶外停留。"),
+        VO("嗚拉呀哈！","傍晚前確認下一個落腳點和交通方向。"),
+        VO("哼～？","晚上活動依體力決定，不需要硬完成。")
+      ],
+      "duo":[
+        "今天也一起走吧～　嗚拉！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "今天一路都不要太趕～",
+        "吃飽一點再繼續吧。",
+        "下午留一段真的空白也很好。",
+        "看到舒服的地方就多坐一下。",
+        "今天不用證明自己完成了多少～",
+        "慢慢到下一段就好。"
+      ],
+      "usagi":[
+        VO("呀哈！","上午先看體力，再決定今天要不要加備案。"),
+        VO("嗚拉！","吃飯、補給和移動都要保留緩衝。"),
+        VO("蛤？","下午的空白不要臨時全部塞滿。"),
+        VO("噗嚕","跨區移動前確認手機、錢包和重要物品。"),
+        VO("嗚拉呀哈！","抵達後先休息，再決定要不要出去。"),
+        VO("哼～？","有固定晚間安排時，提早確認交通。")
+      ],
+      "duo":[
+        "今天也一起走吧～　噗嚕！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "今天比較有任務感，也要記得休息～",
+        "重要的事情完成後就慢慢來。",
+        "中午一定要好好吃一餐。",
+        "走很多的日子更要記得坐一下。",
+        "拍照和散步都不用搶快。",
+        "晚上就讓自己好好恢復～"
+      ],
+      "usagi":[
+        VO("呀哈！","早上的固定事項最優先，其他都可以讓位。"),
+        VO("嗚拉！","報到類行程把找入口和排隊一起算進時間。"),
+        VO("蛤？","上午完成重點後，中午先好好吃飯。"),
+        VO("噗嚕","下午如果延誤，優先保留住宿和已預約事項。"),
+        VO("嗚拉呀哈！","今天步行量高就提早補水。"),
+        VO("哼～？","出發前再查一次現場營運狀態。")
+      ],
+      "duo":[
+        "今天也一起走吧～　呀哈！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "今天有變動也沒關係嘛～",
+        "照現場狀況決定就好。",
+        "移動多的日子更要留緩衝。",
+        "下午慢慢把節奏收回來～",
+        "有備案就不用擔心臨時改變。",
+        "今天只要順順走完就很好了。"
+      ],
+      "usagi":[
+        VO("呀哈！","先看當天狀態再選方案，不預設一定走主案。"),
+        VO("嗚拉！","移動任務要留時間給找入口、找月台或停車。"),
+        VO("蛤？","天氣普通時，備案往往比硬撐更有效率。"),
+        VO("噗嚕","今天只補真正缺少的東西，不重新展開整份清單。"),
+        VO("嗚拉呀哈！","跨城或長距離交通先確認班次。"),
+        VO("哼～？","今天的成功標準是順利完成下一段交接。")
+      ],
+      "duo":[
+        "今天也一起走吧～　嗚拉！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "旅程後段更要留體力喔～",
+        "想完成的事情慢慢一個個來。",
+        "下午以前記得坐下來休息。",
+        "東西變多了要注意行李重量喔。",
+        "拍到喜歡的照片就很值得了～",
+        "晚上如果還有事，中間一定要休息。"
+      ],
+      "usagi":[
+        VO("呀哈！","上午只處理還沒完成的清單，不重新逛一輪。"),
+        VO("嗚拉！","下午要留電量、儲存空間和體力。"),
+        VO("蛤？","是否多留一段時間，要用後續移動倒推。"),
+        VO("噗嚕","大件物品先想怎麼放進行李。"),
+        VO("嗚拉呀哈！","取行李或轉乘前先看交通時間。"),
+        VO("哼～？","晚上有移動時，不要拖到最後一班才出發。")
+      ],
+      "duo":[
+        "今天也一起走吧～　噗嚕！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "最後一天就慢慢來吧～",
+        "不要因為要回家就突然趕好多事。",
+        "最後一餐也要好好吃♪",
+        "行李和證件比多跑一站重要。",
+        "最後再拍幾張旅行照片吧。",
+        "回家以前，再好好看看這趟旅行～"
+      ],
+      "usagi":[
+        VO("呀哈！","最後一天先把退房、寄物、取行李和去機場時間鎖好。"),
+        VO("嗚拉！","觀光全部放在離境時間之前，不要反過來壓縮。"),
+        VO("蛤？","國際線保留足夠提早到場時間。"),
+        VO("噗嚕","最後採買以能快速完成的為主。"),
+        VO("嗚拉呀哈！","離開住宿前再做一次證件、錢包、手機、行李確認。"),
+        VO("哼～？","交通臨時異動時，直接犧牲最後一個彈性項目。")
+      ],
+      "duo":[
+        "今天也一起走吧～　呀哈！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    }
   ],
-  egg:[
-    "找到隱藏彩蛋 ♡","旅伴集合！！","布丁狗 × 烏薩奇：一起出發！","被你發現了！",
-    "布丁狗散步中～","咻————！！","還沒睡嗎……？","還可以再玩！！",
-    "該睡覺了啦～","任務全部完成，無敵！","不想回家！！","九州旅程 START！"
+  "egg":[
+    "找到隱藏彩蛋～",
+    "旅伴集合！",
+    "一起出發吧～　呀哈！",
+    "被你發現了。",
+    "散步時間～",
+    "咻————！",
+    "還沒睡嗎……？",
+    "呀哈！還可以玩！",
+    "真的該睡覺了啦～",
+    "今天也完成好多事。",
+    "不想這麼快結束～",
+    "旅行模式 ON！",
+    "鴨寶幫集合！",
+    "又被你按到了～",
+    "今天也一起玩到底。",
+    "先拍一張再走～",
+    "噗嚕！",
+    "一起慢慢玩吧♪",
+    "嗚拉呀哈！",
+    "下一個彩蛋在哪裡呢～"
   ],
-  time:{
-    morning:["早安～今天去哪裡？","新的一天出發！","早餐先吃好 ♡"],
-    afternoon:["下午也繼續玩！","要不要喝杯咖啡？","還有好多地方可以去！"],
-    evening:["今天玩得開心嗎？","夜晚也很好拍 ♡","差不多準備回飯店囉～"],
-    late:["今天已經走很多了。","明天再繼續！","晚安 ♡"]
+  "time":{
+    "morning":{
+      "purin":[
+        "早安～先讓自己慢慢醒來。",
+        "早餐吃飽再出發吧♪",
+        "今天也一起出去玩～",
+        "先喝點水，再看看第一站。",
+        "早上的步調不要太急嘛。",
+        "手機有充飽嗎？",
+        "今天的第一張照片要拍什麼？",
+        "如果還睏就多坐一下～"
+      ],
+      "usagi":[
+        VO("呀哈！","早上先確認手機、錢包、票券和行動電源。"),
+        VO("嗚拉！","第一站有固定時間的話，先倒推離開住宿時間。"),
+        VO("噗嚕","早餐不要吃到壓縮後面固定行程。"),
+        VO("蛤？","今天如果要早起，先確認沒有睡過頭。"),
+        VO("嗚拉呀哈！","出門前看一次天氣和交通異動。"),
+        VO("呀哈呀哈！","鞋子、外套和雨具依今天行程一次帶好。")
+      ],
+      "duo":[
+        "早安～　呀哈！",
+        "吃飽再出發吧～　嗚拉！",
+        "今天也一起玩♪　呀哈！",
+        "東西帶齊了嗎～　蛤？"
+      ]
+    },
+    "afternoon":{
+      "purin":[
+        "下午先坐一下嘛～",
+        "要不要喝杯咖啡？",
+        "走到一半休息一下很重要喔。",
+        "下午的光線開始變漂亮了～",
+        "先看看還有多少體力。",
+        "如果累了就少一站嘛。",
+        "甜點時間差不多到了吧♪",
+        "慢慢走，晚上還有時間。"
+      ],
+      "usagi":[
+        VO("嗚拉！","下午先看體力，再決定備案要不要加。"),
+        VO("呀哈！","傍晚有拍照或固定安排時，現在就開始倒推。"),
+        VO("蛤？","手機電量低於一半就先補電。"),
+        VO("噗嚕","咖啡休息可以順便整理下一段交通。"),
+        VO("嗚拉拉！","不要把下午所有空檔都塞成新景點。"),
+        VO("哼～？","如果已經延誤，就直接砍最低優先度行程。")
+      ],
+      "duo":[
+        "下午也慢慢走～　嗚拉！",
+        "先喝點東西嘛～　呀哈！",
+        "還有體力嗎～　蛤？",
+        "傍晚前先休息一下♪　嗚拉！"
+      ]
+    },
+    "evening":{
+      "purin":[
+        "今天玩得開心嗎～",
+        "晚餐時間快到了耶。",
+        "夜晚也可以慢慢拍♪",
+        "差不多開始收尾吧～",
+        "今天的照片一定很多。",
+        "吃飽就不要再走太遠嘛。",
+        "回去以前再散步一下？",
+        "今晚想早點回房間～"
+      ],
+      "usagi":[
+        VO("呀哈！","晚上先確認最後一段交通和住宿方向。"),
+        VO("嗚拉！","有預約晚餐時，不要在前一站拖到最後一刻。"),
+        VO("噗嚕","夜間拍照前先看手機與相機剩餘電量。"),
+        VO("蛤？","最後一班車或末班交通有風險時，優先提早移動。"),
+        VO("哼～？","今天已經超時就不要再加臨時行程。"),
+        VO("嗚拉呀哈！","回住宿前把明早一定要做的事確認一次。")
+      ],
+      "duo":[
+        "晚上也慢慢玩～　嗚拉！",
+        "晚餐要吃飽喔～　呀哈！",
+        "差不多收尾吧～　噗嚕！",
+        "回去以前再拍一張♪　嗚拉！"
+      ]
+    },
+    "late":{
+      "purin":[
+        "真的該睡了啦～",
+        "剩下的明天再想嘛。",
+        "手機插上就躺平吧。",
+        "今天已經玩很多了～",
+        "晚安，明天再一起出去玩♪",
+        "照片不用今晚全部整理。",
+        "先喝水，再去睡覺～",
+        "我已經睏了……"
+      ],
+      "usagi":[
+        VO("噗嚕……","現在優先睡眠，不再新增行程。"),
+        VO("蛤？","鬧鐘和充電確認完就休息。"),
+        VO("嗚拉","明早固定事項先看一眼，其餘明天處理。"),
+        VO("哼～？","照片和記帳可以明天補，不要熬夜。"),
+        VO("噗嚕噗嚕","手機、行動電源、相機都插上。"),
+        VO("嗚拉","門鎖、房卡、錢包放好就睡。")
+      ],
+      "duo":[
+        "晚安～　噗嚕……",
+        "明天再繼續玩♪　嗚拉！",
+        "真的要睡囉～　蛤？",
+        "充電插好就躺平～　噗嚕。"
+      ]
+    }
   }
 };
 const USAGI_VOICE_LINES=[
-  "蛤？","嗚拉","呀哈！","嗚拉呀哈呀哈嗚拉～","哼～？","噗嚕"
+  "蛤？",
+  "嗚拉！",
+  "呀哈！",
+  "嗚拉呀哈呀哈嗚拉～",
+  "哼～？",
+  "噗嚕",
+  "呀哈——！",
+  "嗚拉拉！",
+  "噗嚕……",
+  "呀哈呀哈！",
+  "嗚拉呀哈！",
+  "蛤啊？"
 ];
-const USAGI_VOICE_ART={
-  "蛤？":"./usagi_think.png?v=430",
-  "嗚拉":"./usagi_excited.png?v=430",
-  "呀哈！":"./usagi_success.png?v=430",
-  "嗚拉呀哈呀哈嗚拉～":"./usagi_dash.png?v=430",
-  "哼～？":"./usagi_think.png?v=430",
-  "噗嚕":"./usagi_sticker.png?v=430"
-};
-const usagiVoiceState={tapCount:0};
 const usagiVoiceImageState=new WeakMap();
 
+function dialogueText(msg){
+  if(msg&&typeof msg==="object")return String(msg.text||"");
+  return String(msg??"");
+}
+function dialogueHint(msg){
+  if(msg&&typeof msg==="object")return String(msg.hint||"");
+  return "";
+}
 function isUsagiVoiceLine(msg){
-  return USAGI_VOICE_LINES.includes(msg);
+  const text=dialogueText(msg);
+  return USAGI_VOICE_LINES.includes(text)||/^(?:呀哈|呀——哈|嗚拉|嗚啦|噗嚕|蛤|哼)/.test(text);
 }
-function pickUsagiVoice(){
-  return pickLine(USAGI_VOICE_LINES,"呀哈！");
-}
-function shouldUseUsagiVoice(context=""){
-  // v4.9: the special Usagi sounds must be discoverable, not buried by context.
-  // Every second Usagi tap is guaranteed to use the voice deck.
-  usagiVoiceState.tapCount+=1;
-  return usagiVoiceState.tapCount%2===0;
+function usagiVoiceArtFor(msg){
+  const text=dialogueText(msg);
+  if(/蛤|哼/.test(text))return "./usagi_think.png?v=430";
+  if(/噗嚕/.test(text))return "./usagi_sticker.png?v=430";
+  if(/嗚拉.*呀哈|呀哈.*嗚拉|嗚啦.*呀哈/.test(text))return "./usagi_dash.png?v=430";
+  if(/呀哈|呀——哈/.test(text))return "./usagi_success.png?v=430";
+  if(/嗚拉|嗚啦/.test(text))return "./usagi_excited.png?v=430";
+  return "";
 }
 function flashUsagiVoiceArt(el,msg,context=""){
   if(!el||!isUsagiVoiceLine(msg)||context==="weather")return;
   const img=el.matches?.("img")?el:el.querySelector?.("img");
   if(!img)return;
-  const next=USAGI_VOICE_ART[msg];
+  const next=usagiVoiceArtFor(msg);
   if(!next)return;
 
   const prev=usagiVoiceImageState.get(img);
@@ -330,19 +1075,17 @@ function japanHour(){
     return Number(new Intl.DateTimeFormat("en-US",{timeZone:TRIP?.timezone||"Asia/Tokyo",hour:"2-digit",hourCycle:"h23"}).format(new Date()));
   }catch{return new Date().getHours()}
 }
-function timeDialogue(){
+function timeDialogue(kind="duo"){
   const h=japanHour();
-  if(h<11)return BUDDY_DIALOG.time.morning;
-  if(h<17)return BUDDY_DIALOG.time.afternoon;
-  if(h<22)return BUDDY_DIALOG.time.evening;
-  return BUDDY_DIALOG.time.late;
+  const slot=h<11?BUDDY_DIALOG.time.morning:h<17?BUDDY_DIALOG.time.afternoon:h<22?BUDDY_DIALOG.time.evening:BUDDY_DIALOG.time.late;
+  return slot?.[kind]||slot?.duo||BUDDY_DIALOG.duo;
 }
 function buddyToneForContext(context){
   return ({weather:"weather",food:"food",booking:"booking",shop:"shop",money:"money",note:"note",hotel:"hotel",day:"day",duo:"duo"})[context]||"";
 }
 function toast(msg,tone=""){
   const t=$("#toast"); if(!t)return;
-  t.textContent=msg;t.dataset.tone=tone||"";
+  t.textContent=dialogueText(msg);t.dataset.tone=tone||"";
   t.classList.remove("show");void t.offsetWidth;t.classList.add("show");
   clearTimeout(toast._t);
   toast._t=setTimeout(()=>{t.classList.remove("show");setTimeout(()=>{t.dataset.tone=""},220)},1900);
@@ -353,27 +1096,37 @@ function showBuddySpeech(el,msg,tone="duo"){
   if(!bubble||!el){toast(msg,tone);return;}
   const rect=el.getBoundingClientRect();
   const vw=Math.max(document.documentElement.clientWidth||0,window.innerWidth||0);
-  const safeHalf=Math.min(112,Math.max(82,(vw-24)/2));
+  const safeHalf=Math.min(124,Math.max(88,(vw-24)/2));
   const center=rect.left+rect.width/2;
   const x=Math.max(12+safeHalf,Math.min(vw-12-safeHalf,center));
-  const below=rect.top<118;
-  bubble.textContent=msg;
+  const below=rect.top<132;
+  const main=dialogueText(msg);
+  const hint=dialogueHint(msg);
+  bubble.innerHTML=`<span class="buddy-speech-main">${esc(main)}</span>${hint?`<span class="buddy-speech-hint">${esc(hint)}</span>`:""}`;
+  bubble.setAttribute("aria-label",[main,hint].filter(Boolean).join("。"));
+  bubble.classList.toggle("has-hint",!!hint);
   bubble.dataset.tone=tone||"duo";
   bubble.classList.remove("show","below");
   bubble.style.left=`${x}px`;
-  bubble.style.top=`${below?Math.min(rect.bottom+9,window.innerHeight-90):Math.max(rect.top-9,62)}px`;
+  bubble.style.top=`${below?Math.min(rect.bottom+9,window.innerHeight-116):Math.max(rect.top-9,72)}px`;
   if(below)bubble.classList.add("below");
   void bubble.offsetWidth;
   bubble.classList.add("show");
   clearTimeout(showBuddySpeech._t);
   showBuddySpeech._t=setTimeout(()=>{
     bubble.classList.remove("show","below");
-    setTimeout(()=>{bubble.dataset.tone="";bubble.textContent=""},180);
-  },3000);
+    setTimeout(()=>{
+      bubble.dataset.tone="";
+      bubble.classList.remove("has-hint");
+      bubble.textContent="";
+      bubble.removeAttribute("aria-label");
+    },180);
+  },hint?4200:3000);
 }
 function buddyMoodFor(kind,msg=""){
-  if(kind==="usagi"&&/(蛤|哼～|噗嚕)/.test(msg))return "question";
-  if(kind==="usagi"&&/(嗚拉|呀哈|衝|！！|!)/.test(msg))return "chaos";
+  const text=dialogueText(msg);
+  if(kind==="usagi"&&/(蛤|哼|噗嚕)/.test(text))return "question";
+  if(kind==="usagi"&&/(嗚拉|嗚啦|呀哈|！！|!)/.test(text))return "chaos";
   if(kind==="purin")return "soft";
   return "pop";
 }
@@ -410,7 +1163,7 @@ function buddySparkBurst(x=50,y=45,tone="duo"){
 function buddyCelebrate(text="完成！",image="./buddy_success.png?v=430",tone="duo"){
   if(!isBuddyTheme())return;
   const wrap=$("#buddyCelebration"),img=$("#buddyCelebrateImg"),label=$("#buddyCelebrateText"); if(!wrap)return;
-  img.src=image; label.textContent=text; wrap.dataset.tone=tone; wrap.classList.remove("show"); void wrap.offsetWidth; wrap.classList.add("show"); buddySparkBurst(50,42,tone);
+  img.src=image; label.textContent=dialogueText(text); wrap.dataset.tone=tone; wrap.classList.remove("show"); void wrap.offsetWidth; wrap.classList.add("show"); buddySparkBurst(50,42,tone);
   clearTimeout(buddyCelebrate._t); buddyCelebrate._t=setTimeout(()=>{wrap.classList.remove("show");wrap.dataset.tone=""},1450);
 }
 function inferBuddyContext(el){
@@ -428,11 +1181,11 @@ function inferBuddyContext(el){
 }
 function weatherDialogue(){
   const slot=$("#weatherBuddySlot");
-  if(slot?.classList.contains("is-rain"))return BUDDY_DIALOG.weather.rain;
-  const icon=$("#weatherIcon")?.textContent||"";
-  const desc=$("#weatherDesc")?.textContent||"";
-  if(/☀|晴|sun/i.test(icon+" "+desc))return BUDDY_DIALOG.weather.sunny;
-  return BUDDY_DIALOG.weather.cloudy;
+  const mode=slot?.dataset.weatherMode||"unknown";
+  if(mode==="rain")return BUDDY_DIALOG.weather.rain;
+  if(mode==="sunny")return BUDDY_DIALOG.weather.sunny;
+  if(mode==="cloudy")return BUDDY_DIALOG.weather.cloudy;
+  return BUDDY_DIALOG.weather.unknown;
 }
 function bookingHasUrgent(){
   if(!TRIP?.bookingTasks?.length)return false;
@@ -444,29 +1197,39 @@ function bookingHasUrgent(){
   });
 }
 function buddyDialogueFor(kind,context){
-  if(context==="day")return pickLine(BUDDY_DIALOG.day[state?.dayIndex]||BUDDY_DIALOG.duo);
+  if(context==="day"){
+    const day=BUDDY_DIALOG.day[state?.dayIndex]||{};
+    return pickLine(day?.[kind]||day?.duo||BUDDY_DIALOG.duo);
+  }
   if(context==="weather")return pickLine(weatherDialogue());
   if(context==="food"){
-    if(kind==="purin")return pickLine(BUDDY_DIALOG.food.purin);
-    if(kind==="usagi")return pickLine(BUDDY_DIALOG.food.usagi);
-    return pickLine([...BUDDY_DIALOG.food.purin,...BUDDY_DIALOG.food.usagi]);
+    return pickLine(BUDDY_DIALOG.food?.[kind]||BUDDY_DIALOG.food.duo||BUDDY_DIALOG.food.purin);
   }
   if(context==="booking"){
-    if(kind==="usagi"&&bookingHasUrgent())return pickLine(BUDDY_DIALOG.booking.urgent);
-    return pickLine(BUDDY_DIALOG.booking.reminder);
+    if(kind==="usagi")return pickLine(bookingHasUrgent()?BUDDY_DIALOG.booking.usagiUrgent:BUDDY_DIALOG.booking.usagi);
+    if(kind==="purin")return pickLine(BUDDY_DIALOG.booking.purin);
+    return pickLine(BUDDY_DIALOG.booking.duo);
   }
   if(context==="shop"){
-    if(kind==="purin")return pickLine([...BUDDY_DIALOG.shop.purin,...BUDDY_DIALOG.shop.general]);
-    return pickLine(BUDDY_DIALOG.shop.general);
+    return pickLine(BUDDY_DIALOG.shop?.[kind]||BUDDY_DIALOG.shop.duo||BUDDY_DIALOG.shop.purin);
   }
-  if(context==="money")return pickLine(BUDDY_DIALOG.money);
-  if(context==="note")return pickLine(BUDDY_DIALOG.note);
+  if(context==="money"){
+    return pickLine(BUDDY_DIALOG.money?.[kind]||BUDDY_DIALOG.money.duo);
+  }
+  if(context==="note"){
+    return pickLine(BUDDY_DIALOG.note?.[kind]||BUDDY_DIALOG.note.duo);
+  }
   if(context==="hotel"){
-    return pickLine(japanHour()>=21?BUDDY_DIALOG.hotel.late:BUDDY_DIALOG.hotel.normal);
+    if(japanHour()>=21){
+      if(kind==="usagi")return pickLine(BUDDY_DIALOG.hotel.lateUsagi);
+      if(kind==="purin")return pickLine(BUDDY_DIALOG.hotel.latePurin);
+      return pickLine(BUDDY_DIALOG.hotel.duo);
+    }
+    return pickLine(BUDDY_DIALOG.hotel?.[kind]||BUDDY_DIALOG.hotel.duo);
   }
   if(kind==="duo")return pickLine(BUDDY_DIALOG.duo);
-  // Generic character taps occasionally react to Japan-local time so the app feels alive.
-  if(Math.random()<0.28)return pickLine(timeDialogue());
+  // Generic taps occasionally react to Japan-local time, but keep each character's own voice.
+  if(Math.random()<0.28)return pickLine(timeDialogue(kind));
   return pickLine(kind==="purin"?BUDDY_DIALOG.purin:BUDDY_DIALOG.usagi);
 }
 function buddyReact(kind,el){
@@ -495,15 +1258,8 @@ function buddyReact(kind,el){
     return;
   }
 
-  let msg;
-  let tone=baseTone;
-
-  if(kind==="usagi" && shouldUseUsagiVoice(context)){
-    msg=pickUsagiVoice();
-    tone="voice";
-  }else{
-    msg=buddyDialogueFor(kind,context);
-  }
+  const msg=buddyDialogueFor(kind,context);
+  const tone=kind==="usagi"&&!context?"voice":baseTone;
 
   animateBuddyMood(el,kind,msg);
   if(kind==="usagi")flashUsagiVoiceArt(el,msg,context);
@@ -552,10 +1308,27 @@ function renderDailyScene(){
 }
 
 
-function updateWeatherBuddy(hasRain=false){
-  const el=$("#weatherBuddySlot"); if(!el)return;
-  el.classList.toggle("is-rain",!!hasRain);
-  el.innerHTML=`<img class="weather-usagi-rain buddy-reactable" data-buddy-react="usagi" data-buddy-context="weather" src="./weather-rain-usagi-v47.webp?v=470" alt="雨衣烏薩奇">`;
+function updateWeatherBuddy(mode="unknown"){
+  const el=$("#weatherBuddySlot"), card=$("#weatherCard"); if(!el)return;
+  const allowed=["rain","sunny","cloudy","unknown"];
+  if(!allowed.includes(mode))mode="unknown";
+  el.dataset.weatherMode=mode;
+  el.classList.toggle("is-rain",mode==="rain");
+  el.classList.toggle("is-sunny",mode==="sunny");
+  el.classList.toggle("is-cloudy",mode==="cloudy");
+  card?.classList.toggle("has-weather-buddy",mode!=="unknown");
+  if(mode==="unknown"){
+    el.innerHTML="";el.hidden=true;return;
+  }
+  el.hidden=false;
+  const sunnyPool=["./usagi_stars.png?v=430","./usagi_excited.png?v=430","./usagi_point.png?v=430"];
+  const cloudyPool=["./usagi_think.png?v=430","./usagi_sticker.png?v=430","./usagi_peek.png?v=430"];
+  const spec=mode==="rain"
+    ? {src:"./weather-rain-usagi-v47.webp?v=470",alt:"穿雨衣的烏薩奇"}
+    : mode==="sunny"
+      ? {src:sunnyPool[state.dayIndex%sunnyPool.length],alt:"晴天烏薩奇"}
+      : {src:cloudyPool[state.dayIndex%cloudyPool.length],alt:"陰天烏薩奇"};
+  el.innerHTML=`<button type="button" class="weather-buddy-button buddy-reactable weather-usagi-${mode}" data-buddy-react="usagi" data-buddy-context="weather" aria-label="點烏薩奇看天氣反應"><img src="${spec.src}" alt="${spec.alt}"></button>`;
 }
 
 
@@ -636,19 +1409,46 @@ function renderEventExtras(e){
 function selectedDecision(id){
   return state.decisions[id] || "";
 }
+function draftDecision(id){return state.decisionDrafts?.[id]||""}
+function renderDecisionArea(){
+  const d=TRIP.days[state.dayIndex];
+  const area=$("#decisionArea");if(area)area.innerHTML=renderDecisionCards(d);
+}
+function stageDecision(id,option){
+  state.decisionDrafts=state.decisionDrafts||{};
+  if(state.decisionDrafts[id]===option)delete state.decisionDrafts[id];
+  else state.decisionDrafts[id]=option;
+  renderDecisionArea();
+}
 async function chooseDecision(id, option){
+  if(!option)return;
   state.decisions[id]=option;
+  if(state.decisionDrafts)delete state.decisionDrafts[id];
   saveLocal("decisions",state.decisions);
   if(state.cloud){try{await setCloud("decisions",state.decisions)}catch{}}
   renderSchedule();
   buddyCelebrate("決定好啦！","./usagi_success.png?v=430");
+}
+async function confirmDecision(id){
+  const draft=draftDecision(id);if(!draft){toast("先點一個選項，再按確認");return}
+  await chooseDecision(id,draft);
+}
+async function clearDecision(id){
+  const had=!!state.decisions[id]||!!draftDecision(id);
+  delete state.decisions[id];if(state.decisionDrafts)delete state.decisionDrafts[id];
+  saveLocal("decisions",state.decisions);
+  if(state.cloud){try{await setCloud("decisions",state.decisions)}catch{}}
+  renderSchedule();
+  if(had)toast("已清除選擇，可以晚點再決定");
 }
 function renderDecisionCards(day){
   const ids=day.decisionIds||[];
   if(!ids.length)return "";
   return `<div class="decision-stack">${ids.map(id=>{
     const d=TRIP.decisions.find(x=>x.id===id); if(!d)return "";
-    const selected=selectedDecision(id);
+    const selected=selectedDecision(id), draft=draftDecision(id);
+    const selectedLabel=d.options.find(o=>o.id===selected)?.label||"";
+    const draftLabel=d.options.find(o=>o.id===draft)?.label||"";
     const checklist=(d.checklist||[]).length?`<div class="decision-checks">${d.checklist.map(x=>`<div>□ ${esc(x)}</div>`).join("")}</div>`:"";
     return `<section class="decision-card">
       <img class="decision-usagi-art buddy-only-art buddy-reactable" data-buddy-react="usagi" data-buddy-context="booking" src="./usagi_think.png?v=430" alt="烏薩奇">
@@ -656,13 +1456,19 @@ function renderDecisionCards(day){
       <h3>${esc(d.title)}</h3>
       <p>${esc(d.hint||"")}</p>
       ${checklist}
-      <div class="decision-options">${d.options.map(o=>`
-        <button class="decision-option ${selected===o.id?"selected":""}" data-decision-id="${esc(d.id)}" data-decision-option="${esc(o.id)}">
+      <div class="decision-options">${d.options.map(o=>{
+        const isDraft=draft===o.id,isConfirmed=selected===o.id&&!draft;
+        return `<button class="decision-option ${isDraft?"draft":isConfirmed?"selected":""}" data-decision-id="${esc(d.id)}" data-decision-option="${esc(o.id)}">
           <span class="decision-icon">${esc(o.icon||"→")}</span>
           <span><b>${esc(o.label)}</b><small>${esc(o.detail||"")}</small></span>
-          <em>${selected===o.id?"已選":"選擇"}</em>
-        </button>`).join("")}
+          <em>${isDraft?"暫選":isConfirmed?"已確認":"選擇"}</em>
+        </button>`}).join("")}
       </div>
+      <div class="decision-confirm-row">
+        <button type="button" class="decision-confirm-btn" data-decision-confirm="${esc(d.id)}" ${draft?"":"disabled"}>確認${draftLabel?`「${esc(draftLabel)}」`:"選擇"}</button>
+        <button type="button" class="decision-clear-btn" data-decision-clear="${esc(d.id)}">${selected||draft?"先不決定／清除":"先不決定"}</button>
+      </div>
+      <div class="decision-state-text">${draft?`目前只是暫選「${esc(draftLabel)}」，尚未套用到行程。`:selected?`目前已確認「${esc(selectedLabel)}」，仍可清除或改選。`:"點選選項只會暫選；按下確認後才會套用行程。"}</div>
     </section>`;
   }).join("")}</div>`;
 }
@@ -682,16 +1488,16 @@ function renderDays(){
 function buddyRole(e){
   const text=`${e.category||""} ${e.title||""} ${e.status||""}`;
   if(/早餐|午餐|晚餐|咖啡|甜點|住宿|Chill|休息|泡湯|Buffet|飯店|Check-in|放空|星空/.test(text)) return "purin";
-  if(/搶|預約|決策|時間控制|購物|補貨|GUNDAM|交通決策|排隊|租車|還車|航班|固定|必守/.test(text)) return "usagi";
+  if(/搶|預約|決策|時間控制|購物|補貨|交通決策|排隊|租車|還車|航班|固定|必守/.test(text)) return "usagi";
   return "";
 }
 
 function buddyDecorForEvent(e){
   const text=`${e.category||""} ${e.title||""} ${e.status||""}`;
   if(/早餐|午餐|晚餐|咖啡|甜點|住宿|休息|飯店|泡湯|Buffet|放空/.test(text)) return "";
-  if(/Marine World|水族館|海豹|海豚/.test(text)) return "🐬";
-  if(/夕陽|日落|百道|海/.test(text)) return "☁️";
-  if(/搶票|預約|固定|強制|決策|還車|租車|GUNDAM|購物|補貨/.test(text)) return "";
+  if(/水族館|海豹|海豚|海洋館/.test(text)) return "🐬";
+  if(/夕陽|日落|海邊|海岸|海景/.test(text)) return "☁️";
+  if(/搶票|預約|固定|強制|決策|還車|租車|購物|補貨/.test(text)) return "";
   return "";
 }
 function renderBuddyDashboard(day, visibleEvents){
@@ -731,7 +1537,7 @@ function syncBuddyWeather(){
 }
 
 
-function mapDirections(q){return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(q)}`}
+function mapDirections(q){return mapSearch(q)}
 function hotelForDay(index){
   const explicit=TRIP.days?.[index]?.hotel;
   if(explicit?.name && (explicit.nav||explicit.name))return {title:explicit.name,nav:explicit.nav||explicit.name};
@@ -757,7 +1563,7 @@ function renderHotelReturnCard(){
   const label=lastDay?"返台前據點":"今晚住這裡";
   const help=lastDay?"取行李或需要回住宿時，從這裡直接導航。":"一天走完要回飯店時，不用再往上找地址。";
   box.hidden=false;
-  box.innerHTML=`<div class="hotel-return-copy"><span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ 導航回飯店</a></div><div class="hotel-return-art buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="hotel"><img src="./hotel-return-duo.webp?v=460" alt="布丁狗與烏薩奇回飯店休息"></div>`;
+  box.innerHTML=`<div class="hotel-return-copy"><span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ Google Maps 查看飯店</a></div><div class="hotel-return-art buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="hotel"><img src="./hotel-return-duo.webp?v=460" alt="布丁狗與烏薩奇回飯店休息"></div>`;
 }
 
 
@@ -772,11 +1578,11 @@ function eventBuddySpec(e,index){
 
   if(/早餐|午餐|晚餐|咖啡|甜點|餐廳|Buffet|赤牛|牛排|燒鳥|すき焼き|美食|吃/.test(text)){
     kind="purin";context="food";
-  }else if(/購物|補貨|PARCO|天神|大名|Canal|AMU|LaLaport|GUNDAM|店|逛/.test(text)){
+  }else if(/購物|補貨|商場|百貨|服飾|鞋|店|逛/.test(text)){
     kind="usagi";context="shop";
   }else if(/住宿|飯店|Hotel|Check-in|入住|泡湯|大浴場|休息|放空|星空/.test(text)){
     kind="purin";context="hotel";
-  }else if(/預約|搶|新幹線|由布院之森|租車|還車|航班|機場|划船|報到|固定|必守|交通/.test(text)){
+  }else if(/預約|搶|新幹線|特急|列車|租車|還車|航班|機場|划船|報到|固定|必守|交通/.test(text)){
     kind="usagi";context="booking";
   }
 
@@ -839,7 +1645,7 @@ function guideMascot(kind="duo"){
 function eventGuideMascot(e){
   const text=`${e?.category||""} ${e?.title||""}`;
   if(/餐|咖啡|甜點|吃|飯店|住宿|休息|泡湯/i.test(text))return "purin";
-  if(/購物|店|PARCO|Canal|AMU|LaLaport|預約|交通|票|車|機場/i.test(text))return "usagi";
+  if(/購物|商場|百貨|服飾|鞋|店|預約|交通|票|車|機場/i.test(text))return "usagi";
   return "duo";
 }
 function normalizeGuideSections(sections=[]){
@@ -1086,8 +1892,12 @@ function bindSafeHold(el,handler,{ms=750,move=10,allowInteractiveRoot=false}={})
   },{passive:true});
   ["pointercancel","pointerleave"].forEach(ev=>el.addEventListener(ev,clear,{passive:true}));
   el.addEventListener("click",e=>{if(suppressClick){e.preventDefault();e.stopImmediatePropagation();suppressClick=false}},true);
-  el.addEventListener("contextmenu",e=>{if(el.classList.contains("guide-pressing")||el.classList.contains("guide-ready"))e.preventDefault()});
+  // iOS Safari otherwise highlights itinerary text blue or opens the callout while holding.
+  el.addEventListener("contextmenu",e=>e.preventDefault());
+  el.addEventListener("selectstart",e=>e.preventDefault());
+  el.addEventListener("dragstart",e=>e.preventDefault());
 }
+
 function bindGuideTargets(visibleEvents=[]){
   $$("#timeline .event-card").forEach((card,i)=>bindSafeHold(card,()=>openGuide(buildEventGuide(visibleEvents[i]))));
   const dayScene=$("#daySceneCard");if(dayScene)bindSafeHold(dayScene,()=>openGuide(buildDayGuide()),{allowInteractiveRoot:true});
@@ -1096,7 +1906,6 @@ function bindGuideTargets(visibleEvents=[]){
 
 function renderSchedule(){
   const d=TRIP.days[state.dayIndex];
-  renderWeather(d);
   $("#dayNumber").textContent=`D${state.dayIndex+1}`;
   $("#dayTitle").textContent=d.title;
   $("#daySubtitle").textContent=d.subtitle;
@@ -1114,7 +1923,7 @@ function renderSchedule(){
         ${renderEventExtras(e)}
         ${e.note?`<div class="event-note">${esc(e.note)}</div>`:""}
         <div class="event-footer ${e.noNav?"buddy-only-footer":""}">
-          ${e.noNav?"":`<a class="nav-link" target="_blank" rel="noopener" href="${mapNav(e.nav||e.title,weatherMode(e))}">↗ Google Maps 導航</a>`}
+          ${e.noNav?"":`<a class="nav-link" target="_blank" rel="noopener" href="${mapNav(e.nav||e.title,weatherMode(e))}">↗ Google Maps 查看</a>`}
           ${eventBuddyHtml(e,i)}
         </div>
       </div>
@@ -1128,24 +1937,28 @@ async function renderWeather(d){
   $("#weatherLocation").textContent=d.location+" · "+d.shortDate;
   $("#weatherTemp").textContent="載入中";
   $("#weatherDesc").textContent="正在取得旅行日期預報";
-  $("#weatherIcon").textContent="☁️";$("#rainBox").innerHTML="";
+  $("#weatherIcon").textContent="☁️";$("#rainBox").innerHTML=""; updateWeatherBuddy("unknown");
   try{
     const w=await getWeather(d);
     if(w.state!=="forecast"){
       $("#weatherTemp").textContent="—";
       $("#weatherDesc").textContent=w.message;
-      $("#rainBox").innerHTML="進入預報範圍後，這裡會顯示高低溫、降雨機率與預計下雨時段。"; updateWeatherBuddy(false);
+      $("#rainBox").innerHTML="進入預報範圍後，這裡會顯示高低溫、降雨機率與預計下雨時段。"; updateWeatherBuddy("unknown");
     }else{
       $("#weatherIcon").textContent=w.icon;
       $("#weatherTemp").textContent=w.current!==null?`${w.current}° · ${w.high}° / ${w.low}°`:`${w.high}° / ${w.low}°`;
       $("#weatherDesc").textContent=`${w.desc} · 全日最高降雨機率 ${w.rainMax}%`;
       if(w.rainGroups.length){
-        $("#rainBox").innerHTML=w.rainGroups.slice(0,2).map(g=>`<div class="rain-alert">🌧️ 預計 ${g.start}–${g.end} 有雨 · 最高 ${g.maxProb}%</div>`).join(""); updateWeatherBuddy(true);
-      }else { $("#rainBox").innerHTML="☂️ 目前預報沒有明顯連續降雨時段。"; updateWeatherBuddy(false); }
+        $("#rainBox").innerHTML=w.rainGroups.slice(0,2).map(g=>`<div class="rain-alert">🌧️ 預計 ${g.start}–${g.end} 有雨 · 最高 ${g.maxProb}%</div>`).join(""); updateWeatherBuddy("rain");
+      }else {
+        $("#rainBox").innerHTML="☂️ 目前預報沒有明顯連續降雨時段。";
+        const weatherText=`${w.icon||""} ${w.desc||""}`;
+        updateWeatherBuddy(/☀|晴|sun|clear/i.test(weatherText)?"sunny":"cloudy");
+      }
     }
   }catch(e){
     $("#weatherTemp").textContent="—";$("#weatherDesc").textContent="天氣暫時無法更新";
-    $("#rainBox").textContent="保留上次行程資料；網路恢復後重新切換日期即可再抓。"; updateWeatherBuddy(false);
+    $("#rainBox").textContent="保留上次行程資料；網路恢復後重新切換日期即可再抓。"; updateWeatherBuddy("unknown");
   }finally{card.classList.remove("skeleton")}
 }
 
@@ -1400,12 +2213,14 @@ function bind(){
     if(buddyReaction){buddyReact(buddyReaction.dataset.buddyReact,buddyReaction);}
     const themeChoice=e.target.closest("[data-theme-choice]");if(themeChoice){setDisplayTheme(themeChoice.dataset.themeChoice);return}
     const fontChoice=e.target.closest("[data-font-choice]");if(fontChoice){setFontSize(fontChoice.dataset.fontChoice);return}
-    const d=e.target.closest("[data-day]");if(d){state.dayIndex=Number(d.dataset.day);renderDays();renderSchedule();return}
+    const d=e.target.closest("[data-day]");if(d){state.dayIndex=Number(d.dataset.day);state.decisionDrafts={};renderDays();renderSchedule();return}
     const n=e.target.closest("[data-view]");if(n){switchView(n.dataset.view);return}
     const t=e.target.closest("[data-tool]");if(t){switchTool(t.dataset.tool);return}
     const o=e.target.closest("[data-open-modal]");if(o){openModal(o.dataset.openModal);return}
     const m=e.target.closest("[data-member]");if(m){state.shoppingMember=m.dataset.member;renderShopping();return}
-    const decision=e.target.closest("[data-decision-id]");if(decision){await chooseDecision(decision.dataset.decisionId,decision.dataset.decisionOption);return}
+    const decisionConfirm=e.target.closest("[data-decision-confirm]");if(decisionConfirm){await confirmDecision(decisionConfirm.dataset.decisionConfirm);return}
+    const decisionClear=e.target.closest("[data-decision-clear]");if(decisionClear){await clearDecision(decisionClear.dataset.decisionClear);return}
+    const decision=e.target.closest("[data-decision-id]");if(decision){stageDecision(decision.dataset.decisionId,decision.dataset.decisionOption);return}
     const task=e.target.closest("[data-task-id]");if(task){await toggleBookingTask(task.dataset.taskId);return}
     for(const [attr,key,render] of [["data-check-food","foods",renderFood],["data-check-shopping","shopping",renderShopping]]){
       const x=e.target.closest(`[${attr}]`);if(x){const id=x.getAttribute(attr);const before=state[key].find(i=>i.id===id)?.checked;await toggleItem(key,id);render();if(!before)buddyCelebrate(key==="foods"?pickLine(BUDDY_DIALOG.food.complete):pickLine(BUDDY_DIALOG.shop.complete),key==="foods"?"./purin_clap.png?v=430":"./buddy_success.png?v=430",key==="foods"?"food":"shop");return}
@@ -1422,10 +2237,9 @@ function bind(){
       "./buddy_hero.png?v=430",
       "./buddy_celebrate.png?v=430",
       "./buddy_chill.png?v=430",
-      "./buddy_eat.png?v=430",
-      "./buddy_success.png?v=430"
+      "./buddy_eat.png?v=430"
     ];
-    let heroIndex=0,taps=0,tapTimer=null,holdTimer=null,holdTriggered=false;
+    let heroIndex=0,taps=0,tapTimer=null,holdTriggered=false,swipeIgnoreClick=false;
     heroGallery.slice(1).forEach(src=>{const p=new Image();p.src=src;if(p.decode)p.decode().catch(()=>{})});
     const syncDots=()=>{$$("#buddyHeroDots [data-hero-index]").forEach((d,i)=>d.classList.toggle("active",i===heroIndex))};
     const setHero=(idx,animate=true)=>{
@@ -1438,9 +2252,29 @@ function bind(){
       }
       syncDots();
     };
-    const resetTap=()=>{clearTimeout(tapTimer);tapTimer=setTimeout(()=>taps=0,1200)};
-    heroEgg.addEventListener("click",()=>{if(holdTriggered){holdTriggered=false;return;}setHero(heroIndex+1);taps++;resetTap();if(taps>=5){taps=0;buddyCelebrate(BUDDY_DIALOG.egg[1],"./buddy_celebrate.png?v=430","duo")}});
     $$("#buddyHeroDots [data-hero-index]").forEach(dot=>dot.addEventListener("click",()=>setHero(Number(dot.dataset.heroIndex))));
+
+    let sx=0,sy=0,spid=null;
+    heroEgg.addEventListener("pointerdown",e=>{if(e.button!==undefined&&e.button!==0)return;sx=e.clientX;sy=e.clientY;spid=e.pointerId;swipeIgnoreClick=false},{passive:true});
+    heroEgg.addEventListener("pointerup",e=>{
+      if(spid!==e.pointerId)return;
+      const dx=e.clientX-sx,dy=e.clientY-sy;spid=null;
+      if(Math.abs(dx)>=42&&Math.abs(dx)>Math.abs(dy)*1.15){
+        swipeIgnoreClick=true;setHero(heroIndex+(dx<0?1:-1));
+        try{navigator.vibrate?.(8)}catch{}
+        setTimeout(()=>swipeIgnoreClick=false,380);
+      }
+    },{passive:true});
+    heroEgg.addEventListener("pointercancel",()=>{spid=null;swipeIgnoreClick=false},{passive:true});
+
+    const resetTap=()=>{clearTimeout(tapTimer);tapTimer=setTimeout(()=>taps=0,1200)};
+    heroEgg.addEventListener("click",()=>{
+      if(holdTriggered){holdTriggered=false;return}
+      if(swipeIgnoreClick)return;
+      const msg=pickLine(BUDDY_DIALOG.duo);
+      animateBuddyMood(heroEgg,"duo",msg);showBuddySpeech(heroEgg,msg,"duo");buddySparkBurst(50,31,"duo");
+      taps++;resetTap();if(taps>=5){taps=0;buddyCelebrate(pickLine(BUDDY_DIALOG.egg),"./buddy_celebrate.png?v=430","duo")}
+    });
     const heroHoldEggs=[
       {text:"鴨寶幫，九州出發！",image:"./buddy_celebrate.png?v=430",tone:"duo"},
       {text:"我們是鴨寶幫！",image:"./buddy_success.png?v=430",tone:"duo"},
@@ -1652,7 +2486,7 @@ function formatTripDate(){
 function applyPrivateTripMeta(){
   const title=$("#heroPrivateTitle"); if(title) title.textContent=TRIP.heroTitle||TRIP.title||"私人旅程";
   const date=$("#heroPrivateDate"); if(date) date.textContent=formatTripDate();
-  const route=$("#heroPrivateRoute"); if(route) route.textContent=TRIP.heroRoute||"福岡・由布院・阿蘇・高千穗・熊本";
+  const route=$("#heroPrivateRoute"); if(route) route.textContent=TRIP.heroRoute||"PRIVATE TRIP";
   const season=$("#heroPrivateSeason"); if(season) season.textContent="2026・秋";
   document.title="私人旅程";
 }
@@ -1768,7 +2602,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=533",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=534",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });

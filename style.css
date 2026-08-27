@@ -2847,3 +2847,106 @@ html[data-theme="buddy"] .guide-hold-target.guide-ready::after{transform:scaleX(
 #guideNoteArea:focus{border-color:rgba(183,145,83,.65);box-shadow:0 0 0 3px rgba(211,176,111,.12)}
 @keyframes guideSyncPulse{0%,100%{transform:scale(.82);opacity:.65}50%{transform:scale(1.18);opacity:1}}
 @media(prefers-reduced-motion:reduce){.guide-note-actions #guideSaveStatus[data-state="saving"]::before{animation:none}}
+
+
+/* =========================================================
+   v5.3.4 — Interaction Polish
+   iOS hold safety / weather variety / decision confirm / hero swipe
+   ========================================================= */
+
+/* iPhone/iPad: long-press guide targets must never select itinerary text. */
+.guide-hold-target,
+.guide-hold-target *{
+  -webkit-user-select:none!important;
+  user-select:none!important;
+  -webkit-touch-callout:none!important;
+}
+.guide-hold-target img{-webkit-user-drag:none!important;user-drag:none!important}
+
+/* Weather character is contextual instead of raincoat-on-every-day. */
+html[data-theme="buddy"] .weather-card:not(.has-weather-buddy){padding-right:20px!important}
+html[data-theme="buddy"] .weather-buddy-slot{pointer-events:none!important}
+html[data-theme="buddy"] .weather-buddy-slot[hidden]{display:none!important}
+html[data-theme="buddy"] .weather-buddy-button{
+  pointer-events:auto!important;display:grid;place-items:end center;width:91px;height:111px;padding:0;border:0;background:transparent;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;
+}
+html[data-theme="buddy"] .weather-buddy-button img{width:100%;height:100%;object-fit:contain;object-position:center bottom;filter:drop-shadow(0 5px 7px rgba(67,72,79,.09));pointer-events:none}
+html[data-theme="buddy"] .weather-usagi-rain img{width:82px;height:112px}
+html[data-theme="buddy"] .weather-usagi-sunny img{width:84px;height:104px;animation:buddySunnyFloat 2.2s ease-in-out infinite}
+html[data-theme="buddy"] .weather-usagi-cloudy img{width:78px;height:101px;animation:buddyCloudyThink 3s ease-in-out infinite}
+@keyframes buddySunnyFloat{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-5px) rotate(1deg)}}
+@keyframes buddyCloudyThink{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px) rotate(-1deg)}}
+@media(max-width:520px){
+  html[data-theme="buddy"] .weather-buddy-button{width:80px;height:102px}
+  html[data-theme="buddy"] .weather-usagi-rain img{width:72px;height:101px}
+  html[data-theme="buddy"] .weather-usagi-sunny img{width:75px;height:95px}
+  html[data-theme="buddy"] .weather-usagi-cloudy img{width:70px;height:93px}
+}
+
+/* Decisions are two-step: tap = draft, explicit confirm = applies to itinerary. */
+.decision-option.draft{border-color:#d6a736!important;background:#fff7d7!important;box-shadow:0 0 0 1px rgba(214,167,54,.28) inset!important}
+.decision-option.draft em{color:#a77616!important}
+.decision-confirm-row{display:flex;gap:8px;margin-top:11px;align-items:center}
+.decision-confirm-btn,.decision-clear-btn{min-height:38px;border-radius:12px;padding:8px 12px;font-weight:900;font-size:11px;cursor:pointer}
+.decision-confirm-btn{flex:1;border:1px solid #d4a83b;background:#f5ca62;color:#5e4727;box-shadow:0 4px 10px rgba(165,121,32,.10)}
+.decision-confirm-btn:disabled{opacity:.38;cursor:default;box-shadow:none}
+.decision-clear-btn{border:1px solid #ddd4c8;background:rgba(255,255,255,.68);color:#7f746a}
+.decision-state-text{margin-top:7px;color:#938578;font-size:9.5px;line-height:1.5}
+html[data-font-size="large"] .decision-confirm-btn,html[data-font-size="large"] .decision-clear-btn{font-size:14px;min-height:44px}
+html[data-font-size="large"] .decision-state-text{font-size:13px}
+html[data-font-size="xlarge"] .decision-confirm-btn,html[data-font-size="xlarge"] .decision-clear-btn{font-size:16px;min-height:48px}
+html[data-font-size="xlarge"] .decision-state-text{font-size:15px}
+
+/* Hero title glass is warmer and less like a bright white card. */
+html[data-theme="buddy"] .buddy-hero-copy{
+  background:linear-gradient(180deg,rgba(255,247,220,.72),rgba(255,251,239,.56))!important;
+  border-color:rgba(210,176,112,.46)!important;
+  box-shadow:0 9px 24px rgba(91,66,43,.055)!important;
+  backdrop-filter:blur(7px) saturate(.92)!important;
+  -webkit-backdrop-filter:blur(7px) saturate(.92)!important;
+}
+html[data-theme="buddy"] .buddy-hero-copy .buddy-season{background:rgba(255,235,176,.62)!important}
+html[data-theme="buddy"] .buddy-hero-art{touch-action:pan-y;cursor:grab;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+html[data-theme="buddy"] .buddy-hero-art:active{cursor:grabbing}
+html[data-theme="buddy"] .buddy-hero-tapcue{background:rgba(255,248,229,.72)!important;border-color:rgba(216,185,125,.54)!important}
+
+@media(prefers-reduced-motion:reduce){
+  html[data-theme="buddy"] .weather-usagi-sunny img,
+  html[data-theme="buddy"] .weather-usagi-cloudy img{animation:none!important}
+}
+
+
+/* v5.3.5 — Character Voice Pass
+   Usagi uses a short vocalization as the character line; practical copy is clearly separated as app guidance. */
+html[data-theme="buddy"] .buddy-speech-bubble.has-hint{
+  max-width:min(248px,calc(100vw - 24px));
+  padding:10px 12px 9px;
+}
+html[data-theme="buddy"] .buddy-speech-main{
+  display:block;
+  font-size:13px;
+  font-weight:950;
+  line-height:1.35;
+}
+html[data-theme="buddy"] .buddy-speech-hint{
+  display:block;
+  margin-top:6px;
+  padding-top:6px;
+  border-top:1px solid color-mix(in srgb,currentColor 16%,transparent);
+  font-size:10.5px;
+  font-weight:750;
+  line-height:1.48;
+  opacity:.78;
+  text-align:left;
+}
+html[data-theme="buddy"] .buddy-speech-bubble[data-tone="voice"] .buddy-speech-main{
+  font-size:15px;
+  letter-spacing:.02em;
+}
+@media(max-width:430px){
+  html[data-theme="buddy"] .buddy-speech-bubble.has-hint{
+    max-width:min(238px,calc(100vw - 20px));
+  }
+  html[data-theme="buddy"] .buddy-speech-hint{font-size:10px}
+}
