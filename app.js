@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.6 Manual Weather Buddy */
+/* Private travel PWA · Firebase Auth gated content · v5.3.7 Hero + Weather Interaction Cleanup */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -276,40 +276,25 @@ const BUDDY_DIALOG={
   ],
   "weather":{
     "sunny":[
-      VO("呀哈——！","晴天模式。今天可以多留意戶外拍照光線。"),
-      VO("嗚拉！","太陽有出來；記得防曬和補水。"),
-      VO("呀哈呀哈！","戶外段可以照原定節奏走，傍晚再看雲量。"),
-      VO("噗嚕","光線不錯，喜歡的場景可以多拍幾張。"),
-      VO("嗚拉呀哈！","晴天也別把行程塞滿，留一點休息時間。"),
-      VO("呀——哈！","如果傍晚雲量不高，可以留意夕陽。"),
-      VO("嗚啦——！","氣溫高時先找陰影休息，再繼續走。"),
-      VO("哼～？","太陽很亮時，人像可以找側光或陰影。"),
-      VO("呀哈！","今天的戶外行程條件看起來不錯。"),
-      VO("噗嚕！","相機、手機、行動電源都記得帶好。")
+      VO("呀哈！"),
+      VO("嗚拉！"),
+      VO("呀哈呀哈！"),
+      VO("噗嚕♪"),
+      VO("嗚拉呀哈！")
     ],
     "rain":[
-      VO("蛤？","雨天模式。先看降雨時段，不必整天都切成雨備。"),
-      VO("嗚拉！","短暫陣雨就抓空檔移動，鞋子和相機先顧好。"),
-      VO("噗嚕……","雨勢大的時段優先安排室內或咖啡休息。"),
-      VO("嗚拉拉！","傘和防水袋先放在最好拿的位置。"),
-      VO("呀哈！","雨小一點再走；行程不用為了趕時間硬衝。"),
-      VO("哼～？","如果只是毛毛雨，先看現場體感再決定要不要改。"),
-      VO("蛤啊？","路面濕滑時，自駕和步行都把速度放慢。"),
-      VO("嗚啦——！","有拍照行程的話，等雨停空檔再出手。"),
-      VO("噗嚕","回住宿後記得把鞋襪和外套弄乾。"),
-      VO("嗚拉呀哈！","雨備只是備案，不需要一看到雨就整天取消。")
+      VO("噗嚕……"),
+      VO("蛤？"),
+      VO("嗚拉！"),
+      VO("哼～？"),
+      VO("呀哈！")
     ],
     "cloudy":[
-      VO("哼～？","陰天光線比較柔和，拍人像反而舒服。"),
-      VO("噗嚕","雲多不一定會下雨，先照原定節奏走。"),
-      VO("呀哈！","沒有大太陽，走戶外會比較輕鬆。"),
-      VO("嗚拉！","傍晚如果雲層變薄，還是有機會看到漂亮天空。"),
-      VO("蛤？","先看降雨機率，不要只看到陰天圖示就改行程。"),
-      VO("噗嚕……","陰天適合慢慢走，也不用一直找陰影。"),
-      VO("嗚拉呀哈！","拍景時可以把天空比例少一點，人物會更突出。"),
-      VO("呀哈呀哈！","體感舒服的話，戶外段可以多留一點時間。"),
-      VO("哼？","雲層變厚時再看看即時降雨。"),
-      VO("嗚啦——！","今天就用柔和光線好好拍。")
+      VO("蛤？"),
+      VO("哼～？"),
+      VO("噗嚕……"),
+      VO("嗚拉？"),
+      VO("呀哈？")
     ],
     "thunder":[
       VO("蛤？！"),
@@ -333,12 +318,11 @@ const BUDDY_DIALOG={
       VO("嗚拉呀哈！")
     ],
     "unknown":[
-      VO("噗嚕……","還沒進入可靠預報範圍，先別把這個當正式天氣。"),
-      VO("蛤？","現在只先陪你等預報；接近旅行日再確認。"),
-      VO("哼～？","天氣還太早，暫時不要因為預估值改行程。"),
-      VO("呀哈！","等進入有效預報範圍後，再切成真正的晴雨版本。"),
-      VO("嗚拉","目前先保留彈性，真正天氣之後再判斷。"),
-      VO("噗嚕","出發前幾天再看降雨時段會比較有意義。")
+      VO("噗嚕……"),
+      VO("蛤？"),
+      VO("哼～？"),
+      VO("呀哈！"),
+      VO("嗚拉！")
     ]
   },
   "food":{
@@ -1198,14 +1182,36 @@ function inferBuddyContext(el){
   if(el.closest?.("#hotelReturnCard"))return "hotel";
   return "";
 }
-function weatherDialogue(){
-  const slot=$("#weatherBuddySlot");
-  const mode=slot?.dataset.weatherMode||"sunny";
-  if(BUDDY_DIALOG.weather?.[mode])return BUDDY_DIALOG.weather[mode];
-  if(mode==="teruteru")return BUDDY_DIALOG.weather.sunny;
-  if(mode==="thunder")return BUDDY_DIALOG.weather.rain;
-  if(mode==="snow")return BUDDY_DIALOG.weather.cloudy;
-  return BUDDY_DIALOG.weather.sunny;
+function weatherDialogue(mode){
+  const current=mode||$("#weatherBuddySlot")?.dataset.weatherMode||"sunny";
+  return BUDDY_DIALOG.weather?.[current]||BUDDY_DIALOG.weather.sunny;
+}
+function hideGlobalBuddySpeech(){
+  const bubble=$("#buddySpeechBubble");
+  if(!bubble)return;
+  clearTimeout(showBuddySpeech._t);
+  bubble.classList.remove("show","below");
+}
+function showWeatherBuddySpeech(mode){
+  const bubble=$("#weatherBuddySpeech");
+  if(!bubble)return;
+  const msg=pickLine(weatherDialogue(mode));
+  const main=dialogueText(msg);
+  clearTimeout(showWeatherBuddySpeech._t);
+  bubble.textContent=main;
+  bubble.setAttribute("aria-label",main);
+  bubble.classList.remove("show");
+  void bubble.offsetWidth;
+  bubble.classList.add("show");
+  showWeatherBuddySpeech._t=setTimeout(()=>{
+    bubble.classList.remove("show");
+    setTimeout(()=>{
+      if(!bubble.classList.contains("show")){
+        bubble.textContent="";
+        bubble.removeAttribute("aria-label");
+      }
+    },180);
+  },1900);
 }
 function bookingHasUrgent(){
   if(!TRIP?.bookingTasks?.length)return false;
@@ -1353,7 +1359,7 @@ function updateWeatherBuddy(mode=WEATHER_BUDDY_VARIANTS[weatherBuddyIndex].mode)
   el.className=`weather-buddy-slot buddy-only-art is-${spec.mode}`;
   card?.classList.add("has-weather-buddy");
   el.hidden=false;
-  el.innerHTML=`<button type="button" class="weather-buddy-button buddy-reactable weather-usagi-${spec.mode}" data-weather-switch="1" data-buddy-react="usagi" data-buddy-context="weather" aria-label="切換天氣烏薩奇造型，目前：${spec.label}"><img src="${spec.src}" alt="${spec.alt}"></button>`;
+  el.innerHTML=`<button type="button" class="weather-buddy-button weather-usagi-${spec.mode}" data-weather-switch="1" aria-label="切換天氣烏薩奇造型，目前：${spec.label}"><img src="${spec.src}" alt="${spec.alt}"></button>`;
 }
 function cycleWeatherBuddy(){
   weatherBuddyIndex=(weatherBuddyIndex+1)%WEATHER_BUDDY_VARIANTS.length;
@@ -1361,6 +1367,21 @@ function cycleWeatherBuddy(){
   try{localStorage.setItem(WEATHER_BUDDY_STORAGE_KEY,spec.mode)}catch{}
   updateWeatherBuddy(spec.mode);
   return spec.mode;
+}
+function handleWeatherBuddyTap(){
+  clearTimeout(handleWeatherBuddyTap._speechDelay);
+  const bubble=$("#weatherBuddySpeech");
+  if(bubble){clearTimeout(showWeatherBuddySpeech._t);bubble.classList.remove("show")}
+  hideGlobalBuddySpeech();
+  const mode=cycleWeatherBuddy();
+  const button=$("#weatherBuddySlot [data-weather-switch]");
+  if(button){
+    button.classList.remove("weather-buddy-pop");
+    void button.offsetWidth;
+    button.classList.add("weather-buddy-pop");
+    setTimeout(()=>button.classList.remove("weather-buddy-pop"),360);
+  }
+  handleWeatherBuddyTap._speechDelay=setTimeout(()=>showWeatherBuddySpeech(mode),150);
 }
 function ensureWeatherBuddy(){updateWeatherBuddy(WEATHER_BUDDY_VARIANTS[weatherBuddyIndex].mode);}
 
@@ -2247,7 +2268,7 @@ function bind(){
   if(appBound)return; appBound=true;
   document.addEventListener("click",async e=>{
     const weatherSwitch=e.target.closest("[data-weather-switch]");
-    if(weatherSwitch){cycleWeatherBuddy();const nextWeatherBuddy=$("#weatherBuddySlot [data-weather-switch]");buddyReact("usagi",nextWeatherBuddy||weatherSwitch);return;}
+    if(weatherSwitch){handleWeatherBuddyTap();return;}
     const buddyReaction=e.target.closest("[data-buddy-react]");
     if(buddyReaction){buddyReact(buddyReaction.dataset.buddyReact,buddyReaction);}
     const themeChoice=e.target.closest("[data-theme-choice]");if(themeChoice){setDisplayTheme(themeChoice.dataset.themeChoice);return}
@@ -2278,7 +2299,7 @@ function bind(){
       "./buddy_chill.png?v=430",
       "./buddy_eat.png?v=430"
     ];
-    let heroIndex=0,taps=0,tapTimer=null,holdTriggered=false,swipeIgnoreClick=false;
+    let heroIndex=0,swipeIgnoreClick=false;
     heroGallery.slice(1).forEach(src=>{const p=new Image();p.src=src;if(p.decode)p.decode().catch(()=>{})});
     const syncDots=()=>{$$("#buddyHeroDots [data-hero-index]").forEach((d,i)=>d.classList.toggle("active",i===heroIndex))};
     const setHero=(idx,animate=true)=>{
@@ -2306,13 +2327,9 @@ function bind(){
     },{passive:true});
     heroEgg.addEventListener("pointercancel",()=>{spid=null;swipeIgnoreClick=false},{passive:true});
 
-    const resetTap=()=>{clearTimeout(tapTimer);tapTimer=setTimeout(()=>taps=0,1200)};
+    // Hero tap is intentionally inert: swipe changes artwork, long-press opens the easter egg.
     heroEgg.addEventListener("click",()=>{
-      if(holdTriggered){holdTriggered=false;return}
       if(swipeIgnoreClick)return;
-      const msg=pickLine(BUDDY_DIALOG.duo);
-      animateBuddyMood(heroEgg,"duo",msg);showBuddySpeech(heroEgg,msg,"duo");buddySparkBurst(50,31,"duo");
-      taps++;resetTap();if(taps>=5){taps=0;buddyCelebrate(pickLine(BUDDY_DIALOG.egg),"./buddy_celebrate.png?v=430","duo")}
     });
     const heroHoldEggs=[
       {text:"鴨寶幫，九州出發！",image:"./buddy_celebrate.png?v=430",tone:"duo"},
@@ -2321,7 +2338,7 @@ function bind(){
       {text:"先吃飽再出發！",image:"./purin_clap.png?v=430",tone:"food"},
       {text:"旅行正式開始 ♡",image:"./buddy_hero.png?v=430",tone:"duo"}
     ];
-    bindSafeHold(heroEgg,()=>{holdTriggered=false;const egg=pickLine(heroHoldEggs);buddyCelebrate(egg.text,egg.image,egg.tone)},{ms:760,move:11,allowInteractiveRoot:true});
+    bindSafeHold(heroEgg,()=>{const egg=pickLine(heroHoldEggs);buddyCelebrate(egg.text,egg.image,egg.tone)},{ms:760,move:11,allowInteractiveRoot:true});
     syncDots();
   }
   $("#buddyCelebration")?.addEventListener("click",()=>$("#buddyCelebration").classList.remove("show"));
