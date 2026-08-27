@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.9 Interactive Home Eggs */
+/* Private travel PWA · Firebase Auth gated content · v5.3.10 Egg Stability + Typography Fix */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -1202,13 +1202,20 @@ function buddySparkBurst(x=50,y=45,tone="duo"){
 function buddyCelebrate(text="完成！",image="./buddy_success.png?v=430",tone="duo"){
   if(!isBuddyTheme())return;
   const wrap=$("#buddyCelebration"),img=$("#buddyCelebrateImg"),label=$("#buddyCelebrateText"); if(!wrap)return;
+  // A user-opened home easter egg is modal and persistent. Other buddy celebrations
+  // must never replace its image or text while it is open.
+  if(wrap.dataset.heroEgg==="1"&&wrap.classList.contains("show"))return;
   img.src=image; label.textContent=dialogueText(text); wrap.dataset.tone=tone; wrap.classList.remove("show"); void wrap.offsetWidth; wrap.classList.add("show"); buddySparkBurst(50,42,tone);
   clearTimeout(buddyCelebrate._t); buddyCelebrate._t=setTimeout(()=>{wrap.classList.remove("show");wrap.dataset.tone=""},1450);
 }
 function clearHeroEggInteractive(){
   const hotspots=$("#buddyEggHotspots"),speech=$("#buddyEggSpeech");
   if(hotspots)hotspots.innerHTML="";
-  if(speech){speech.textContent="";speech.classList.remove("show");speech.style.left="";speech.style.top=""}
+  if(speech){
+    speech.textContent="";
+    speech.classList.remove("show","below","is-long","is-xlong");
+    speech.style.left="";speech.style.top="";
+  }
 }
 function closeHeroEgg(){
   const wrap=$("#buddyCelebration"); if(!wrap)return;
@@ -1221,19 +1228,42 @@ function showHeroEggSpeech(scene,charId,button){
   const speech=$("#buddyEggSpeech"),stage=$("#buddyEggStage");
   if(!speech||!stage||!button)return;
   const character=scene.characters?.find(c=>c.id===charId);if(!character)return;
-  speech.textContent=pickLine(character.lines);
+  const line=String(pickLine(character.lines)||"");
+  speech.textContent=line;
+  speech.classList.remove("show","below","is-long","is-xlong");
+  speech.classList.toggle("is-long",line.length>11);
+  speech.classList.toggle("is-xlong",line.length>18);
+  speech.style.left="6px";speech.style.top="6px";
+
+  // Measure the rendered bubble, then clamp it completely inside the 4:3 scene.
+  // Prefer above the tapped character; if there is not enough room, place it below.
+  speech.style.visibility="hidden";
+  speech.style.opacity="0";
+  speech.classList.add("show");
   const br=button.getBoundingClientRect(),sr=stage.getBoundingClientRect();
-  if(!sr.width||!sr.height)return;
-  const x=((br.left+br.width/2-sr.left)/sr.width)*100;
-  const y=((br.top-sr.top)/sr.height)*100;
-  speech.style.left=`${Math.max(18,Math.min(82,x))}%`;
-  speech.style.top=`${Math.max(13,y-1)}%`;
+  const sw=speech.offsetWidth,sh=speech.offsetHeight;
+  if(!sr.width||!sr.height||!sw||!sh){speech.style.visibility="";speech.style.opacity="";return}
+  const gap=8,pad=7;
+  const cx=br.left+br.width/2-sr.left;
+  let left=cx-sw/2;
+  left=Math.max(pad,Math.min(sr.width-sw-pad,left));
+  let top=br.top-sr.top-sh-gap;
+  let below=false;
+  if(top<pad){top=br.bottom-sr.top+gap;below=true}
+  top=Math.max(pad,Math.min(sr.height-sh-pad,top));
+  speech.style.left=`${Math.round(left)}px`;
+  speech.style.top=`${Math.round(top)}px`;
+  speech.classList.toggle("below",below);
+  speech.style.visibility="";
+  speech.style.opacity="";
   speech.classList.remove("show");void speech.offsetWidth;speech.classList.add("show");
 }
 function showHeroEgg(scene){
   if(!isBuddyTheme()||!scene)return;
   const wrap=$("#buddyCelebration"),img=$("#buddyCelebrateImg"),label=$("#buddyCelebrateText"),hotspots=$("#buddyEggHotspots");
   if(!wrap||!img||!label)return;
+  // Once opened, keep exactly the same easter-egg scene until the backdrop closes it.
+  if(wrap.dataset.heroEgg==="1"&&wrap.classList.contains("show"))return;
   clearTimeout(buddyCelebrate._t);
   clearHeroEggInteractive();
   wrap.dataset.heroEgg="1";wrap.dataset.scene=scene.id||"classic";wrap.dataset.tone=scene.tone||"duo";
