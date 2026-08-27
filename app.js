@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.12 Day Buddy Speech Position Fix */
+/* Private travel PWA · Firebase Auth gated content · v5.3.14 Egg Caption Tap + Pending Interaction Fixes */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -1066,7 +1066,6 @@ function flashUsagiVoiceArt(el,msg,context=""){
 const HERO_EGG_POOL=[
   {type:"classic",text:"我們是鴨寶幫！",image:"./duck_gang.png?v=5311",tone:"duo"},
   {type:"classic",text:"我們是海豹幫！",image:"./seal_gang.png?v=5311",tone:"duo"},
-  {type:"classic",text:"旅行正式開始 ♡",image:"./buddy_hero.png?v=430",tone:"duo"},
   {
     type:"scene",id:"sendoff",image:"./egg-sendoff-v539.png?v=539",tone:"duo",
     captions:["要玩得開心喔～","記得拍很多照片回來！","家裡交給我們～","鴨寶幫九州玩得開心！","海豹幫看家 (･∞･ﾐэ )Э"],
@@ -1113,6 +1112,24 @@ function pickLine(list,fallback=""){
   }
   return list[deck.pop()];
 }
+function pickDifferentText(list,current=""){
+  if(!Array.isArray(list)||!list.length)return current;
+  const unique=[...new Set(list.map(x=>String(x??"")).filter(Boolean))];
+  const choices=unique.filter(x=>x!==String(current??""));
+  if(!choices.length)return String(current??unique[0]??"");
+  return choices[Math.floor(Math.random()*choices.length)];
+}
+function cycleHeroEggCaption(scene,label){
+  if(!scene||!label)return;
+  const pool=scene.type==="scene"?scene.captions:[scene.text];
+  const next=pickDifferentText(pool,label.textContent);
+  if(!next||next===label.textContent)return;
+  label.textContent=next;
+  label.classList.remove("caption-swap");
+  void label.offsetWidth;
+  label.classList.add("caption-swap");
+}
+
 function japanHour(){
   try{
     return Number(new Intl.DateTimeFormat("en-US",{timeZone:TRIP?.timezone||"Asia/Tokyo",hour:"2-digit",hourCycle:"h23"}).format(new Date()));
@@ -1144,8 +1161,14 @@ function showBuddySpeech(el,msg,tone="duo"){
 
   bubble.innerHTML=`<span class="buddy-speech-main">${esc(main)}</span>`;
   bubble.setAttribute("aria-label",main);
-  bubble.classList.remove("has-hint","show","below","side-left","side-right");
+  bubble.classList.remove("has-hint","show","below","side-left","side-right","single-line","line-long","line-xlong");
   bubble.dataset.tone=tone||"duo";
+  const isEventBuddy=!!el.classList?.contains('event-buddy');
+  if(isEventBuddy){
+    bubble.classList.add('single-line');
+    if(main.length>24)bubble.classList.add('line-xlong');
+    else if(main.length>17)bubble.classList.add('line-long');
+  }
   bubble.style.left='-9999px';
   bubble.style.top='-9999px';
   bubble.style.visibility='hidden';
@@ -1154,7 +1177,6 @@ function showBuddySpeech(el,msg,tone="duo"){
   const bw=bubble.offsetWidth||190;
   const bh=bubble.offsetHeight||58;
 
-  const isEventBuddy=!!el.classList?.contains('event-buddy');
   if(isEventBuddy){
     const gap=12;
     const spaceLeft=Math.max(0,rect.left-14);
@@ -1192,7 +1214,7 @@ function showBuddySpeech(el,msg,tone="duo"){
   bubble.classList.add('show');
   clearTimeout(showBuddySpeech._t);
   showBuddySpeech._t=setTimeout(()=>{
-    bubble.classList.remove('show','below','side-left','side-right');
+    bubble.classList.remove('show','below','side-left','side-right','single-line','line-long','line-xlong');
     setTimeout(()=>{
       bubble.dataset.tone='';
       bubble.textContent='';
@@ -1262,6 +1284,9 @@ function closeHeroEgg(){
   wrap.classList.remove("show","hero-egg","hero-egg-scene");
   wrap.dataset.heroEgg="";wrap.dataset.scene="";wrap.dataset.tone="";
   clearHeroEggInteractive();
+  const img=$("#buddyCelebrateImg"),stage=$("#buddyEggStage");
+  if(img)img.onclick=null;
+  if(stage)stage.onclick=null;
 }
 function showHeroEggSpeech(scene,charId,button){
   const speech=$("#buddyEggSpeech"),stage=$("#buddyEggStage");
@@ -1299,7 +1324,7 @@ function showHeroEggSpeech(scene,charId,button){
 }
 function showHeroEgg(scene){
   if(!isBuddyTheme()||!scene)return;
-  const wrap=$("#buddyCelebration"),img=$("#buddyCelebrateImg"),label=$("#buddyCelebrateText"),hotspots=$("#buddyEggHotspots");
+  const wrap=$("#buddyCelebration"),img=$("#buddyCelebrateImg"),label=$("#buddyCelebrateText"),hotspots=$("#buddyEggHotspots"),stage=$("#buddyEggStage");
   if(!wrap||!img||!label)return;
   // Once opened, keep exactly the same easter-egg scene until the backdrop closes it.
   if(wrap.dataset.heroEgg==="1"&&wrap.classList.contains("show"))return;
@@ -1310,6 +1335,13 @@ function showHeroEgg(scene){
   wrap.classList.toggle("hero-egg-scene",scene.type==="scene");
   img.src=scene.image;
   label.textContent=scene.type==="scene"?pickLine(scene.captions):dialogueText(scene.text);
+  // Tapping the easter-egg artwork changes only its bottom caption. If there is
+  // only one unique caption, or the candidate would be identical, keep it unchanged.
+  if(img)img.onclick=e=>{e.stopPropagation();cycleHeroEggCaption(scene,label)};
+  if(stage)stage.onclick=e=>{
+    // Empty scene area counts as tapping the artwork; character hotspots stop propagation.
+    if(e.target===stage)cycleHeroEggCaption(scene,label);
+  };
   if(scene.type==="scene"&&hotspots){
     hotspots.innerHTML=(scene.characters||[]).map(c=>{
       const h=c.hotspot||{};
@@ -1589,7 +1621,7 @@ function maybePageSwitchDashEgg(source="view"){
   el.classList.remove("play");
   void el.offsetWidth;
   el.classList.add("play");
-  setTimeout(()=>el.classList.remove("play"),2200);
+  setTimeout(()=>el.classList.remove("play"),3800);
 }
 
 function maybeTripStartEgg(){
@@ -2834,7 +2866,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=5312",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=5314",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });
