@@ -1,11 +1,10 @@
-Kyushu_2026_oct v5.3.12a Black Background Hotfix
+Kyushu_2026_oct v5.3.12b Transparent Asset Fix
 
-說明：
-- 修正首頁長按彩蛋中的兩張新圖背景為透明，不再顯示黑底。
-- 這是熱修復包，只需要覆蓋以下兩個檔案：
-  - duck_gang.png
-  - seal_gang.png
+修正：
+- 重新從使用者原始圖片製作 duck_gang.png / seal_gang.png。
+- 只移除與畫面邊界連通的黑色背景。
+- 保留角色本體內的黑色眼睛、五官與深色線條。
 
-適用版本：
-- 已經套用 v5.3.11 / v5.3.12 / v5.3.12 cumulative 的版本。
-- 若你目前畫面只有這兩張圖有黑底，直接覆蓋即可。
+請覆蓋：
+- duck_gang.png
+- seal_gang.png
