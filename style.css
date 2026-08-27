@@ -2950,3 +2950,36 @@ html[data-theme="buddy"] .buddy-speech-bubble[data-tone="voice"] .buddy-speech-m
   }
   html[data-theme="buddy"] .buddy-speech-hint{font-size:10px}
 }
+
+
+/* =========================================================
+   v5.3.6 — Manual Weather Buddy
+   Decorative weather Usagi: tap cycles artwork; forecast never changes mascot.
+   Character bubbles show character dialogue only (no app-hint subtitle).
+   ========================================================= */
+html[data-theme="buddy"] .buddy-speech-hint{display:none!important}
+html[data-theme="buddy"] .buddy-speech-bubble.has-hint{padding:9px 12px!important;max-width:min(220px,calc(100vw - 24px))!important}
+html[data-theme="buddy"] .weather-buddy-button{width:96px!important;height:114px!important}
+html[data-theme="buddy"] .weather-usagi-sunny img{width:88px!important;height:108px!important;object-fit:contain!important}
+html[data-theme="buddy"] .weather-usagi-teruteru img{width:82px!important;height:109px!important;object-fit:contain!important;animation:buddyTeruSway 3.1s ease-in-out infinite}
+html[data-theme="buddy"] .weather-usagi-cloudy img{width:94px!important;height:110px!important;object-fit:contain!important}
+html[data-theme="buddy"] .weather-usagi-thunder img{width:90px!important;height:108px!important;object-fit:contain!important;animation:buddyThunderBob 2.1s ease-in-out infinite}
+html[data-theme="buddy"] .weather-usagi-snow img{width:88px!important;height:108px!important;object-fit:contain!important;animation:buddySnowFloat 3s ease-in-out infinite}
+html[data-theme="buddy"] .weather-usagi-rain img{width:78px!important;height:108px!important;object-fit:contain!important}
+@keyframes buddyTeruSway{0%,100%{transform:rotate(-1.5deg)}50%{transform:translateY(-3px) rotate(1.5deg)}}
+@keyframes buddyThunderBob{0%,100%{transform:translateY(0)}45%{transform:translateY(-2px) rotate(-.8deg)}55%{transform:translateY(-1px) rotate(.8deg)}}
+@keyframes buddySnowFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@media(max-width:520px){
+  html[data-theme="buddy"] .weather-buddy-button{width:82px!important;height:103px!important}
+  html[data-theme="buddy"] .weather-usagi-sunny img{width:76px!important;height:97px!important}
+  html[data-theme="buddy"] .weather-usagi-teruteru img{width:72px!important;height:98px!important}
+  html[data-theme="buddy"] .weather-usagi-cloudy img{width:80px!important;height:99px!important}
+  html[data-theme="buddy"] .weather-usagi-thunder img{width:78px!important;height:97px!important}
+  html[data-theme="buddy"] .weather-usagi-snow img{width:76px!important;height:97px!important}
+  html[data-theme="buddy"] .weather-usagi-rain img{width:70px!important;height:99px!important}
+}
+@media(prefers-reduced-motion:reduce){
+  html[data-theme="buddy"] .weather-usagi-teruteru img,
+  html[data-theme="buddy"] .weather-usagi-thunder img,
+  html[data-theme="buddy"] .weather-usagi-snow img{animation:none!important}
+}

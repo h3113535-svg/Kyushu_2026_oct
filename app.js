@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.5 Character Voice Pass */
+/* Private travel PWA · Firebase Auth gated content · v5.3.6 Manual Weather Buddy */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -20,7 +20,7 @@ const GUIDE_DEVICE_ID_KEY = "kyushu-private:guide-device-id";
 const BUDDY_FAST_ASSETS=[
   "./day-scene-v52-01.webp?v=520","./day-scene-v52-02.webp?v=520","./day-scene-v52-03.webp?v=520","./day-scene-v52-04.webp?v=520","./day-scene-v52-05.webp?v=520",
   "./day-scene-v52-06.webp?v=520","./day-scene-v52-07.webp?v=520","./day-scene-v52-08.webp?v=520","./day-scene-v52-09.webp?v=520","./day-scene-v52-10.webp?v=520",
-  "./weather-rain-usagi-v47.webp?v=470","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
+  "./weather-rain-usagi-v47.webp?v=470","./weather-sunny-usagi-v536.webp?v=536","./weather-teruteru-usagi-v536.webp?v=536","./weather-cloudy-usagi-v536.webp?v=536","./weather-thunder-usagi-v536.webp?v=536","./weather-snow-usagi-v536.webp?v=536","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
   "./ui-cloud.webp?v=440","./ui-coffee.webp?v=440","./ui-suitcase.webp?v=440","./ui-purin-tip.webp?v=440"
 ];
 const buddyFastImageCache=[];
@@ -190,7 +190,7 @@ function initialDay(){
   return idx>=0?idx:0;
 }
 
-const VO=(text,hint="")=>({text,hint});
+const VO=(text)=>({text});
 const BUDDY_DIALOG={
   "purin":[
     "一起慢慢走吧～",
@@ -310,6 +310,27 @@ const BUDDY_DIALOG={
       VO("呀哈呀哈！","體感舒服的話，戶外段可以多留一點時間。"),
       VO("哼？","雲層變厚時再看看即時降雨。"),
       VO("嗚啦——！","今天就用柔和光線好好拍。")
+    ],
+    "thunder":[
+      VO("蛤？！"),
+      VO("嗚拉！！"),
+      VO("噗嚕……"),
+      VO("哼～？"),
+      VO("嗚啦——！！")
+    ],
+    "snow":[
+      VO("呀哈！"),
+      VO("噗嚕！"),
+      VO("嗚拉！"),
+      VO("哼～？"),
+      VO("呀哈呀哈！")
+    ],
+    "teruteru":[
+      VO("呀哈——！"),
+      VO("嗚拉！"),
+      VO("噗嚕♪"),
+      VO("呀哈呀哈！"),
+      VO("嗚拉呀哈！")
     ],
     "unknown":[
       VO("噗嚕……","還沒進入可靠預報範圍，先別把這個當正式天氣。"),
@@ -1101,10 +1122,9 @@ function showBuddySpeech(el,msg,tone="duo"){
   const x=Math.max(12+safeHalf,Math.min(vw-12-safeHalf,center));
   const below=rect.top<132;
   const main=dialogueText(msg);
-  const hint=dialogueHint(msg);
-  bubble.innerHTML=`<span class="buddy-speech-main">${esc(main)}</span>${hint?`<span class="buddy-speech-hint">${esc(hint)}</span>`:""}`;
-  bubble.setAttribute("aria-label",[main,hint].filter(Boolean).join("。"));
-  bubble.classList.toggle("has-hint",!!hint);
+  bubble.innerHTML=`<span class="buddy-speech-main">${esc(main)}</span>`;
+  bubble.setAttribute("aria-label",main);
+  bubble.classList.remove("has-hint");
   bubble.dataset.tone=tone||"duo";
   bubble.classList.remove("show","below");
   bubble.style.left=`${x}px`;
@@ -1117,11 +1137,10 @@ function showBuddySpeech(el,msg,tone="duo"){
     bubble.classList.remove("show","below");
     setTimeout(()=>{
       bubble.dataset.tone="";
-      bubble.classList.remove("has-hint");
       bubble.textContent="";
       bubble.removeAttribute("aria-label");
     },180);
-  },hint?4200:3000);
+  },3000);
 }
 function buddyMoodFor(kind,msg=""){
   const text=dialogueText(msg);
@@ -1181,11 +1200,12 @@ function inferBuddyContext(el){
 }
 function weatherDialogue(){
   const slot=$("#weatherBuddySlot");
-  const mode=slot?.dataset.weatherMode||"unknown";
-  if(mode==="rain")return BUDDY_DIALOG.weather.rain;
-  if(mode==="sunny")return BUDDY_DIALOG.weather.sunny;
-  if(mode==="cloudy")return BUDDY_DIALOG.weather.cloudy;
-  return BUDDY_DIALOG.weather.unknown;
+  const mode=slot?.dataset.weatherMode||"sunny";
+  if(BUDDY_DIALOG.weather?.[mode])return BUDDY_DIALOG.weather[mode];
+  if(mode==="teruteru")return BUDDY_DIALOG.weather.sunny;
+  if(mode==="thunder")return BUDDY_DIALOG.weather.rain;
+  if(mode==="snow")return BUDDY_DIALOG.weather.cloudy;
+  return BUDDY_DIALOG.weather.sunny;
 }
 function bookingHasUrgent(){
   if(!TRIP?.bookingTasks?.length)return false;
@@ -1308,29 +1328,41 @@ function renderDailyScene(){
 }
 
 
-function updateWeatherBuddy(mode="unknown"){
+const WEATHER_BUDDY_STORAGE_KEY="kyushu-private:weather-buddy-mode";
+const WEATHER_BUDDY_VARIANTS=[
+  {mode:"sunny",src:"./weather-sunny-usagi-v536.webp?v=536",alt:"晴天烏薩奇",label:"晴天"},
+  {mode:"teruteru",src:"./weather-teruteru-usagi-v536.webp?v=536",alt:"晴天娃娃烏薩奇",label:"晴天娃娃"},
+  {mode:"cloudy",src:"./weather-cloudy-usagi-v536.webp?v=536",alt:"陰天烏薩奇",label:"陰天"},
+  {mode:"rain",src:"./weather-rain-usagi-v47.webp?v=470",alt:"穿雨衣的烏薩奇",label:"雨天"},
+  {mode:"thunder",src:"./weather-thunder-usagi-v536.webp?v=536",alt:"雷雨烏薩奇",label:"雷雨"},
+  {mode:"snow",src:"./weather-snow-usagi-v536.webp?v=536",alt:"雪天烏薩奇",label:"雪天"}
+];
+let weatherBuddyIndex=0;
+try{
+  const saved=localStorage.getItem(WEATHER_BUDDY_STORAGE_KEY);
+  const idx=WEATHER_BUDDY_VARIANTS.findIndex(v=>v.mode===saved);
+  if(idx>=0)weatherBuddyIndex=idx;
+}catch{}
+function updateWeatherBuddy(mode=WEATHER_BUDDY_VARIANTS[weatherBuddyIndex].mode){
   const el=$("#weatherBuddySlot"), card=$("#weatherCard"); if(!el)return;
-  const allowed=["rain","sunny","cloudy","unknown"];
-  if(!allowed.includes(mode))mode="unknown";
-  el.dataset.weatherMode=mode;
-  el.classList.toggle("is-rain",mode==="rain");
-  el.classList.toggle("is-sunny",mode==="sunny");
-  el.classList.toggle("is-cloudy",mode==="cloudy");
-  card?.classList.toggle("has-weather-buddy",mode!=="unknown");
-  if(mode==="unknown"){
-    el.innerHTML="";el.hidden=true;return;
-  }
+  let idx=WEATHER_BUDDY_VARIANTS.findIndex(v=>v.mode===mode);
+  if(idx<0)idx=0;
+  weatherBuddyIndex=idx;
+  const spec=WEATHER_BUDDY_VARIANTS[idx];
+  el.dataset.weatherMode=spec.mode;
+  el.className=`weather-buddy-slot buddy-only-art is-${spec.mode}`;
+  card?.classList.add("has-weather-buddy");
   el.hidden=false;
-  const sunnyPool=["./usagi_stars.png?v=430","./usagi_excited.png?v=430","./usagi_point.png?v=430"];
-  const cloudyPool=["./usagi_think.png?v=430","./usagi_sticker.png?v=430","./usagi_peek.png?v=430"];
-  const spec=mode==="rain"
-    ? {src:"./weather-rain-usagi-v47.webp?v=470",alt:"穿雨衣的烏薩奇"}
-    : mode==="sunny"
-      ? {src:sunnyPool[state.dayIndex%sunnyPool.length],alt:"晴天烏薩奇"}
-      : {src:cloudyPool[state.dayIndex%cloudyPool.length],alt:"陰天烏薩奇"};
-  el.innerHTML=`<button type="button" class="weather-buddy-button buddy-reactable weather-usagi-${mode}" data-buddy-react="usagi" data-buddy-context="weather" aria-label="點烏薩奇看天氣反應"><img src="${spec.src}" alt="${spec.alt}"></button>`;
+  el.innerHTML=`<button type="button" class="weather-buddy-button buddy-reactable weather-usagi-${spec.mode}" data-weather-switch="1" data-buddy-react="usagi" data-buddy-context="weather" aria-label="切換天氣烏薩奇造型，目前：${spec.label}"><img src="${spec.src}" alt="${spec.alt}"></button>`;
 }
-
+function cycleWeatherBuddy(){
+  weatherBuddyIndex=(weatherBuddyIndex+1)%WEATHER_BUDDY_VARIANTS.length;
+  const spec=WEATHER_BUDDY_VARIANTS[weatherBuddyIndex];
+  try{localStorage.setItem(WEATHER_BUDDY_STORAGE_KEY,spec.mode)}catch{}
+  updateWeatherBuddy(spec.mode);
+  return spec.mode;
+}
+function ensureWeatherBuddy(){updateWeatherBuddy(WEATHER_BUDDY_VARIANTS[weatherBuddyIndex].mode);}
 
 function localDateKey(){ return japanToday(); }
 function maybePurinWalkEgg(){
@@ -1937,28 +1969,33 @@ async function renderWeather(d){
   $("#weatherLocation").textContent=d.location+" · "+d.shortDate;
   $("#weatherTemp").textContent="載入中";
   $("#weatherDesc").textContent="正在取得旅行日期預報";
-  $("#weatherIcon").textContent="☁️";$("#rainBox").innerHTML=""; updateWeatherBuddy("unknown");
+  $("#weatherIcon").textContent="☁️";$("#rainBox").innerHTML=""; ensureWeatherBuddy();
+  if(typeof getWeather!=="function"){
+    $("#weatherTemp").textContent="—";
+    $("#weatherDesc").textContent="尚未進入預報範圍";
+    $("#rainBox").textContent="接近旅行日期後再顯示正式天氣資料。";
+    card.classList.remove("skeleton");
+    return;
+  }
   try{
     const w=await getWeather(d);
     if(w.state!=="forecast"){
       $("#weatherTemp").textContent="—";
       $("#weatherDesc").textContent=w.message;
-      $("#rainBox").innerHTML="進入預報範圍後，這裡會顯示高低溫、降雨機率與預計下雨時段。"; updateWeatherBuddy("unknown");
+      $("#rainBox").innerHTML="進入預報範圍後，這裡會顯示高低溫、降雨機率與預計下雨時段。";
     }else{
       $("#weatherIcon").textContent=w.icon;
       $("#weatherTemp").textContent=w.current!==null?`${w.current}° · ${w.high}° / ${w.low}°`:`${w.high}° / ${w.low}°`;
       $("#weatherDesc").textContent=`${w.desc} · 全日最高降雨機率 ${w.rainMax}%`;
       if(w.rainGroups.length){
-        $("#rainBox").innerHTML=w.rainGroups.slice(0,2).map(g=>`<div class="rain-alert">🌧️ 預計 ${g.start}–${g.end} 有雨 · 最高 ${g.maxProb}%</div>`).join(""); updateWeatherBuddy("rain");
+        $("#rainBox").innerHTML=w.rainGroups.slice(0,2).map(g=>`<div class="rain-alert">🌧️ 預計 ${g.start}–${g.end} 有雨 · 最高 ${g.maxProb}%</div>`).join("");
       }else {
         $("#rainBox").innerHTML="☂️ 目前預報沒有明顯連續降雨時段。";
-        const weatherText=`${w.icon||""} ${w.desc||""}`;
-        updateWeatherBuddy(/☀|晴|sun|clear/i.test(weatherText)?"sunny":"cloudy");
       }
     }
   }catch(e){
     $("#weatherTemp").textContent="—";$("#weatherDesc").textContent="天氣暫時無法更新";
-    $("#rainBox").textContent="保留上次行程資料；網路恢復後重新切換日期即可再抓。"; updateWeatherBuddy("unknown");
+    $("#rainBox").textContent="保留上次行程資料；網路恢復後重新切換日期即可再抓。";
   }finally{card.classList.remove("skeleton")}
 }
 
@@ -2209,6 +2246,8 @@ function setFontSize(size){
 function bind(){
   if(appBound)return; appBound=true;
   document.addEventListener("click",async e=>{
+    const weatherSwitch=e.target.closest("[data-weather-switch]");
+    if(weatherSwitch){cycleWeatherBuddy();const nextWeatherBuddy=$("#weatherBuddySlot [data-weather-switch]");buddyReact("usagi",nextWeatherBuddy||weatherSwitch);return;}
     const buddyReaction=e.target.closest("[data-buddy-react]");
     if(buddyReaction){buddyReact(buddyReaction.dataset.buddyReact,buddyReaction);}
     const themeChoice=e.target.closest("[data-theme-choice]");if(themeChoice){setDisplayTheme(themeChoice.dataset.themeChoice);return}

@@ -1,9 +1,10 @@
-const CACHE = "kyushu-private-v5.3.5";
+const CACHE = "kyushu-private-v5.3.6";
 const SHELL = [
-  "./","./index.html","./style.css?v=534","./app.js?v=534",
+  "./","./index.html","./style.css?v=536","./app.js?v=536",
   "./manifest.json","./firebase-config.js?v=430","./icon-192.png","./icon-512.png","./hero-cover-v51.webp?v=510",
   "./buddy_hero.png","./buddy_celebrate.png","./buddy_chill.png","./buddy_eat.png","./buddy_success.png",
   "./purin_peek_edge.png","./purin_walk.png","./usagi_peek.png","./usagi_dash.png","./usagi_success.png","./usagi_weather.png","./weather-rain-usagi-v47.webp",
+  "./weather-sunny-usagi-v536.webp","./weather-teruteru-usagi-v536.webp","./weather-cloudy-usagi-v536.webp","./weather-thunder-usagi-v536.webp","./weather-snow-usagi-v536.webp",
   "./travel_shopping.png","./travel_ticket.png",
   "./daily-d1.webp","./daily-d2.webp","./daily-d3.webp","./daily-d4.webp","./daily-d5.webp",
   "./daily-d6.webp","./daily-d7.webp","./daily-d8.webp","./daily-d9.webp","./daily-d10.webp",
@@ -23,6 +24,7 @@ const SHELL = [
   "./day-scene-v52-09.webp?v=520",
   "./day-scene-v52-10.webp?v=520",
   "./weather-rain-usagi-v47.webp?v=470",
+  "./weather-sunny-usagi-v536.webp?v=536","./weather-teruteru-usagi-v536.webp?v=536","./weather-cloudy-usagi-v536.webp?v=536","./weather-thunder-usagi-v536.webp?v=536","./weather-snow-usagi-v536.webp?v=536",
   "./booking-check-purin.webp?v=460",
   "./booking-dash-usagi.webp?v=460",
   "./hotel-return-duo.webp?v=460"];
