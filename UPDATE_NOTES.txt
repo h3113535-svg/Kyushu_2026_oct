@@ -1,0 +1,13 @@
+v5.3.17 Secret Life Expansion — Update Only
+
+Upload/overwrite the included code files and add the 5 new WebP assets.
+Do NOT upload the original 9909.png / 9908.png / 9907.png / 9906.png / 9904.png source files.
+
+New WebP assets:
+- secret-life-hide-and-seek.webp
+- secret-life-pillow-fight.webp
+- secret-life-ditto-usagi.webp
+- secret-life-block-building.webp
+- secret-life-olaf-bed.webp
+
+Secret Life now contains 11 images total.

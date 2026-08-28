@@ -53,3 +53,10 @@
 - Secret Life 相簿由 4 張調整為 6 張；保留原有「想一起去旅行」、「歡迎回來」、「半夜偷吃零食」。
 - 6 張 Secret Life 圖片全部改為 WebP，並縮至最大寬 1280px、品質 84，以降低 GitHub / PWA 儲存與傳輸容量。
 - Secret Life 圖片仍不放入 Service Worker 的 SHELL 初始預快取；首次首頁長按成功後才背景預載。
+
+更新：v5.3.17 Secret Life Expansion
+- Secret Life 相簿新增 5 張：躲貓貓、枕頭大戰、百變怪假裝烏薩奇、堆積木（百變怪變妙蛙種子用藤蔓幫忙）、Olaf 霸床。
+- 相簿由 6 張擴充為 11 張；原有 6 張順序與內容維持。
+- 新增圖片全部轉為 WebP，最大寬 1280px、品質 80；不將來源 PNG 放入網站。
+- 5 張新增 WebP 合計約 400 KB，Secret Life 仍只在首頁 Hero 長按成功後背景預載，並維持 2 張並行預載。
+- Service Worker SHELL 仍不預快取 Secret Life 圖片，避免增加 App 初次開啟流量。
