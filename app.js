@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.14 Egg Caption Tap + Pending Interaction Fixes */
+/* Private travel PWA · Firebase Auth gated content · v5.3.15 Secret Life Entry Preview */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -1095,6 +1095,66 @@ const HERO_EGG_POOL=[
   }
 ];
 
+const SECRET_LIFE_SCENES=[
+  {id:"want-to-travel",image:"./secret-life-want-to-travel.png?v=5315",alt:"大家偷偷準備行李，也想一起去旅行"},
+  {id:"nap",image:"./secret-life-nap.png?v=5315",alt:"主人不在家時，大家一起在客廳補眠"},
+  {id:"welcome-home",image:"./secret-life-welcome-home.png?v=5315",alt:"大家準備迎接旅行回來的旅伴"},
+  {id:"midnight-snack",image:"./secret-life-midnight-snack.png?v=5315",alt:"深夜大家偷偷拿零食吃"}
+];
+let secretLifeIndex=0;
+let secretLifePreloadPromise=null;
+let secretLifeSwipeIgnoreClick=false;
+
+function preloadSecretLifeAssets(concurrency=2){
+  if(secretLifePreloadPromise)return secretLifePreloadPromise;
+  const queue=SECRET_LIFE_SCENES.map(scene=>scene.image);
+  let cursor=0;
+  const worker=()=>new Promise(resolve=>{
+    const next=()=>{
+      if(cursor>=queue.length){resolve();return}
+      const src=queue[cursor++];
+      const image=new Image();
+      image.onload=image.onerror=next;
+      image.src=src;
+    };
+    next();
+  });
+  secretLifePreloadPromise=Promise.all(
+    Array.from({length:Math.min(Math.max(1,concurrency),queue.length)},worker)
+  ).catch(()=>{});
+  return secretLifePreloadPromise;
+}
+function renderSecretLifeScene(index=secretLifeIndex,animate=true){
+  const img=$("#secretLifeImg"),counter=$("#secretLifeCounter");
+  if(!img||!SECRET_LIFE_SCENES.length)return;
+  secretLifeIndex=(index+SECRET_LIFE_SCENES.length)%SECRET_LIFE_SCENES.length;
+  const scene=SECRET_LIFE_SCENES[secretLifeIndex];
+  if(animate){
+    img.classList.remove("swap");
+    void img.offsetWidth;
+  }
+  img.src=scene.image;
+  img.alt=scene.alt||"主人不在家的秘密生活";
+  if(animate)img.classList.add("swap");
+  if(counter)counter.textContent=`${secretLifeIndex+1} / ${SECRET_LIFE_SCENES.length}`;
+}
+function openSecretLifeAlbum(){
+  if(!isBuddyTheme()||!SECRET_LIFE_SCENES.length)return;
+  preloadSecretLifeAssets();
+  const album=$("#secretLifeAlbum");if(!album)return;
+  renderSecretLifeScene(secretLifeIndex,false);
+  album.setAttribute("aria-hidden","false");
+  album.classList.remove("show");void album.offsetWidth;album.classList.add("show");
+}
+function closeSecretLifeAlbum(){
+  const album=$("#secretLifeAlbum");if(!album)return;
+  album.classList.remove("show");
+  album.setAttribute("aria-hidden","true");
+}
+function moveSecretLife(step=1){
+  renderSecretLifeScene(secretLifeIndex+step,true);
+}
+
 const PAGE_SWITCH_DASH_EGG_CHANCE=0.12;
 const PAGE_SWITCH_DASH_EGG_COOLDOWN=4*60*1000;
 
@@ -1279,6 +1339,7 @@ function clearHeroEggInteractive(){
   }
 }
 function closeHeroEgg(){
+  closeSecretLifeAlbum();
   const wrap=$("#buddyCelebration"); if(!wrap)return;
   clearTimeout(buddyCelebrate._t);
   wrap.classList.remove("show","hero-egg","hero-egg-scene");
@@ -2542,8 +2603,34 @@ function bind(){
     heroEgg.addEventListener("click",()=>{
       if(swipeIgnoreClick)return;
     });
-    bindSafeHold(heroEgg,()=>showHeroEgg(pickLine(HERO_EGG_POOL)),{ms:760,move:11,allowInteractiveRoot:true});
+    bindSafeHold(heroEgg,()=>{preloadSecretLifeAssets();showHeroEgg(pickLine(HERO_EGG_POOL))},{ms:760,move:11,allowInteractiveRoot:true});
     syncDots();
+  }
+  $("#secretLifeEntry")?.addEventListener("click",e=>{e.stopPropagation();openSecretLifeAlbum()});
+  $("#secretLifeClose")?.addEventListener("click",e=>{e.stopPropagation();closeSecretLifeAlbum()});
+  $("#secretLifePrev")?.addEventListener("click",e=>{e.stopPropagation();moveSecretLife(-1)});
+  $("#secretLifeNext")?.addEventListener("click",e=>{e.stopPropagation();moveSecretLife(1)});
+  $("#secretLifeImg")?.addEventListener("click",e=>{
+    e.stopPropagation();
+    if(secretLifeSwipeIgnoreClick)return;
+    moveSecretLife(1);
+  });
+  $("#secretLifeAlbum")?.addEventListener("click",e=>{if(e.target===e.currentTarget)closeSecretLifeAlbum()});
+  const secretStage=$("#secretLifeStage");
+  if(secretStage){
+    let ssx=0,ssy=0,spointer=null;
+    secretStage.addEventListener("pointerdown",e=>{if(e.button!==undefined&&e.button!==0)return;ssx=e.clientX;ssy=e.clientY;spointer=e.pointerId},{passive:true});
+    secretStage.addEventListener("pointerup",e=>{
+      if(spointer!==e.pointerId)return;
+      const dx=e.clientX-ssx,dy=e.clientY-ssy;spointer=null;
+      if(Math.abs(dx)>=42&&Math.abs(dx)>Math.abs(dy)*1.15){
+        secretLifeSwipeIgnoreClick=true;
+        moveSecretLife(dx<0?1:-1);
+        try{navigator.vibrate?.(8)}catch{}
+        setTimeout(()=>{secretLifeSwipeIgnoreClick=false},360);
+      }
+    },{passive:true});
+    secretStage.addEventListener("pointercancel",()=>{spointer=null},{passive:true});
   }
   $("#buddyCelebration")?.addEventListener("click",e=>{
     const wrap=e.currentTarget;
@@ -2866,7 +2953,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=5314",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=5315",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });

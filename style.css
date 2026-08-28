@@ -1907,6 +1907,174 @@ html[data-theme="buddy"] .buddy-spark-layer.play i{animation:buddySpark 1s ease-
   html[data-theme="buddy"] .buddy-celebration.hero-egg-scene #buddyCelebrateText{padding:7px 7px 0;font-size:13px;line-height:1.32}
 }
 
+
+/* v5.3.15 · Secret Life second-level album */
+.secret-life-album{display:none}
+html[data-theme="buddy"] .secret-life-entry{
+  display:none;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  width:max-content;
+  max-width:calc(100% - 24px);
+  margin:9px auto 0;
+  padding:7px 13px;
+  border:1px solid rgba(183,135,83,.33);
+  border-radius:999px;
+  background:rgba(255,248,232,.92);
+  color:#714832;
+  box-shadow:0 5px 13px rgba(78,59,40,.08);
+  font-weight:850;
+  font-size:12.5px;
+  line-height:1;
+  -webkit-tap-highlight-color:transparent
+}
+html[data-theme="buddy"] .buddy-celebration.hero-egg .secret-life-entry{display:inline-flex}
+html[data-theme="buddy"] .secret-life-entry:active{transform:scale(.97)}
+
+html[data-theme="buddy"] .secret-life-album{
+  position:fixed;
+  inset:0;
+  z-index:150;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:max(16px,env(safe-area-inset-top)) 10px max(16px,env(safe-area-inset-bottom));
+  background:rgba(62,48,37,.20);
+  backdrop-filter:blur(5px);
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  transition:opacity .18s ease,visibility .18s ease
+}
+html[data-theme="buddy"] .secret-life-album.show{opacity:1;visibility:visible;pointer-events:auto}
+html[data-theme="buddy"] .secret-life-card{
+  position:relative;
+  width:min(94vw,720px);
+  max-height:calc(100dvh - 30px);
+  overflow:auto;
+  padding:13px 13px 11px;
+  border:1px solid rgba(224,190,130,.86);
+  border-radius:25px;
+  background:rgba(255,253,247,.985);
+  box-shadow:0 24px 65px rgba(67,49,35,.25);
+  text-align:center;
+  transform:translateY(8px) scale(.985);
+  transition:transform .2s ease
+}
+html[data-theme="buddy"] .secret-life-album.show .secret-life-card{transform:translateY(0) scale(1)}
+html[data-theme="buddy"] .secret-life-close{
+  position:absolute;
+  z-index:6;
+  top:8px;
+  right:9px;
+  width:34px;
+  height:34px;
+  padding:0;
+  border:1px solid rgba(177,133,88,.25);
+  border-radius:999px;
+  background:rgba(255,253,247,.92);
+  color:#72503d;
+  box-shadow:0 4px 12px rgba(65,48,34,.10);
+  font-size:24px;
+  line-height:30px
+}
+html[data-theme="buddy"] .secret-life-kicker{
+  margin-top:1px;
+  color:#B48155;
+  font-size:9.5px;
+  line-height:1.15;
+  font-weight:900;
+  letter-spacing:.18em
+}
+html[data-theme="buddy"] .secret-life-title{
+  margin:3px 38px 10px;
+  color:#6C4633;
+  font-size:16px;
+  line-height:1.25;
+  font-weight:950;
+  letter-spacing:.02em
+}
+html[data-theme="buddy"] .secret-life-stage{
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:100%;
+  min-height:220px;
+  max-height:72dvh;
+  overflow:hidden;
+  border-radius:18px;
+  background:#F8EEDC;
+  touch-action:pan-y
+}
+html[data-theme="buddy"] .secret-life-stage>img{
+  display:block;
+  width:100%;
+  height:auto;
+  max-height:72dvh;
+  object-fit:contain;
+  border-radius:18px;
+  user-select:none;
+  -webkit-user-drag:none;
+  cursor:pointer
+}
+html[data-theme="buddy"] .secret-life-stage>img.swap{animation:secretLifeSwap .24s ease both}
+@keyframes secretLifeSwap{0%{opacity:.45;transform:scale(.99)}100%{opacity:1;transform:scale(1)}}
+html[data-theme="buddy"] .secret-life-nav{
+  position:absolute;
+  z-index:5;
+  top:50%;
+  width:38px;
+  height:46px;
+  margin-top:-23px;
+  padding:0;
+  border:0;
+  border-radius:999px;
+  background:rgba(255,253,247,.82);
+  color:#714832;
+  box-shadow:0 6px 16px rgba(65,48,34,.12);
+  font-size:32px;
+  line-height:42px;
+  font-weight:700;
+  -webkit-tap-highlight-color:transparent
+}
+html[data-theme="buddy"] .secret-life-prev{left:8px}
+html[data-theme="buddy"] .secret-life-next{right:8px}
+html[data-theme="buddy"] .secret-life-nav:active{transform:scale(.94)}
+html[data-theme="buddy"] .secret-life-footer{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  min-height:28px;
+  padding:7px 4px 0;
+  color:#9A735B;
+  font-size:11.5px;
+  font-weight:800
+}
+html[data-theme="buddy"] .secret-life-counter{
+  min-width:46px;
+  padding:4px 8px;
+  border-radius:999px;
+  background:#F7E8C9;
+  color:#714832;
+  font-variant-numeric:tabular-nums
+}
+html[data-theme="buddy"] .secret-life-hint{opacity:.76}
+
+@media (max-width:430px){
+  html[data-theme="buddy"] .secret-life-card{width:min(96vw,410px);padding:10px 9px 9px;border-radius:21px}
+  html[data-theme="buddy"] .secret-life-title{margin:3px 34px 8px;font-size:14px}
+  html[data-theme="buddy"] .secret-life-close{top:6px;right:6px;width:32px;height:32px;font-size:22px;line-height:28px}
+  html[data-theme="buddy"] .secret-life-stage{min-height:190px;max-height:68dvh;border-radius:15px}
+  html[data-theme="buddy"] .secret-life-stage>img{max-height:68dvh;border-radius:15px}
+  html[data-theme="buddy"] .secret-life-nav{width:34px;height:42px;margin-top:-21px;font-size:28px;line-height:38px}
+  html[data-theme="buddy"] .secret-life-prev{left:6px}
+  html[data-theme="buddy"] .secret-life-next{right:6px}
+  html[data-theme="buddy"] .secret-life-footer{gap:8px;font-size:10.8px}
+}
+
 /* Soft motion accessibility */
 @media (prefers-reduced-motion:reduce){html[data-theme="buddy"] *{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}
 @media (max-width:430px){

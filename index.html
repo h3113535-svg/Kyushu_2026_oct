@@ -16,9 +16,9 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=5314" />
+  <link rel="stylesheet" href="./style.css?v=5315" />
   <title>私人旅程</title>
-  <meta name="app-version" content="5.3.10" />
+  <meta name="app-version" content="5.3.15" />
   <link rel="preload" as="image" href="./day-scene-v52-01.webp?v=520" fetchpriority="high">
 </head>
 <body>
@@ -320,6 +320,24 @@
         <div id="buddyEggSpeech" class="buddy-egg-speech" role="status" aria-live="polite"></div>
       </div>
       <div id="buddyCelebrateText">完成！</div>
+      <button type="button" id="secretLifeEntry" class="secret-life-entry" aria-label="打開主人不在家的秘密生活">🏠 偷偷看家裡</button>
+    </div>
+  </div>
+
+  <div id="secretLifeAlbum" class="secret-life-album buddy-only-art" aria-hidden="true">
+    <div class="secret-life-card" role="dialog" aria-modal="true" aria-labelledby="secretLifeTitle">
+      <button type="button" id="secretLifeClose" class="secret-life-close" aria-label="返回彩蛋">×</button>
+      <div class="secret-life-kicker">SECRET LIFE</div>
+      <div id="secretLifeTitle" class="secret-life-title">主人不在家的秘密生活</div>
+      <div id="secretLifeStage" class="secret-life-stage">
+        <img id="secretLifeImg" src="./secret-life-want-to-travel.png?v=5315" alt="主人不在家的秘密生活">
+        <button type="button" id="secretLifePrev" class="secret-life-nav secret-life-prev" aria-label="上一張">‹</button>
+        <button type="button" id="secretLifeNext" class="secret-life-nav secret-life-next" aria-label="下一張">›</button>
+      </div>
+      <div class="secret-life-footer">
+        <span id="secretLifeCounter" class="secret-life-counter">1 / 4</span>
+        <span class="secret-life-hint">點圖片切換下一張</span>
+      </div>
     </div>
   </div>
   <div id="buddySparkLayer" class="buddy-spark-layer buddy-only-art" aria-hidden="true"></div>
@@ -330,6 +348,6 @@
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=430"></script>
-  <script defer src="./app.js?v=5314"></script>
+  <script defer src="./app.js?v=5315"></script>
 </body>
 </html>
