@@ -1,0 +1,5 @@
+GitHub 更新完成後可刪除以下舊檔，以確實節省 repo 容量：
+
+secret-life-welcome-home.webp
+
+v5.3.18 已不再引用此檔案；第 2 張已由 secret-life-seal-gang-mission.webp 取代。

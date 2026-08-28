@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.17 Secret Life Expansion */
+/* Private travel PWA · Firebase Auth gated content · v5.3.18 Secret Life Seal Gang */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -1096,17 +1096,17 @@ const HERO_EGG_POOL=[
 ];
 
 const SECRET_LIFE_SCENES=[
-  {id:"want-to-travel",image:"./secret-life-want-to-travel.webp?v=5317",alt:"大家偷偷準備行李，也想一起去旅行"},
-  {id:"welcome-home",image:"./secret-life-welcome-home.webp?v=5317",alt:"大家準備迎接旅行回來的旅伴"},
-  {id:"midnight-snack",image:"./secret-life-midnight-snack.webp?v=5317",alt:"深夜大家偷偷拿零食吃"},
-  {id:"sofa-battle",image:"./secret-life-sofa-battle.webp?v=5317",alt:"大家在客廳搶沙發最舒服的位置"},
-  {id:"watchduty-sleep",image:"./secret-life-watchduty-sleep.webp?v=5317",alt:"木木梟負責看家卻第一個睡著"},
-  {id:"house-mess",image:"./secret-life-house-mess.webp?v=5317",alt:"暴暴龍玩得太開心把客廳弄得有點亂"},
-  {id:"hide-and-seek",image:"./secret-life-hide-and-seek.webp?v=5317",alt:"大家玩躲貓貓，但每個人都躲得很明顯"},
-  {id:"pillow-fight",image:"./secret-life-pillow-fight.webp?v=5317",alt:"大家本來準備睡覺，最後玩起枕頭大戰"},
-  {id:"ditto-usagi",image:"./secret-life-ditto-usagi.webp?v=5317",alt:"百變怪假裝成烏薩奇回來了"},
-  {id:"block-building",image:"./secret-life-block-building.webp?v=5317",alt:"大家堆積木，百變怪變成妙蛙種子用藤蔓幫忙"},
-  {id:"olaf-bed",image:"./secret-life-olaf-bed.webp?v=5317",alt:"Olaf 占掉大部分床位，其他角色不知道要睡哪裡"}
+  {id:"want-to-travel",image:"./secret-life-want-to-travel.webp?v=5318",alt:"大家偷偷準備行李，也想一起去旅行"},
+  {id:"seal-gang-mission",image:"./secret-life-seal-gang-mission.webp?v=5318",alt:"可達鴨、呆呆獸和木木梟組成討伐隊，前往海豹與百變怪的抱枕基地"},
+  {id:"midnight-snack",image:"./secret-life-midnight-snack.webp?v=5318",alt:"深夜大家偷偷拿零食吃"},
+  {id:"sofa-battle",image:"./secret-life-sofa-battle.webp?v=5318",alt:"大家在客廳搶沙發最舒服的位置"},
+  {id:"watchduty-sleep",image:"./secret-life-watchduty-sleep.webp?v=5318",alt:"木木梟負責看家卻第一個睡著"},
+  {id:"house-mess",image:"./secret-life-house-mess.webp?v=5318",alt:"暴暴龍玩得太開心把客廳弄得有點亂"},
+  {id:"hide-and-seek",image:"./secret-life-hide-and-seek.webp?v=5318",alt:"大家玩躲貓貓，但每個人都躲得很明顯"},
+  {id:"pillow-fight",image:"./secret-life-pillow-fight.webp?v=5318",alt:"大家本來準備睡覺，最後玩起枕頭大戰"},
+  {id:"ditto-usagi",image:"./secret-life-ditto-usagi.webp?v=5318",alt:"百變怪假裝成烏薩奇回來了"},
+  {id:"block-building",image:"./secret-life-block-building.webp?v=5318",alt:"大家堆積木，百變怪變成妙蛙種子用藤蔓幫忙"},
+  {id:"olaf-bed",image:"./secret-life-olaf-bed.webp?v=5318",alt:"Olaf 占掉大部分床位，其他角色不知道要睡哪裡"}
 ];
 let secretLifeIndex=0;
 let secretLifePreloadPromise=null;
@@ -2960,7 +2960,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=5317",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=5318",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });

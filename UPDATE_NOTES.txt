@@ -1,13 +1,6 @@
-v5.3.17 Secret Life Expansion — Update Only
-
-Upload/overwrite the included code files and add the 5 new WebP assets.
-Do NOT upload the original 9909.png / 9908.png / 9907.png / 9906.png / 9904.png source files.
-
-New WebP assets:
-- secret-life-hide-and-seek.webp
-- secret-life-pillow-fight.webp
-- secret-life-ditto-usagi.webp
-- secret-life-block-building.webp
-- secret-life-olaf-bed.webp
-
-Secret Life now contains 11 images total.
+v5.3.18 Secret Life Seal Gang
+- 移除 Secret Life 第 2 張「歡迎回來」。
+- 第 2 張改為「討伐海豹幫」。
+- 新圖：secret-life-seal-gang-mission.webp，1280x960，WebP quality 80，約 82 KB。
+- Secret Life 總數維持 11 張。
+- 保留 Hero 長按後才預載 Secret Life 的載入策略。

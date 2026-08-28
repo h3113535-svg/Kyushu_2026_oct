@@ -60,3 +60,10 @@
 - 新增圖片全部轉為 WebP，最大寬 1280px、品質 80；不將來源 PNG 放入網站。
 - 5 張新增 WebP 合計約 400 KB，Secret Life 仍只在首頁 Hero 長按成功後背景預載，並維持 2 張並行預載。
 - Service Worker SHELL 仍不預快取 Secret Life 圖片，避免增加 App 初次開啟流量。
+
+更新：v5.3.18 Secret Life Seal Gang
+- Secret Life 第 2 張「歡迎回來」移除，改為「討伐海豹幫」。
+- 新圖檔使用 `secret-life-seal-gang-mission.webp`，由來源 PNG 縮至 1280×960、WebP 品質 80，約 82 KB。
+- Secret Life 總張數維持 11 張，新的海豹幫情境位於第 2 張。
+- 舊 `secret-life-welcome-home.webp` 不再被程式引用，可從 GitHub 刪除以節省容量。
+- Secret Life 圖片仍只在首頁 Hero 長按成功後背景預載，不加入 Service Worker SHELL。
