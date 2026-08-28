@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.15 Secret Life Entry Preview */
+/* Private travel PWA · Firebase Auth gated content · v5.3.16 Secret Life WebP Refresh */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -1096,10 +1096,12 @@ const HERO_EGG_POOL=[
 ];
 
 const SECRET_LIFE_SCENES=[
-  {id:"want-to-travel",image:"./secret-life-want-to-travel.png?v=5315",alt:"大家偷偷準備行李，也想一起去旅行"},
-  {id:"nap",image:"./secret-life-nap.png?v=5315",alt:"主人不在家時，大家一起在客廳補眠"},
-  {id:"welcome-home",image:"./secret-life-welcome-home.png?v=5315",alt:"大家準備迎接旅行回來的旅伴"},
-  {id:"midnight-snack",image:"./secret-life-midnight-snack.png?v=5315",alt:"深夜大家偷偷拿零食吃"}
+  {id:"want-to-travel",image:"./secret-life-want-to-travel.webp?v=5316",alt:"大家偷偷準備行李，也想一起去旅行"},
+  {id:"welcome-home",image:"./secret-life-welcome-home.webp?v=5316",alt:"大家準備迎接旅行回來的旅伴"},
+  {id:"midnight-snack",image:"./secret-life-midnight-snack.webp?v=5316",alt:"深夜大家偷偷拿零食吃"},
+  {id:"sofa-battle",image:"./secret-life-sofa-battle.webp?v=5316",alt:"大家在客廳搶沙發最舒服的位置"},
+  {id:"watchduty-sleep",image:"./secret-life-watchduty-sleep.webp?v=5316",alt:"木木梟負責看家卻第一個睡著"},
+  {id:"house-mess",image:"./secret-life-house-mess.webp?v=5316",alt:"暴暴龍玩得太開心把客廳弄得有點亂"}
 ];
 let secretLifeIndex=0;
 let secretLifePreloadPromise=null;
@@ -2953,7 +2955,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=5315",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=5316",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });

@@ -46,3 +46,10 @@
 - 相簿目前放入 4 張預覽圖；可點圖片、左右按鈕或左右滑動切換，並顯示 1 / 4 頁碼。
 - 4 張 Secret Life 圖片刻意不加入 Service Worker 的 SHELL 預快取；首次長按後才載入，之後由既有 runtime cache 接手。
 - 其餘 v5.3.14 行為維持不變。
+
+更新：v5.3.16 Secret Life WebP Refresh
+- 移除「一起補眠」Secret Life 圖片。
+- 新增「沙發搶位大戰」、「木木梟看家先睡著」、「暴暴龍把家裡搞亂」三張。
+- Secret Life 相簿由 4 張調整為 6 張；保留原有「想一起去旅行」、「歡迎回來」、「半夜偷吃零食」。
+- 6 張 Secret Life 圖片全部改為 WebP，並縮至最大寬 1280px、品質 84，以降低 GitHub / PWA 儲存與傳輸容量。
+- Secret Life 圖片仍不放入 Service Worker 的 SHELL 初始預快取；首次首頁長按成功後才背景預載。
