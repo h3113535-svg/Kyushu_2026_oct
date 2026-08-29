@@ -67,3 +67,11 @@
 - Secret Life 總張數維持 11 張，新的海豹幫情境位於第 2 張。
 - 舊 `secret-life-welcome-home.webp` 不再被程式引用，可從 GitHub 刪除以節省容量。
 - Secret Life 圖片仍只在首頁 Hero 長按成功後背景預載，不加入 Service Worker SHELL。
+
+更新：v5.3.19 Secret Life Hotpot First Scene
+- Secret Life 相簿最前面新增 1 張「偷偷煮火鍋開趴」情境圖，位於第 1 張。
+- 新圖檔使用 `secret-life-hotpot-party.webp`，由來源 PNG 縮至最大寬 1280px、WebP 品質 80，約 125 KB。
+- 原本第 1 張「想一起去旅行」順延為第 2 張，其餘順序整體後移；海豹幫討伐圖維持保留。
+- Secret Life 相簿總張數由 11 張增加為 12 張；首頁頁碼初始顯示同步更新為 1 / 12。
+- 版本號提升至 v5.3.19，更新 `index.html`、`app.js`、`sw.js`、`manifest.json` 以確保 PWA 取得新相簿內容。
+- Secret Life 圖片仍只在首頁 Hero 長按成功後背景預載，不加入 Service Worker SHELL 初始預快取。
