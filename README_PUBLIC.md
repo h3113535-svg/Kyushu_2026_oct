@@ -120,3 +120,13 @@
 - Google 營業資料只存在目前頁面記憶體，不寫入 LocalStorage；只保存 Google 允許長期保存的 Place ID，以避免下一次重新文字搜尋。
 - Timeline 與「今日營業檢查」摘要會直接標示衝突；Google 來源資訊旁顯示 `Google Maps` attribution。
 - 保留 v5.3.20 Cache First / offline-first、v5.3.21 匯率即時換算、v5.3.22 快速匯入功能。
+
+更新：v5.3.24 Cache Architecture Fix
+- 修正 v5.3.20–v5.3.23 的 Navigation Cache First 可能讓 Chrome／已安裝 PWA 長時間停留在舊版的問題。
+- CacheStorage 拆成「小型、版本化 App Shell」與「穩定、跨版本共用 Assets」：`kyushu-oct-shell-v5.3.24`、`kyushu-oct-assets-v1`、`kyushu-oct-runtime-v1`。
+- HTML / app.js / style.css / manifest 等小型程式檔隨版本更新；大型角色圖、每日插圖、彩蛋與 Secret Life 圖只要 URL/version token 沒變，就跨版本直接沿用本機 cache，不再因每次升版重新下載約 20 MB 素材。
+- 從 v5.3.20–v5.3.23 升級時會先把舊 cache 裡已存在的圖片直接搬進新的 stable asset cache，只有真正缺少的檔案才走網路下載。
+- v5.3.24 對舊版 cache 做一次性強制接管／重新導頁，專門解除已被舊 index.html 卡住的 Chrome 與 PWA；完成後不再重複強制 reload。
+- 未來版本偵測到 waiting Service Worker 時，App 會顯示「新版本已準備完成／立即更新」，使用者按下後才切換新版並 reload。
+- 完全離線仍由已快取的最新 App Shell + stable assets 開啟；Firebase、Google Places/Maps、匯率 API 等跨網域請求不由 Service Worker 攔截。
+- Cache 清理仍限定 `kyushu-oct-` namespace，不會刪除未來 11 月 PWA 或其他 GitHub Pages repo 的 cache。

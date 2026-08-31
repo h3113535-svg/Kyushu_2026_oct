@@ -16,9 +16,9 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=5323" />
+  <link rel="stylesheet" href="./style.css?v=5324" />
   <title>私人旅程</title>
-  <meta name="app-version" content="5.3.23" />
+  <meta name="app-version" content="5.3.24" />
   <link rel="preload" as="image" href="./day-scene-v52-01.webp?v=520" fetchpriority="high">
 </head>
 <body>
@@ -442,10 +442,14 @@ https://www.google.com/maps/place/...
   <div id="buddySpeechBubble" class="buddy-speech-bubble buddy-only-art" role="status" aria-live="polite"></div>
   <div id="purinWalkEgg" class="purin-walk-egg buddy-only-art" aria-hidden="true"><img src="./purin_walk.png?v=431" alt=""></div>
   <div id="usagiUrgentEgg" class="usagi-urgent-egg buddy-only-art" aria-hidden="true"><img src="./usagi_dash.png?v=431" alt=""><div class="usagi-urgent-egg-text">嗚拉呀哈呀哈嗚拉～</div></div>
+  <div id="appUpdateBanner" class="app-update-banner" hidden role="status" aria-live="polite">
+    <div class="app-update-copy"><b>✨ 新版本已準備完成</b><small>更新 App 程式，不會清除記事、記帳或本機資料。</small></div>
+    <button type="button" id="appUpdateNow" class="app-update-btn">立即更新</button>
+  </div>
   <div id="toast" class="toast" role="status"></div>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=430"></script>
-  <script defer src="./app.js?v=5323"></script>
+  <script defer src="./app.js?v=5324"></script>
 </body>
 </html>

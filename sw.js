@@ -1,14 +1,30 @@
+/* Kyushu 2026 Oct PWA · v5.3.24 Cache Architecture Fix
+ * Goals:
+ * 1) static images are downloaded once and reused across app versions;
+ * 2) app shell updates remain reliable;
+ * 3) the app still opens fully offline;
+ * 4) caches belonging to other GitHub Pages repos are never touched.
+ */
 const CACHE_PREFIX = "kyushu-oct-";
-const STATIC_CACHE = "kyushu-oct-static-v5.3.23";
-const RUNTIME_CACHE = "kyushu-oct-runtime-v5.3.23";
+const SHELL_CACHE = "kyushu-oct-shell-v5.3.24";
+const ASSET_CACHE = "kyushu-oct-assets-v1";
+const RUNTIME_CACHE = "kyushu-oct-runtime-v1";
+const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|22|23)$/;
 
-// All same-origin assets that the current app actually references. They are downloaded once when
-// this Service Worker installs, then served Cache First so reopening the PWA does not repeatedly
-// consume roaming data. Firebase/Google external requests are intentionally outside this cache.
-const PRECACHE = [
-  "./",
+// Small files that are expected to change when app code changes.
+const SHELL = [
   "./index.html",
-  "./app.js?v=5323",
+  "./app.js?v=5324",
+  "./style.css?v=5324",
+  "./manifest.json",
+  "./firebase-config.js?v=430"
+];
+
+// Large/stable visual assets. This cache deliberately has a stable name across releases.
+// If an image is actually replaced, bump only that image's ?v= token in the app/source list.
+const ASSETS = [
+  "./icon-192.png",
+  "./icon-512.png",
   "./booking-check-purin.webp?v=460",
   "./booking-dash-usagi.webp?v=460",
   "./buddy_celebrate.png?v=430",
@@ -30,12 +46,8 @@ const PRECACHE = [
   "./egg-cry-v539.png?v=539",
   "./egg-home-sleep-v539.png?v=539",
   "./egg-sendoff-v539.png?v=539",
-  "./firebase-config.js?v=430",
   "./hero-cover-v51.webp?v=510",
   "./hotel-return-duo.webp?v=460",
-  "./icon-192.png",
-  "./icon-512.png",
-  "./manifest.json",
   "./mini-purin-clap.webp",
   "./mini-purin-hero.webp",
   "./mini-purin-lie.webp",
@@ -65,7 +77,6 @@ const PRECACHE = [
   "./secret-life-sofa-battle.webp?v=5319",
   "./secret-life-want-to-travel.webp?v=5319",
   "./secret-life-watchduty-sleep.webp?v=5319",
-  "./style.css?v=5323",
   "./travel_camera.png?v=430",
   "./travel_coffee.png?v=430",
   "./travel_shopping.png?v=430",
@@ -91,70 +102,189 @@ const PRECACHE = [
   "./weather-thunder-usagi-v536.webp?v=536"
 ];
 
+function sameProject(url) {
+  const scopePath = new URL(self.registration.scope).pathname;
+  return url.origin === self.location.origin && url.pathname.startsWith(scopePath);
+}
+
+async function cacheResponse(cacheName, request, response) {
+  if (!response || !response.ok) return response;
+  const cache = await caches.open(cacheName);
+  await cache.put(request, response.clone());
+  return response;
+}
+
+async function fetchFresh(request) {
+  return fetch(request, { cache: "no-store" });
+}
+
+// Copy from any existing October cache before going to network. This is the key migration step:
+// users upgrading from 5.3.20–5.3.23 do NOT re-download the ~20 MB visual asset set.
+async function migrateOrFetchAsset(path) {
+  const request = new Request(path, { cache: "default" });
+  const existing = await caches.match(request);
+  if (existing) {
+    const target = await caches.open(ASSET_CACHE);
+    await target.put(request, existing.clone());
+    return;
+  }
+  const response = await fetchFresh(request);
+  if (!response.ok) throw new Error(`Asset preload failed: ${path} (${response.status})`);
+  const target = await caches.open(ASSET_CACHE);
+  await target.put(request, response.clone());
+}
+
 self.addEventListener("install", event => {
-  event.waitUntil(
-    caches.open(STATIC_CACHE)
-      .then(cache => cache.addAll(PRECACHE))
-      .then(() => self.skipWaiting())
-  );
+  event.waitUntil((async () => {
+    // Shell is intentionally refreshed every release; it is small compared with image assets.
+    const shellCache = await caches.open(SHELL_CACHE);
+    for (const path of SHELL) {
+      const request = new Request(path, { cache: "reload" });
+      const response = await fetchFresh(request);
+      if (!response.ok) throw new Error(`Shell preload failed: ${path} (${response.status})`);
+      await shellCache.put(request, response.clone());
+    }
+
+    // Migrate cached images from the old versioned cache without re-downloading them.
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(4, ASSETS.length) }, async () => {
+      while (cursor < ASSETS.length) {
+        const path = ASSETS[cursor++];
+        await migrateOrFetchAsset(path);
+      }
+    });
+    await Promise.all(workers);
+
+    // v5.3.20–5.3.23 could trap an already-open page behind an old cache-first index.
+    // Force activation only for that one-time migration path. Future releases will wait and
+    // use the in-app "new version available" button instead.
+    const keys = await caches.keys();
+    if (keys.some(key => LEGACY_BLOCKING_CACHES.test(key))) await self.skipWaiting();
+  })());
 });
 
 self.addEventListener("activate", event => {
-  event.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(
-        keys
-          .filter(key => key.startsWith(CACHE_PREFIX) && key !== STATIC_CACHE && key !== RUNTIME_CACHE)
-          .map(key => caches.delete(key))
-      ))
-      .then(() => self.clients.claim())
-  );
+  event.waitUntil((async () => {
+    const keysBefore = await caches.keys();
+    const migratingLegacy = keysBefore.some(key => LEGACY_BLOCKING_CACHES.test(key));
+
+    await Promise.all(keysBefore
+      .filter(key => key.startsWith(CACHE_PREFIX))
+      .filter(key => key !== SHELL_CACHE && key !== ASSET_CACHE && key !== RUNTIME_CACHE)
+      .map(key => caches.delete(key))
+    );
+
+    await self.clients.claim();
+
+    // One-time rescue for users currently stuck on 5.3.20–5.3.23.
+    // Navigation is forced only during this legacy migration, not on normal future updates.
+    if (migratingLegacy) {
+      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      await Promise.all(clients.map(client => {
+        try { return client.navigate(client.url); } catch { return null; }
+      }));
+    }
+  })());
 });
 
-async function cacheFirst(request) {
-  const staticHit = await caches.match(request);
-  if (staticHit) return staticHit;
+self.addEventListener("message", event => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+});
 
+async function shellCacheFirst(request) {
+  const cache = await caches.open(SHELL_CACHE);
+  const hit = await cache.match(request, { ignoreSearch: false });
+  if (hit) return hit;
   try {
-    const response = await fetch(request);
-    if (response && response.ok) {
-      const cache = await caches.open(RUNTIME_CACHE);
-      cache.put(request, response.clone()).catch(() => {});
-    }
-    return response;
+    const response = await fetchFresh(request);
+    return cacheResponse(SHELL_CACHE, request, response);
   } catch (error) {
-    // Last chance for assets whose only difference is an old cache-busting query string.
-    const fallback = await caches.match(request, {ignoreSearch:true});
+    const fallback = await cache.match(request, { ignoreSearch: true });
     if (fallback) return fallback;
     throw error;
   }
 }
 
+async function assetCacheFirst(request) {
+  const assetCache = await caches.open(ASSET_CACHE);
+  const exact = await assetCache.match(request);
+  if (exact) return exact;
+
+  // Migration/fallback may find the same URL in an older cache on first access.
+  const anyExact = await caches.match(request);
+  if (anyExact) {
+    assetCache.put(request, anyExact.clone()).catch(() => {});
+    return anyExact;
+  }
+
+  try {
+    const response = await fetch(request);
+    if (response && response.ok) assetCache.put(request, response.clone()).catch(() => {});
+    return response;
+  } catch (error) {
+    const fallback = await caches.match(request, { ignoreSearch: true });
+    if (fallback) return fallback;
+    throw error;
+  }
+}
+
+async function runtimeCacheFirst(request) {
+  const cache = await caches.open(RUNTIME_CACHE);
+  const hit = await cache.match(request);
+  if (hit) return hit;
+  try {
+    const response = await fetch(request);
+    if (response && response.ok) cache.put(request, response.clone()).catch(() => {});
+    return response;
+  } catch (error) {
+    const fallback = await caches.match(request, { ignoreSearch: true });
+    if (fallback) return fallback;
+    throw error;
+  }
+}
+
+function isAssetRequest(request, url) {
+  if (["image", "font"].includes(request.destination)) return true;
+  return /\.(?:png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf)$/i.test(url.pathname);
+}
+
+function isShellRequest(url) {
+  const name = url.pathname.split("/").pop();
+  return ["index.html", "app.js", "style.css", "manifest.json", "firebase-config.js"].includes(name);
+}
+
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
-  const scopePath = new URL(self.registration.scope).pathname;
 
-  // Do not intercept Firebase, Google Maps, CDN scripts, or assets belonging to another GitHub Pages repo.
-  if (url.origin !== self.location.origin || !url.pathname.startsWith(scopePath)) return;
+  // Firebase, Google Places/Maps, exchange-rate API, and third-party CDN requests stay on network.
+  if (!sameProject(url)) return;
 
   if (event.request.mode === "navigate") {
-    event.respondWith((async()=>{
-      const cached = await caches.match("./index.html");
+    event.respondWith((async () => {
+      const shellCache = await caches.open(SHELL_CACHE);
+      const cached = await shellCache.match("./index.html", { ignoreSearch: true });
       if (cached) return cached;
       try {
-        const response = await fetch(event.request);
-        if (response && response.ok) {
-          const cache = await caches.open(RUNTIME_CACHE);
-          cache.put("./index.html", response.clone()).catch(() => {});
-        }
+        const response = await fetchFresh(event.request);
+        if (response && response.ok) shellCache.put("./index.html", response.clone()).catch(() => {});
         return response;
-      } catch (error) {
-        return new Response("Offline", {status:503, headers:{"Content-Type":"text/plain; charset=utf-8"}});
+      } catch {
+        return new Response("Offline", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
       }
     })());
     return;
   }
 
-  event.respondWith(cacheFirst(event.request));
+  if (isShellRequest(url)) {
+    event.respondWith(shellCacheFirst(event.request));
+    return;
+  }
+
+  if (isAssetRequest(event.request, url)) {
+    event.respondWith(assetCacheFirst(event.request));
+    return;
+  }
+
+  event.respondWith(runtimeCacheFirst(event.request));
 });

@@ -3387,3 +3387,18 @@ html[data-theme="buddy"] .place-import-card,html[data-theme="buddy"] .place-impo
 .opening-hours-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}.opening-hours-grid label{display:grid;grid-template-columns:36px 1fr;align-items:center;gap:7px}.opening-hours-grid label>span{font-size:10px;font-weight:800;color:var(--muted)}.opening-hours-grid input{box-sizing:border-box;width:100%;min-height:39px;padding:8px 9px;border:1px solid var(--line);border-radius:11px;background:var(--card,#fff);color:var(--ink);font:inherit;font-size:11px;outline:none}.opening-hours-grid input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 13%,transparent)}.opening-hours-actions{display:flex;gap:9px}.opening-hours-actions .primary-btn{flex:1;margin:0}.opening-hours-actions .mini-btn{min-width:120px}
 html[data-theme="buddy"] .opening-setup-card,html[data-theme="buddy"] .opening-guard-summary{background:#FFFCF5;border-color:#E8D9B9}html[data-theme="buddy"] .opening-guard{background:#FFF9ED;border-color:#EADFC7}
 @media(max-width:520px){.opening-hours-grid{grid-template-columns:1fr}.opening-hours-actions{flex-direction:column}.opening-hours-actions .mini-btn{width:100%}.opening-summary-main{align-items:flex-start}.place-hours-actions{max-width:145px}}
+
+/* v5.3.24 reliable PWA update prompt */
+.app-update-banner{
+  position:fixed;z-index:145;left:50%;bottom:calc(92px + env(safe-area-inset-bottom));
+  width:min(92vw,430px);display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 12px 12px 15px;border:1px solid rgba(126,100,72,.15);border-radius:18px;
+  background:rgba(255,252,247,.96);box-shadow:0 12px 34px rgba(80,61,44,.18);backdrop-filter:blur(16px);
+  transform:translateX(-50%);
+}
+.app-update-banner[hidden]{display:none!important}
+.app-update-copy{display:grid;gap:3px;min-width:0;color:var(--ink)}
+.app-update-copy b{font-size:13px;line-height:1.35}
+.app-update-copy small{color:var(--muted);font-size:10px;line-height:1.45}
+.app-update-btn{flex:0 0 auto;border:0;border-radius:999px;padding:9px 12px;background:var(--accent,#a8673f);color:#fff;font-size:11px;font-weight:800;box-shadow:0 5px 14px rgba(94,67,47,.16)}
+.app-update-btn:disabled{opacity:.58}

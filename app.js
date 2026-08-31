@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.23 Opening Hours Guard */
+/* Private travel PWA · Firebase Auth gated content · v5.3.24 Cache Architecture Fix */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -3582,9 +3582,38 @@ async function startPrivateAuth(){
 startPrivateAuth();
 
 if("serviceWorker" in navigator){
+  let swReloading=false;
+  let swUpdateReg=null;
+
+  const showAppUpdateBanner=reg=>{
+    if(!reg?.waiting||!navigator.serviceWorker.controller)return;
+    swUpdateReg=reg;
+    const banner=$("#appUpdateBanner");
+    if(banner)banner.hidden=false;
+  };
+
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{
+    if(swReloading)return;
+    swReloading=true;
+    window.location.reload();
+  });
+
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=5323",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5324",{updateViaCache:"none"});
+      if(reg.waiting)showAppUpdateBanner(reg);
+      reg.addEventListener("updatefound",()=>{
+        const worker=reg.installing;if(!worker)return;
+        worker.addEventListener("statechange",()=>{
+          if(worker.state==="installed"&&navigator.serviceWorker.controller)showAppUpdateBanner(reg);
+        });
+      });
+      $("#appUpdateNow")?.addEventListener("click",()=>{
+        const worker=swUpdateReg?.waiting;
+        if(!worker)return;
+        const btn=$("#appUpdateNow");if(btn){btn.disabled=true;btn.textContent="更新中…"}
+        worker.postMessage({type:"SKIP_WAITING"});
+      });
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });
