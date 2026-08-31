@@ -1,4 +1,4 @@
-/* Kyushu 2026 Oct PWA · v5.3.26 Simple Opening Hours
+/* Kyushu 2026 Oct PWA · v5.3.28 Auth Hotfix
  * Goals:
  * 1) static images are downloaded once and reused across app versions;
  * 2) app shell updates remain reliable;
@@ -6,7 +6,7 @@
  * 4) caches belonging to other GitHub Pages repos are never touched.
  */
 const CACHE_PREFIX = "kyushu-oct-";
-const SHELL_CACHE = "kyushu-oct-shell-v5.3.27";
+const SHELL_CACHE = "kyushu-oct-shell-v5.3.28";
 const ASSET_CACHE = "kyushu-oct-assets-v1";
 const RUNTIME_CACHE = "kyushu-oct-runtime-v1";
 const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|22|23)$/;
@@ -14,8 +14,8 @@ const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|2
 // Small files that are expected to change when app code changes.
 const SHELL = [
   "./index.html",
-  "./app.js?v=5327",
-  "./style.css?v=5327",
+  "./app.js?v=5328",
+  "./style.css?v=5328",
   "./manifest.json",
   "./firebase-config.js?v=430"
 ];

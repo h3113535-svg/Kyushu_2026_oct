@@ -150,8 +150,8 @@
 
 
 
-## v5.3.27 Auth Reliability
-- Fixes a login-gate stall where an authenticated user could remain on “正在載入私人旅程…” indefinitely when Firebase REST/token access stalled.
-- Authorized local trip cache now opens immediately regardless of its refresh age; a >6h content refresh happens in the background instead of blocking app entry.
-- Firebase token retrieval and REST requests now have bounded timeouts, so failures surface instead of hanging forever.
-- Existing offline-first/static cache architecture and v5.3.21–v5.3.26 features are preserved.
+## v5.3.28 Auth Hotfix
+- No opening-hours or itinerary behavior changes from v5.3.26.
+- Existing authorized local private trip cache boots immediately; Firebase refresh is background-only.
+- Firebase token/read requests now have finite timeouts instead of leaving the private gate spinning forever.
+- UpdateOnly archive is intentionally flat so files replace the GitHub Pages repo root correctly.
