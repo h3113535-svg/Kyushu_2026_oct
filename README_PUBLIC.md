@@ -1,3 +1,10 @@
+## v5.3.29 Chrome/PWA Recovery
+- Fixes Chrome and installed-PWA clients remaining on an older waiting service worker while a fresh browser sees the latest site.
+- New service workers activate automatically; existing images remain in the shared asset cache and are not redownloaded just because the shell changes.
+- Open Chrome/PWA windows move onto the new shell once after an update.
+- Auth gate shows a tiny build number so the loaded version can be verified immediately.
+- If a browser-specific private-trip cache cannot boot, the app falls back to the Firebase copy instead of spinning forever.
+
 # Kyushu_2026_oct — v4.2.0 旅伴手帳
 
 公開 GitHub Pages 只包含 UI、Firebase Auth 與角色素材，不包含私人行程內容。

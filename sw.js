@@ -1,4 +1,4 @@
-/* Kyushu 2026 Oct PWA · v5.3.28 Auth Hotfix
+/* Kyushu 2026 Oct PWA · v5.3.29 Chrome/PWA Recovery
  * Goals:
  * 1) static images are downloaded once and reused across app versions;
  * 2) app shell updates remain reliable;
@@ -6,7 +6,7 @@
  * 4) caches belonging to other GitHub Pages repos are never touched.
  */
 const CACHE_PREFIX = "kyushu-oct-";
-const SHELL_CACHE = "kyushu-oct-shell-v5.3.28";
+const SHELL_CACHE = "kyushu-oct-shell-v5.3.29";
 const ASSET_CACHE = "kyushu-oct-assets-v1";
 const RUNTIME_CACHE = "kyushu-oct-runtime-v1";
 const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|22|23)$/;
@@ -14,8 +14,8 @@ const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|2
 // Small files that are expected to change when app code changes.
 const SHELL = [
   "./index.html",
-  "./app.js?v=5328",
-  "./style.css?v=5328",
+  "./app.js?v=5329",
+  "./style.css?v=5329",
   "./manifest.json",
   "./firebase-config.js?v=430"
 ];
@@ -155,11 +155,9 @@ self.addEventListener("install", event => {
     });
     await Promise.all(workers);
 
-    // v5.3.20–5.3.23 could trap an already-open page behind an old cache-first index.
-    // Force activation only for that one-time migration path. Future releases will wait and
-    // use the in-app "new version available" button instead.
-    const keys = await caches.keys();
-    if (keys.some(key => LEGACY_BLOCKING_CACHES.test(key))) await self.skipWaiting();
+    // Never leave a new shell waiting behind an older Chrome/PWA worker.
+    // Image assets remain in the shared asset cache, so this does not redownload them.
+    await self.skipWaiting();
   })());
 });
 
@@ -167,6 +165,7 @@ self.addEventListener("activate", event => {
   event.waitUntil((async () => {
     const keysBefore = await caches.keys();
     const migratingLegacy = keysBefore.some(key => LEGACY_BLOCKING_CACHES.test(key));
+    const replacingOlderShell = keysBefore.some(key => key.startsWith("kyushu-oct-shell-") && key !== SHELL_CACHE);
 
     await Promise.all(keysBefore
       .filter(key => key.startsWith(CACHE_PREFIX))
@@ -176,9 +175,8 @@ self.addEventListener("activate", event => {
 
     await self.clients.claim();
 
-    // One-time rescue for users currently stuck on 5.3.20–5.3.23.
-    // Navigation is forced only during this legacy migration, not on normal future updates.
-    if (migratingLegacy) {
+    // Move open Chrome/PWA windows onto the new shell automatically.
+    if (migratingLegacy || replacingOlderShell) {
       const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       await Promise.all(clients.map(client => {
         try { return client.navigate(client.url); } catch { return null; }

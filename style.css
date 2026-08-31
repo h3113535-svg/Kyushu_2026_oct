@@ -1676,6 +1676,7 @@ html[data-theme="buddy"][data-font-size="xlarge"] .hero-copy-buddy-v391 h1{font-
 .google-login-btn span{display:grid;place-items:center;width:25px;height:25px;border-radius:50%;background:#f5f5f5;font-weight:900}
 .auth-status{min-height:20px;margin-top:14px;font-size:12px;line-height:1.55;color:#837970}
 .auth-status[data-kind="error"]{color:#a1463d}
+.auth-build{margin-top:7px;color:#aaa098;font-size:9px;letter-spacing:.08em}
 .account-setting{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .logout-btn{border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:12px;padding:9px 12px;font-weight:800;cursor:pointer;white-space:nowrap}
 @media(max-width:420px){.auth-gate{padding:16px}.auth-card{padding:29px 20px 24px}.auth-card h1{font-size:27px}.account-setting{align-items:flex-start;flex-direction:column}.logout-btn{width:100%}}

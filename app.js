@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.28 Auth Hotfix */
+/* Private travel PWA · Firebase Auth gated content · v5.3.29 Chrome/PWA Recovery */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -3279,11 +3279,16 @@ async function handleAuthorizedUser(user){
   // An already-authorized device must enter from its local private copy immediately.
   // Network refresh is background-only, so a slow Firebase connection can never block the gate.
   if(cached && sameUser){
-    await bootTrip(cached.content,user,{offline:!navigator.onLine});
-    if(navigator.onLine && (cacheAge<0 || cacheAge>=PRIVATE_CONTENT_REFRESH_MS)){
-      void refreshPrivateTripCacheInBackground(user);
+    try{
+      await bootTrip(cached.content,user,{offline:!navigator.onLine});
+      if(navigator.onLine && (cacheAge<0 || cacheAge>=PRIVATE_CONTENT_REFRESH_MS)){
+        void refreshPrivateTripCacheInBackground(user);
+      }
+      return;
+    }catch(cacheErr){
+      console.warn("Cached private trip boot failed; retrying network copy",cacheErr);
+      setAuthStatus("本機快取需更新，正在重新載入私人旅程…");
     }
-    return;
   }
 
   try{
@@ -3356,8 +3361,13 @@ async function startPrivateAuth(){
     if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
     firebase.auth().onAuthStateChanged(user=>{
-      if(user) handleAuthorizedUser(user);
-      else { showAuthGate(); setAuthStatus("請使用已授權的 Google 帳號登入。"); }
+      if(user){
+        void handleAuthorizedUser(user).catch(err=>{
+          console.error("Authorized-user boot failed",err);
+          showAuthGate();
+          setAuthStatus(`無法開啟私人旅程：${err?.message||err}`,"error");
+        });
+      }else { showAuthGate(); setAuthStatus("請使用已授權的 Google 帳號登入。"); }
     });
   }catch(err){
     setAuthStatus(`Firebase 初始化失敗：${err.message}`,"error");
@@ -3385,7 +3395,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5328",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5329",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
