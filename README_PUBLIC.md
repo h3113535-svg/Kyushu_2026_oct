@@ -88,3 +88,35 @@
 - 使用者編輯 Notes / Shopping / Expense / Booking 狀態等時，線上仍會立即嘗試寫入 Firebase；恢復網路時會強制做一次同步。
 - 設定頁的同步狀態可點擊，必要時手動強制同步一次。
 - 完全離線時仍使用已授權的私人行程 localStorage 快取；若弱網或 Firebase 暫時失敗，也會退回本機快取，不再卡在登入頁。
+
+
+更新：v5.3.21 Exchange Rate Calculator
+- 在「旅程工具 → 記帳」最上方新增 JPY → TWD 匯率換算卡，輸入日圓時即時在本機換算台幣，不需要每次輸入都發出網路請求。
+- 自動匯率使用 ExchangeRate-API Open Access（JPY base），每 24 小時最多自動抓取一次，回應快取於本機；重新打開 App 直接沿用，不重複消耗流量。
+- 支援手動匯率，可切換「自動／手動」並保存；離線時仍可使用最後一次自動匯率或手動匯率。
+- 旅費總額與每筆記帳同步顯示約略 TWD 金額；原始記帳資料仍以 JPY 為唯一計算基準，不修改既有 expense schema。
+- 匯率 API 採 lazy load：只有實際切到「記帳」工具時才檢查是否需要更新，不影響首頁首次載入。
+- 更新 PWA cache / asset version 至 v5.3.21 / 5321。
+
+
+更新：v5.3.22 Place Quick Import
+- 旅程工具新增「快速匯入」頁，可貼 Google Maps 地點網址或店名／景點名稱，一行一個。
+- 解析完全在瀏覽器本機完成；不需要 Google Places API key，也不會因輸入內容額外呼叫 Google Places API。
+- 支援一般 Google Maps `.../maps/place/...`、`?query=` / `?q=` 網址自動推測地點名稱；純文字會建立 Google Maps 搜尋連結。
+- `maps.app.goo.gl` 等短網址因瀏覽器無法可靠離線展開，仍會保留原始網址並讓使用者在預覽區直接修改名稱。
+- 可批次勾選、修改名稱、指定 D1–D10、預計時間與類型，再加入行程。
+- 匯入項目會顯示在指定日期 Timeline 尾端並標示「快速匯入」，Google Maps 按鈕直接使用貼入的原始地圖網址。
+- 已匯入項目可在快速匯入頁刪除；資料存於 `${TRIP.id}:importedPlaces`，離線可讀寫。
+- 離線變更另以 `importedPlacesPending` 保護，重新連線後先上傳本機版本，再進行 one-shot cloud sync，避免被舊雲端資料覆蓋。
+- v5.3.21 匯率換算與 v5.3.20 Cache First / 低流量模式完整保留；本版為累積更新，可直接從 v5.3.20 升級。
+
+
+更新：v5.3.23 Opening Hours Guard
+- 快速匯入地點新增「營業時間衝突檢查」：依行程日期＋預計抵達時間顯示正常、快打烊、尚未營業、公休／已打烊與待確認狀態。
+- 每個匯入地點可手動設定週日～週六營業時間；支援 `10:00-18:00`、分段營業、`休`、`24h`，手動資料會隨旅行資料保存，完全離線也能判斷。
+- 可選擇在裝置本機設定 Google Maps API Key；Key 只存 trip-namespaced LocalStorage，不同步 Firebase、不寫進 GitHub。
+- Google Places 即時檢查採 lazy-load：首頁與一般瀏覽完全不載 Google Maps JS；只有使用者按「檢查」，或行程日期進入未來 7 天內時才自動查詢。
+- 行程超過 7 天時，手動按「檢查」使用 Google 一般營業時間；進入 7 天內則優先使用 current opening hours，以納入特殊營業／臨時休業。
+- Google 營業資料只存在目前頁面記憶體，不寫入 LocalStorage；只保存 Google 允許長期保存的 Place ID，以避免下一次重新文字搜尋。
+- Timeline 與「今日營業檢查」摘要會直接標示衝突；Google 來源資訊旁顯示 `Google Maps` attribution。
+- 保留 v5.3.20 Cache First / offline-first、v5.3.21 匯率即時換算、v5.3.22 快速匯入功能。

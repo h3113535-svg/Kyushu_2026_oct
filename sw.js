@@ -1,6 +1,6 @@
 const CACHE_PREFIX = "kyushu-oct-";
-const STATIC_CACHE = "kyushu-oct-static-v5.3.20";
-const RUNTIME_CACHE = "kyushu-oct-runtime-v5.3.20";
+const STATIC_CACHE = "kyushu-oct-static-v5.3.23";
+const RUNTIME_CACHE = "kyushu-oct-runtime-v5.3.23";
 
 // All same-origin assets that the current app actually references. They are downloaded once when
 // this Service Worker installs, then served Cache First so reopening the PWA does not repeatedly
@@ -8,7 +8,7 @@ const RUNTIME_CACHE = "kyushu-oct-runtime-v5.3.20";
 const PRECACHE = [
   "./",
   "./index.html",
-  "./app.js?v=5320",
+  "./app.js?v=5323",
   "./booking-check-purin.webp?v=460",
   "./booking-dash-usagi.webp?v=460",
   "./buddy_celebrate.png?v=430",
@@ -65,7 +65,7 @@ const PRECACHE = [
   "./secret-life-sofa-battle.webp?v=5319",
   "./secret-life-want-to-travel.webp?v=5319",
   "./secret-life-watchduty-sleep.webp?v=5319",
-  "./style.css?v=5320",
+  "./style.css?v=5323",
   "./travel_camera.png?v=430",
   "./travel_coffee.png?v=430",
   "./travel_shopping.png?v=430",

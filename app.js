@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.20 Offline Cache First */
+/* Private travel PWA · Firebase Auth gated content · v5.3.23 Opening Hours Guard */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -13,6 +13,18 @@ const PRIVATE_CONTENT_REFRESH_MS = 6 * 60 * 60 * 1000;
 // Cloud reads are intentionally one-shot, never 4-second polling. Reopening the app within this
 // window uses the local copy; edits still attempt immediate cloud writes while online.
 const CLOUD_SYNC_COOLDOWN_MS = 30 * 60 * 1000;
+
+// JPY→TWD exchange-rate helper. The open endpoint refreshes daily, so the app stores one response
+// per 24 hours and performs all conversions locally. It is intentionally lazy-loaded only when the
+// Expense tool is opened, preserving the low-data/offline-first behavior.
+const FX_API_URL = "https://open.er-api.com/v6/latest/JPY";
+const FX_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+// Optional Google Maps Places live-hours verifier. The API key is stored only in this device's
+// trip-namespaced LocalStorage and is never synced to Firebase or committed to the public repo.
+// Live Google data remains memory-only; only the stable Place ID may be persisted.
+const PLACES_AUTO_WINDOW_DAYS = 7;
+let googlePlacesLoaderPromise = null;
 let TRIP = null;
 let state = null;
 let currentAuthUser = null;
@@ -98,7 +110,7 @@ async function initFirebase(){
 }
 
 function subscribe(key, callback){
-  // v5.3.20 data-saver behavior: one read only. The old 4-second REST polling loop was deliberately
+  // v5.3.22 data-saver behavior: one read only. The old 4-second REST polling loop was deliberately
   // removed because it generated continuous roaming traffic. A new one-shot sync happens on boot
   // when the cooldown expires, after reconnecting, or when the user taps the sync status manually.
   let active = true;
@@ -145,6 +157,9 @@ function createState(){
   return {
     dayIndex:0, view:"schedule", tool:"booking", shoppingMember:"全部",
     foods:loadLocal("foods",[]), shopping:loadLocal("shopping",[]), expenses:loadLocal("expenses",[]),
+    importedPlaces:normalizeImportedPlaces(loadLocal("importedPlaces",[])), importedPlacesPending:!!loadLocal("importedPlacesPending",false), placeImportDrafts:[],
+    placesApiKey:String(loadLocal("placesApiKey","")||""), placeLiveChecks:{}, hoursEditId:null,
+    fx:normalizeFxState(loadLocal("fxRate",{})),
     taskStatus:loadLocal("taskStatus",{}), decisions:loadLocal("decisions",{}), decisionDrafts:{},
     notes:loadLocal("notes",""),
     guideNotes:normalizeGuideNotesMap(loadLocal("guideNotes",{})),
@@ -155,6 +170,514 @@ function createState(){
 }
 function loadLocal(key,fallback){try{const v=localStorage.getItem(storeKey(key));return v===null?fallback:JSON.parse(v)}catch{return fallback}}
 function saveLocal(key,value){localStorage.setItem(storeKey(key),JSON.stringify(value))}
+function normalizeManualHours(raw){
+  const src=raw&&typeof raw==="object"?raw:{};
+  const out={};
+  for(let day=0;day<7;day++)out[day]=String(src[day]??src[String(day)]??"").trim();
+  return out;
+}
+function normalizeImportedPlaces(raw){
+  const arr=Array.isArray(raw)?raw:normalizeCloud(raw);
+  return arr.filter(x=>x&&typeof x==="object").map((x,i)=>({
+    id:String(x.id||`import-${i}-${Date.now().toString(36)}`),
+    dayIndex:Math.max(0,Math.min(99,Number(x.dayIndex||0))),
+    time:String(x.time||""), title:String(x.title||x.name||"未命名景點"),
+    category:String(x.category||"景點"), mapUrl:String(x.mapUrl||""), query:String(x.query||x.title||x.name||""),
+    note:String(x.note||""), importedAt:Number(x.importedAt||0), source:String(x.source||"manual"),
+    placeId:String(x.placeId||""), manualHours:normalizeManualHours(x.manualHours)
+  }));
+}
+function normalizeFxState(raw){
+  const v=raw&&typeof raw==="object"?raw:{};
+  return {
+    mode:v.mode==="manual"?"manual":"auto",
+    autoRate:Number(v.autoRate)>0?Number(v.autoRate):null,
+    manualRate:Number(v.manualRate)>0?Number(v.manualRate):null,
+    fetchedAt:Number(v.fetchedAt||0),
+    sourceUpdatedAt:Number(v.sourceUpdatedAt||0),
+    nextUpdateAt:Number(v.nextUpdateAt||0)
+  };
+}
+function activeFxRate(){
+  if(!state?.fx)return null;
+  const manual=Number(state.fx.manualRate);
+  const auto=Number(state.fx.autoRate);
+  if(state.fx.mode==="manual"&&manual>0)return manual;
+  return auto>0?auto:null;
+}
+function formatFxRate(rate){
+  const n=Number(rate);
+  if(!(n>0))return "—";
+  return n.toFixed(4).replace(/0$/,"");
+}
+function formatFxTime(ts){
+  if(!Number(ts))return "尚未更新";
+  try{return new Intl.DateTimeFormat("zh-TW",{timeZone:"Asia/Taipei",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date(Number(ts)))}catch{return "已更新"}
+}
+function formatTwd(value){
+  const n=Number(value);
+  if(!Number.isFinite(n))return "—";
+  return Math.round(n).toLocaleString("zh-TW");
+}
+function updateFxCalculator(){
+  const input=$("#fxJpyInput"),output=$("#fxTwdOutput");
+  if(!input||!output)return;
+  const rate=activeFxRate();
+  const amount=Number(input.value);
+  output.textContent=(rate&&Number.isFinite(amount))?formatTwd(amount*rate):"—";
+}
+function renderFxCard(){
+  const fx=state?.fx;if(!fx)return;
+  const rate=activeFxRate();
+  const rateEl=$("#fxRateValue"),modeEl=$("#fxRateMode"),meta=$("#fxRateMeta");
+  if(rateEl)rateEl.textContent=formatFxRate(rate);
+  if(modeEl){
+    const manual=fx.mode==="manual"&&Number(fx.manualRate)>0;
+    modeEl.textContent=manual?"手動匯率":"自動匯率";
+    modeEl.dataset.mode=manual?"manual":"auto";
+  }
+  if(meta){
+    if(fx.mode==="manual"&&Number(fx.manualRate)>0){
+      meta.textContent=fx.autoRate?`手動使用中 · 自動匯率最後抓取 ${formatFxTime(fx.fetchedAt)}`:"手動使用中 · 尚未取得自動匯率";
+    }else if(fx.autoRate){
+      meta.textContent=`每日最多更新一次 · 匯率資料 ${formatFxTime(fx.sourceUpdatedAt||fx.fetchedAt)}`;
+    }else{
+      meta.textContent=navigator.onLine?"打開記帳頁後會自動取得匯率":"目前離線 · 可先設定手動匯率";
+    }
+  }
+  updateFxCalculator();
+}
+async function ensureFxRate({force=false,notify=false}={}){
+  if(!state?.fx)return null;
+  const hasCached=Number(state.fx.autoRate)>0;
+  if(!force&&state.fx.mode==="manual"){renderFxCard();return activeFxRate();}
+  const fresh=hasCached && Date.now()-Number(state.fx.fetchedAt||0)<FX_CACHE_TTL_MS;
+  if(!force&&fresh){renderFxCard();return state.fx.autoRate;}
+  if(!navigator.onLine){
+    renderFxCard();
+    if(notify)toast(hasCached?"目前離線，使用上次匯率":"目前離線，可改用手動匯率");
+    return hasCached?state.fx.autoRate:null;
+  }
+  const status=$("#fxRateMeta");if(status)status.textContent="正在更新匯率…";
+  try{
+    const res=await fetch(FX_API_URL,{cache:"no-store"});
+    if(!res.ok)throw new Error(`HTTP ${res.status}`);
+    const body=await res.json();
+    const rate=Number(body?.rates?.TWD);
+    if(body?.result!=="success"||!(rate>0))throw new Error("匯率資料格式不正確");
+    state.fx={...state.fx,
+      autoRate:rate,
+      fetchedAt:Date.now(),
+      sourceUpdatedAt:Number(body.time_last_update_unix||0)*1000,
+      nextUpdateAt:Number(body.time_next_update_unix||0)*1000
+    };
+    saveLocal("fxRate",state.fx);
+    renderFxCard();renderExpenses();
+    if(notify)toast(`匯率已更新：1 JPY = ${formatFxRate(rate)} TWD`);
+    return rate;
+  }catch(err){
+    console.warn("Exchange-rate refresh failed",err);
+    renderFxCard();
+    if(status)status.textContent=hasCached?`更新失敗 · 使用上次匯率 ${formatFxTime(state.fx.fetchedAt)}`:"無法取得匯率 · 可設定手動匯率";
+    if(notify)toast(hasCached?"匯率更新失敗，沿用本機資料":"無法取得匯率，請設定手動匯率");
+    return hasCached?state.fx.autoRate:null;
+  }
+}
+function openFxRateModal(){
+  const modal=$("#fxRateModal"),form=$("#fxRateForm");if(!modal||!form)return;
+  const fx=state.fx;
+  const auto=form.querySelector('input[name="fxMode"][value="auto"]');
+  const manual=form.querySelector('input[name="fxMode"][value="manual"]');
+  if(auto)auto.checked=fx.mode!=="manual";
+  if(manual)manual.checked=fx.mode==="manual";
+  const input=$("#fxManualRateInput");if(input)input.value=fx.manualRate?String(fx.manualRate):"";
+  const autoText=$("#fxAutoRatePreview");if(autoText)autoText.textContent=fx.autoRate?`目前自動匯率：1 JPY = ${formatFxRate(fx.autoRate)} TWD`:`尚未取得自動匯率`;
+  modal.showModal();
+}
+function saveFxRateSettings(e){
+  e.preventDefault();
+  const fd=new FormData(e.currentTarget),mode=fd.get("fxMode")==="manual"?"manual":"auto";
+  const manualRate=Number(fd.get("manualRate"));
+  if(mode==="manual"&&!(manualRate>0)){toast("請輸入有效的手動匯率");return;}
+  state.fx={...state.fx,mode,manualRate:manualRate>0?manualRate:state.fx.manualRate};
+  saveLocal("fxRate",state.fx);
+  renderFxCard();renderExpenses();
+  $("#fxRateModal")?.close();
+  toast(mode==="manual"?"已改用手動匯率":"已改用自動匯率");
+  if(mode==="auto"&&!state.fx.autoRate)ensureFxRate({force:true,notify:true});
+}
+
+const OPENING_DAY_LABELS=["日","一","二","三","四","五","六"];
+function tripDayDate(dayIndex){return String(TRIP?.days?.[Number(dayIndex)]?.date||"").slice(0,10)}
+function dayOfWeekForDate(dateKey){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey||"")))return null;
+  return new Date(`${dateKey}T12:00:00+09:00`).getUTCDay();
+}
+function dateKeyInTokyo(date=new Date()){
+  try{
+    const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(date);
+    const get=t=>parts.find(x=>x.type===t)?.value||"";
+    return `${get("year")}-${get("month")}-${get("day")}`;
+  }catch{return date.toISOString().slice(0,10)}
+}
+function dateDiffDays(fromKey,toKey){
+  const a=Date.parse(`${fromKey}T00:00:00+09:00`),b=Date.parse(`${toKey}T00:00:00+09:00`);
+  if(!Number.isFinite(a)||!Number.isFinite(b))return Infinity;
+  return Math.round((b-a)/86400000);
+}
+function targetWithinCurrentHoursWindow(dateKey){
+  const diff=dateDiffDays(dateKeyInTokyo(),dateKey);
+  return diff>=0&&diff<PLACES_AUTO_WINDOW_DAYS;
+}
+function timeToMinutes(value){
+  const m=String(value||"").trim().match(/^(\d{1,2}):(\d{2})$/);if(!m)return null;
+  const h=Number(m[1]),min=Number(m[2]);if(h>23||min>59)return null;
+  return h*60+min;
+}
+function minutesToTime(total){
+  const n=((Number(total)||0)%1440+1440)%1440;
+  return `${String(Math.floor(n/60)).padStart(2,"0")}:${String(n%60).padStart(2,"0")}`;
+}
+function hasManualHours(place){
+  return Object.values(place?.manualHours||{}).some(v=>String(v||"").trim()!=="");
+}
+function parseManualHoursSpec(spec){
+  const raw=String(spec||"").trim();
+  if(!raw)return {known:false,intervals:[]};
+  if(/^(休|公休|店休|closed|休業)$/i.test(raw))return {known:true,closed:true,intervals:[]};
+  if(/^(24h|24小時|24時間|全天)$/i.test(raw))return {known:true,closed:false,intervals:[{start:0,end:1440}]};
+  const parts=raw.split(/[,，、;；]+/).map(x=>x.trim()).filter(Boolean);
+  const intervals=[];
+  for(const part of parts){
+    const m=part.match(/^(\d{1,2}):(\d{2})\s*[-–—~～]\s*(\d{1,2}):(\d{2})$/);
+    if(!m)return {known:true,invalid:true,intervals:[]};
+    const start=Number(m[1])*60+Number(m[2]),endRaw=Number(m[3])*60+Number(m[4]);
+    if(start<0||start>=1440||endRaw<0||endRaw>=1440)return {known:true,invalid:true,intervals:[]};
+    const end=endRaw<=start?endRaw+1440:endRaw;
+    intervals.push({start,end});
+  }
+  return {known:true,closed:false,intervals};
+}
+function evaluateIntervals(intervals,plannedMinute,{source="營業時間",closed=false,invalid=false}={}){
+  if(invalid)return {level:"unknown",label:"營業時間格式錯誤",detail:"請重新設定時段",source};
+  if(closed)return {level:"error",label:"公休／未營業",detail:`預計抵達日為公休日`,source};
+  if(plannedMinute===null)return {level:"unknown",label:"已有營業時間",detail:"尚未設定抵達時間，無法判斷衝突",source};
+  if(!intervals?.length)return {level:"error",label:"公休／未營業",detail:"當日沒有營業時段",source};
+  for(const it of intervals){
+    let t=plannedMinute;
+    if(it.start>=1440&&t<1440)t+=1440;
+    if(t>=it.start&&t<it.end){
+      const left=it.end-t;
+      if(left<=60)return {level:"warn",label:"快打烊",detail:`預計抵達後約剩 ${left} 分鐘 · ${minutesToTime(it.end)} 關門`,source};
+      return {level:"ok",label:"營業時間正常",detail:`預計抵達 ${minutesToTime(plannedMinute)} · ${minutesToTime(it.end)} 關門`,source};
+    }
+  }
+  const upcoming=intervals.filter(it=>it.start>plannedMinute).sort((a,b)=>a.start-b.start)[0];
+  if(upcoming)return {level:"error",label:"尚未營業",detail:`預計 ${minutesToTime(plannedMinute)} 抵達 · ${minutesToTime(upcoming.start)} 才開門`,source};
+  const latest=Math.max(...intervals.map(it=>it.end));
+  return {level:"error",label:"抵達時已打烊",detail:`預計 ${minutesToTime(plannedMinute)} 抵達 · 今日營業已結束（約 ${minutesToTime(latest)}）`,source};
+}
+function evaluateManualOpening(place){
+  const dateKey=tripDayDate(place?.dayIndex),dow=dayOfWeekForDate(dateKey);
+  if(dow===null)return {level:"unknown",label:"無法判斷日期",detail:"行程日期格式不完整",source:"手動營業時間"};
+  const parsed=parseManualHoursSpec(place?.manualHours?.[dow]);
+  if(!parsed.known)return {level:"unknown",label:"尚未設定營業時間",detail:"可設定每週營業時間，離線也能檢查",source:"手動營業時間"};
+  return evaluateIntervals(parsed.intervals,timeToMinutes(place?.time),{...parsed,source:"手動營業時間"});
+}
+function openingPointWeekMinute(point){
+  if(!point)return null;
+  const day=Number(point.day),hour=Number(point.hour||0),minute=Number(point.minute||0);
+  if(!Number.isFinite(day))return null;
+  return day*1440+hour*60+minute;
+}
+function intervalsFromGoogleHours(hours,targetDow){
+  const periods=Array.isArray(hours?.periods)?hours.periods:[];
+  if(!periods.length)return [];
+  const targetBase=targetDow*1440;
+  const intervals=[];
+  periods.forEach(period=>{
+    const open=openingPointWeekMinute(period?.open);if(open===null)return;
+    let close=openingPointWeekMinute(period?.close);
+    if(close===null)close=open+10080;
+    if(close<=open)close+=10080;
+    [targetBase,targetBase+10080].forEach(base=>{
+      const targetEnd=base+1440;
+      if(open<targetEnd&&close>base)intervals.push({start:Math.max(open,base)-base,end:Math.min(close,targetEnd)-base});
+    });
+  });
+  return intervals;
+}
+function evaluateGooglePlaceOpening(placeData,imported){
+  const status=String(placeData?.businessStatus||"");
+  if(/CLOSED_PERMANENTLY/i.test(status))return {level:"error",label:"已永久歇業",detail:"Google Maps 顯示已永久歇業",source:"Google Maps"};
+  if(/CLOSED_TEMPORARILY/i.test(status))return {level:"error",label:"暫停營業",detail:"Google Maps 顯示暫停營業",source:"Google Maps"};
+  const dateKey=tripDayDate(imported?.dayIndex),dow=dayOfWeekForDate(dateKey);
+  if(dow===null)return {level:"unknown",label:"無法判斷日期",detail:"行程日期格式不完整",source:"Google Maps"};
+  const useCurrent=targetWithinCurrentHoursWindow(dateKey)&&placeData?.currentOpeningHours;
+  const hours=useCurrent?placeData.currentOpeningHours:placeData?.regularOpeningHours;
+  if(!hours)return {level:"unknown",label:"查不到營業時間",detail:"Google Maps 沒有提供此地點的營業時段",source:"Google Maps"};
+  const intervals=intervalsFromGoogleHours(hours,dow);
+  const result=evaluateIntervals(intervals,timeToMinutes(imported?.time),{source:useCurrent?"Google Maps · 近期特殊營業時間":"Google Maps · 一般營業時間"});
+  if(!useCurrent&&result.level!=="unknown")result.detail+=` · 距離行程超過 7 天，特殊休業請出發前再確認`;
+  return result;
+}
+function openingGuardForPlace(place){
+  const live=state?.placeLiveChecks?.[place?.id];
+  if(live?.result)return live.result;
+  return evaluateManualOpening(place);
+}
+function openingBadgeHtml(result,{compact=false}={}){
+  if(!result)return "";
+  const icon={ok:"✓",warn:"⚠",error:"!",unknown:"?"}[result.level]||"?";
+  return `<div class="opening-guard ${esc(result.level)} ${compact?"compact":""}"><span class="opening-guard-icon">${icon}</span><span><b>${esc(result.label)}</b>${compact?"":`<small>${esc(result.detail||"")}</small>`}</span>${result.source?.startsWith("Google Maps")?`<em translate="no">Google Maps</em>`:""}</div>`;
+}
+function openingEventHtml(event){
+  if(!event?._imported)return "";
+  const live=state?.placeLiveChecks?.[event.id];
+  if(live?.loading)return `<div class="opening-guard unknown"><span class="opening-guard-icon">…</span><span><b>正在檢查營業時間</b><small>只會在需要時連線查詢，不會背景輪詢</small></span><em translate="no">Google Maps</em></div>`;
+  return openingBadgeHtml(openingGuardForPlace(event));
+}
+function renderOpeningGuardSummary(dayIndex=state?.dayIndex||0){
+  const box=$("#openingGuardSummary");if(!box)return;
+  const list=(state?.importedPlaces||[]).filter(p=>Number(p.dayIndex)===Number(dayIndex));
+  if(!list.length){box.hidden=true;box.innerHTML="";return;}
+  const results=list.map(p=>openingGuardForPlace(p));
+  const counts={ok:0,warn:0,error:0,unknown:0};results.forEach(r=>counts[r?.level]++);
+  const danger=counts.error+counts.warn;
+  box.hidden=false;
+  box.innerHTML=`<div class="opening-summary-main"><div><span class="eyebrow">OPENING HOURS</span><h3>今日營業檢查</h3><p>${danger?`⚠ ${danger} 個地點需要注意`:`${counts.ok?`✓ ${counts.ok} 個地點時間正常`:`尚未有可判斷的營業時間`}`}${counts.unknown?` · ${counts.unknown} 個待確認`:""}</p></div><button type="button" class="mini-btn" data-check-opening-day="${dayIndex}">立即檢查</button></div>`;
+}
+function renderPlacesApiStatus(){
+  const el=$("#placesApiStatus");if(!el||!state)return;
+  const hasKey=!!String(state.placesApiKey||"").trim();
+  el.innerHTML=hasKey?`<span class="status-dot ready"></span><span>Google 即時檢查已設定 · 金鑰只存在這台裝置</span>`:`<span class="status-dot"></span><span>尚未設定 Google Places 金鑰 · 可先用手動營業時間離線檢查</span>`;
+}
+function loadGooglePlacesLibrary(){
+  if(window.google?.maps?.importLibrary)return Promise.resolve(window.google.maps);
+  if(googlePlacesLoaderPromise)return googlePlacesLoaderPromise;
+  const key=String(state?.placesApiKey||"").trim();
+  if(!key)return Promise.reject(new Error("尚未設定 Google Places API 金鑰"));
+  googlePlacesLoaderPromise=new Promise((resolve,reject)=>{
+    const existing=document.querySelector('script[data-kyushu-google-maps="1"]');
+    if(existing){existing.addEventListener("load",()=>resolve(window.google?.maps));existing.addEventListener("error",()=>reject(new Error("Google Maps 載入失敗")));return;}
+    const script=document.createElement("script");script.async=true;script.defer=true;script.dataset.kyushuGoogleMaps="1";
+    script.src=`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly&libraries=places&language=zh-TW&region=JP`;
+    script.onload=()=>window.google?.maps?.importLibrary?resolve(window.google.maps):reject(new Error("Places Library 未載入"));
+    script.onerror=()=>reject(new Error("Google Maps 載入失敗"));document.head.appendChild(script);
+  }).catch(err=>{googlePlacesLoaderPromise=null;throw err});
+  return googlePlacesLoaderPromise;
+}
+async function fetchGooglePlaceForImported(imported){
+  await loadGooglePlacesLibrary();
+  const {Place}=await google.maps.importLibrary("places");
+  const fields=["id","displayName","businessStatus","currentOpeningHours","regularOpeningHours"];
+  if(imported.placeId){
+    const place=new Place({id:imported.placeId});
+    await place.fetchFields({fields});
+    return place;
+  }
+  const day=TRIP?.days?.[imported.dayIndex];
+  const textQuery=[imported.query||imported.title,day?.location,"Japan"].filter(Boolean).join(" ");
+  const {places}=await Place.searchByText({textQuery,fields,language:"ja",region:"jp",maxResultCount:1});
+  return places?.[0]||null;
+}
+async function quietlyPersistResolvedPlaceId(imported,placeId){
+  if(!placeId||imported.placeId===placeId)return;
+  imported.placeId=String(placeId);saveLocal("importedPlaces",state.importedPlaces||[]);
+  if(state.cloud&&navigator.onLine){try{await setCloud("importedPlaces",state.importedPlaces||[])}catch(err){console.warn("Place ID sync failed",err)}}
+}
+async function checkImportedPlaceOpening(id,{notify=true,force=false}={}){
+  const imported=(state?.importedPlaces||[]).find(p=>p.id===id);if(!imported)return null;
+  const existing=state?.placeLiveChecks?.[id];
+  if(existing?.loading)return null;
+  if(!force&&existing?.result&&Date.now()-Number(existing.checkedAt||0)<10*60*1000)return existing.result;
+  if(!String(state.placesApiKey||"").trim()){
+    openPlacesApiSettings();if(notify)toast("先設定 Google Places 金鑰；手動營業時間仍可離線使用");return null;
+  }
+  if(!navigator.onLine){if(notify)toast("目前離線，改用手動營業時間檢查");return openingGuardForPlace(imported)}
+  state.placeLiveChecks[id]={loading:true};renderImportedPlaces();renderOpeningGuardSummary(imported.dayIndex);renderSchedule();
+  try{
+    const place=await fetchGooglePlaceForImported(imported);
+    if(!place)throw new Error("找不到相符的 Google Maps 地點");
+    const result=evaluateGooglePlaceOpening(place,imported);
+    state.placeLiveChecks[id]={loading:false,result,checkedAt:Date.now(),placeName:String(place.displayName||imported.title)};
+    if(place.id)await quietlyPersistResolvedPlaceId(imported,place.id);
+    renderImportedPlaces();renderSchedule();
+    if(notify)toast(result.level==="error"?`⚠ ${imported.title}：${result.label}`:`${imported.title}：${result.label}`);
+    return result;
+  }catch(err){
+    console.warn("Google opening-hours check failed",err);
+    state.placeLiveChecks[id]={loading:false,result:{level:"unknown",label:"Google 檢查失敗",detail:String(err.message||"無法取得營業時間"),source:"Google Maps"},checkedAt:Date.now()};
+    renderImportedPlaces();renderSchedule();if(notify)toast(`營業時間檢查失敗：${err.message}`);return null;
+  }
+}
+async function checkOpeningHoursForDay(dayIndex,{auto=false}={}){
+  const list=(state?.importedPlaces||[]).filter(p=>Number(p.dayIndex)===Number(dayIndex));
+  if(!list.length){if(!auto)toast("這一天沒有快速匯入的地點");return}
+  if(auto){
+    const dateKey=tripDayDate(dayIndex);
+    if(!targetWithinCurrentHoursWindow(dateKey)||!navigator.onLine||!String(state.placesApiKey||"").trim())return;
+  }
+  if(!String(state.placesApiKey||"").trim()){
+    openPlacesApiSettings();if(!auto)toast("先設定 Google Places 金鑰；手動營業時間仍可離線使用");return;
+  }
+  for(const p of list){
+    if(auto&&state.placeLiveChecks?.[p.id])continue;
+    await checkImportedPlaceOpening(p.id,{notify:!auto});
+  }
+}
+function maybeAutoCheckOpeningHours(dayIndex){
+  setTimeout(()=>checkOpeningHoursForDay(dayIndex,{auto:true}),120);
+}
+function openPlacesApiSettings(){
+  const modal=$("#placesApiModal"),input=$("#placesApiKeyInput");if(!modal||!input)return;
+  input.value=state?.placesApiKey||"";modal.showModal();
+}
+function savePlacesApiSettings(e){
+  e.preventDefault();
+  const key=String(new FormData(e.currentTarget).get("apiKey")||"").trim();
+  state.placesApiKey=key;saveLocal("placesApiKey",key);googlePlacesLoaderPromise=null;
+  renderPlacesApiStatus();$("#placesApiModal")?.close();toast(key?"Google Places 金鑰已只存在這台裝置":"已清除 Google Places 金鑰");
+}
+function openOpeningHoursModal(id){
+  const imported=(state?.importedPlaces||[]).find(p=>p.id===id);if(!imported)return;
+  state.hoursEditId=id;
+  const modal=$("#openingHoursModal");if(!modal)return;
+  const title=$("#openingHoursPlaceTitle");if(title)title.textContent=imported.title;
+  for(let day=0;day<7;day++){
+    const input=modal.querySelector(`[data-hours-day="${day}"]`);if(input)input.value=imported.manualHours?.[day]||"";
+  }
+  const meta=$("#openingHoursModalMeta");if(meta){const r=openingGuardForPlace(imported);meta.innerHTML=openingBadgeHtml(r)}
+  modal.showModal();
+}
+async function saveOpeningHoursManual(e){
+  e.preventDefault();
+  const imported=(state?.importedPlaces||[]).find(p=>p.id===state.hoursEditId);if(!imported)return;
+  const hours={};for(let day=0;day<7;day++)hours[day]=String(e.currentTarget.querySelector(`[data-hours-day="${day}"]`)?.value||"").trim();
+  imported.manualHours=normalizeManualHours(hours);delete state.placeLiveChecks[imported.id];
+  await persistImportedPlaces({notify:false});$("#openingHoursModal")?.close();toast("營業時間已儲存，離線也會自動檢查");
+}
+
+function decodeMapComponent(v=""){
+  try{return decodeURIComponent(String(v).replace(/\+/g," ")).trim()}catch{return String(v).trim()}
+}
+function inferGoogleMapsTitle(rawUrl=""){
+  try{
+    const u=new URL(rawUrl);
+    const q=u.searchParams.get("query")||u.searchParams.get("q")||u.searchParams.get("destination");
+    if(q&&!/^place_id:/i.test(q))return decodeMapComponent(q);
+    const parts=u.pathname.split("/").filter(Boolean);
+    const pi=parts.findIndex(x=>x==="place");
+    if(pi>=0&&parts[pi+1])return decodeMapComponent(parts[pi+1]);
+    if((u.hostname.includes("google.")||u.hostname.includes("google.com"))&&parts.length){
+      const candidate=parts.find(x=>!["maps","dir","search"].includes(x));
+      if(candidate)return decodeMapComponent(candidate);
+    }
+  }catch{}
+  return "";
+}
+function parsePlaceImportLine(line,index=0){
+  const raw=String(line||"").trim();if(!raw)return null;
+  const urlMatch=raw.match(/https?:\/\/\S+/i);
+  const mapUrl=urlMatch?urlMatch[0].replace(/[),。；;]+$/g,""):"";
+  let label=mapUrl?raw.replace(mapUrl,"").replace(/^\s*[|｜–—-]\s*|\s*[|｜–—-]\s*$/g,"").trim():raw;
+  if(!label&&mapUrl)label=inferGoogleMapsTitle(mapUrl);
+  if(!label)label=`Google Maps 地點 ${index+1}`;
+  const google=/\bgoogle\.[^/]+\/maps\b|maps\.app\.goo\.gl|goo\.gl\/maps/i.test(mapUrl);
+  const source=mapUrl?(google?"google-maps":"url"):"text";
+  return {id:`draft-${index}-${Date.now().toString(36)}`,title:label,mapUrl:mapUrl||mapSearch(label),query:label,source,checked:true};
+}
+function parsePlaceImportText(text){
+  return String(text||"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean).map(parsePlaceImportLine).filter(Boolean);
+}
+function populatePlaceImportDaySelect(){
+  const sel=$("#placeImportDay");if(!sel||!TRIP?.days)return;
+  const current=String(Math.max(0,Math.min(TRIP.days.length-1,state?.dayIndex||0)));
+  sel.innerHTML=TRIP.days.map((d,i)=>`<option value="${i}">D${i+1} · ${esc(d.shortDate||d.date||"")} · ${esc(d.title||"")}</option>`).join("");
+  sel.value=current;
+}
+function renderPlaceImportPreview(){
+  const box=$("#placeImportPreview"),status=$("#placeImportStatus"),add=$("#placeImportAddBtn");if(!box)return;
+  const drafts=state.placeImportDrafts||[];
+  if(!drafts.length){box.innerHTML="";if(status)status.textContent="尚未解析";if(add)add.disabled=true;return;}
+  box.innerHTML=drafts.map((d,i)=>`<div class="place-import-preview-item" data-import-draft="${i}">
+    <label class="place-import-check"><input type="checkbox" data-import-check="${i}" ${d.checked!==false?"checked":""}><span></span></label>
+    <div class="place-import-preview-main">
+      <input class="place-import-title-input" data-import-title="${i}" value="${esc(d.title)}" aria-label="景點名稱">
+      <div class="place-import-preview-meta"><span>${d.source==="google-maps"?"Google Maps":d.source==="url"?"網址":"店名搜尋"}</span><a target="_blank" rel="noopener" href="${esc(d.mapUrl)}">開啟地圖 ↗</a></div>
+    </div>
+  </div>`).join("");
+  if(status){
+    const shortCount=drafts.filter(d=>/maps\.app\.goo\.gl|goo\.gl\/maps/i.test(d.mapUrl)&&/^Google Maps 地點/.test(d.title)).length;
+    status.textContent=shortCount?`已解析 ${drafts.length} 筆 · ${shortCount} 筆短網址無法離線取得店名，請直接改上方名稱`:`已解析 ${drafts.length} 筆 · 可直接修改名稱後加入`;
+  }
+  if(add)add.disabled=false;
+}
+function renderImportedPlaces(){
+  populatePlaceImportDaySelect();renderPlacesApiStatus();
+  const box=$("#importedPlacesList");if(!box)return;
+  const list=(state.importedPlaces||[]).slice().sort((a,b)=>(a.dayIndex-b.dayIndex)||String(a.time).localeCompare(String(b.time)));
+  box.innerHTML=list.length?list.map(p=>{
+    const live=state.placeLiveChecks?.[p.id],result=openingGuardForPlace(p);
+    const badge=live?.loading?`<div class="opening-guard unknown compact"><span class="opening-guard-icon">…</span><span><b>正在檢查營業時間</b></span><em translate="no">Google Maps</em></div>`:openingBadgeHtml(result,{compact:true});
+    return `<div class="list-item place-import-saved-item"><div class="list-main"><div class="place-import-saved-copy"><div class="list-title">${esc(p.title)}</div><div class="list-meta">D${p.dayIndex+1}${p.time?` · ${esc(p.time)}`:""} · ${esc(p.category||"景點")}${p.placeId?` · Place ID 已綁定`:""}</div>${badge}</div><div class="list-actions place-hours-actions"><a class="mini-btn" target="_blank" rel="noopener" href="${esc(p.mapUrl||mapSearch(p.query||p.title))}">地圖</a><button class="mini-btn" data-edit-opening-hours="${esc(p.id)}">營業</button><button class="mini-btn" data-check-opening="${esc(p.id)}">檢查</button><button class="mini-btn" data-delete-imported-place="${esc(p.id)}">刪</button></div></div></div>`;
+  }).join(""):`<div class="empty">還沒有快速匯入的景點。</div>`;
+}
+async function persistImportedPlaces({notify=false}={}){
+  saveLocal("importedPlaces",state.importedPlaces||[]);
+  state.importedPlacesPending=true;saveLocal("importedPlacesPending",true);
+  renderImportedPlaces();renderSchedule();
+  if(state.cloud&&navigator.onLine){
+    try{
+      await setCloud("importedPlaces",state.importedPlaces||[]);
+      state.importedPlacesPending=false;saveLocal("importedPlacesPending",false);
+      if(notify)toast("已加入行程並同步");
+    }catch(err){console.warn("Imported places sync failed",err);if(notify)toast("已存本機，雲端稍後再同步")}
+  }else if(notify)toast("已加入行程・離線保存在本機");
+}
+async function syncPendingImportedPlaces(){
+  if(!state?.importedPlacesPending||!state.cloud||!navigator.onLine)return false;
+  try{
+    await setCloud("importedPlaces",state.importedPlaces||[]);
+    state.importedPlacesPending=false;saveLocal("importedPlacesPending",false);
+    return true;
+  }catch(err){console.warn("Pending imported places sync failed",err);return false}
+}
+function parsePlaceImportDrafts(){
+  const text=$("#placeImportText")?.value||"";
+  state.placeImportDrafts=parsePlaceImportText(text);
+  renderPlaceImportPreview();
+  if(!state.placeImportDrafts.length)toast("請先貼上店名或 Google Maps 網址");
+}
+async function addPlaceImportDrafts(){
+  const drafts=state.placeImportDrafts||[];if(!drafts.length)return;
+  const dayIndex=Number($("#placeImportDay")?.value||state.dayIndex||0);
+  const time=$("#placeImportTime")?.value||"";
+  const category=$("#placeImportCategory")?.value||"景點";
+  const selected=[];
+  drafts.forEach((d,i)=>{
+    const checked=$(`[data-import-check="${i}"]`)?.checked!==false;
+    if(!checked)return;
+    const title=$(`[data-import-title="${i}"]`)?.value?.trim()||d.title;
+    if(!title)return;
+    selected.push({id:uid(),dayIndex,time,title,category,mapUrl:d.mapUrl||mapSearch(title),query:title,note:"快速匯入",source:d.source,importedAt:Date.now(),placeId:"",manualHours:normalizeManualHours({})});
+  });
+  if(!selected.length){toast("請至少勾選一個景點");return;}
+  state.importedPlaces=[...(state.importedPlaces||[]),...selected];
+  state.placeImportDrafts=[];
+  const ta=$("#placeImportText");if(ta)ta.value="";
+  renderPlaceImportPreview();
+  await persistImportedPlaces({notify:true});
+}
+async function deleteImportedPlace(id){
+  state.importedPlaces=(state.importedPlaces||[]).filter(x=>x.id!==id);
+  await persistImportedPlaces({notify:false});toast("已移除匯入景點");
+}
+function importedEventsForDay(dayIndex){
+  return (state.importedPlaces||[]).filter(x=>Number(x.dayIndex)===Number(dayIndex)).map(x=>({
+    ...x,_imported:true,nav:x.query||x.title,links:x.mapUrl?[{label:"原始 Google Maps",url:x.mapUrl}]:[],noNav:false
+  }));
+}
 function guideDeviceId(){
   try{
     let id=localStorage.getItem(GUIDE_DEVICE_ID_KEY);
@@ -2243,25 +2766,29 @@ function renderSchedule(){
   renderDayBrief(d);
   renderDailyScene();
   $("#decisionArea").innerHTML=renderDecisionCards(d);
-  const visibleEvents=d.events.filter(eventVisible);
+  const baseEvents=d.events.filter(eventVisible);
+  const visibleEvents=[...baseEvents,...importedEventsForDay(state.dayIndex)];
   $("#timeline").innerHTML=visibleEvents.map((e,i)=>`
-    <article class="event ${buddyRole(e)?`buddy-${buddyRole(e)}`:""}">
+    <article class="event ${e._imported?"event-imported ":""}${buddyRole(e)?`buddy-${buddyRole(e)}`:""}">
       <span class="event-dot"></span>
       ${i>0 && e.travel?`<div class="travel">${esc(e.transport||"→")} ${esc(e.travel)}</div>`:""}
       <div class="event-card" data-guide-enabled="1">
-        <div class="event-top"><h3 class="event-title">${esc(e.title)}</h3><span class="tag">${esc(e.category||"行程")}</span></div>
+        <div class="event-top"><h3 class="event-title">${esc(e.title)}</h3><span class="tag">${esc(e.category||"行程")}</span>${e._imported?`<span class="imported-badge">快速匯入</span>`:""}</div>
         <div class="event-time">${esc(e.time)}</div>
+        ${openingEventHtml(e)}
         ${renderEventExtras(e)}
         ${e.note?`<div class="event-note">${esc(e.note)}</div>`:""}
         <div class="event-footer ${e.noNav?"buddy-only-footer":""}">
-          ${e.noNav?"":`<a class="nav-link" target="_blank" rel="noopener" href="${mapNav(e.nav||e.title,weatherMode(e))}">↗ Google Maps 查看</a>`}
+          ${e.noNav?"":`<a class="nav-link" target="_blank" rel="noopener" href="${esc(e.mapUrl||mapNav(e.nav||e.title,weatherMode(e)))}">↗ Google Maps 查看</a>`}
           ${eventBuddyHtml(e,i)}
         </div>
       </div>
     </article>`).join("");
+  renderOpeningGuardSummary(state.dayIndex);
   renderHotelReturnCard();
   renderWeather(d);
   requestAnimationFrame(()=>bindGuideTargets(visibleEvents));
+  maybeAutoCheckOpeningHours(state.dayIndex);
 }
 async function renderWeather(d){
   const card=$("#weatherCard");card.classList.add("skeleton");card.classList.remove("weather-no-forecast");
@@ -2417,17 +2944,19 @@ function settlementText(net){
   return net[a]>0?`${b} → ${a} ¥${Math.round(net[a]).toLocaleString()}`:`${a} → ${b} ¥${Math.round(-net[a]).toLocaleString()}`;
 }
 function renderExpenses(){
-  const s=computeExpense();
+  const s=computeExpense(),rate=activeFxRate();
+  renderFxCard();
   $("#expenseSummary").innerHTML=`<div class="eyebrow">旅費總計</div><div class="summary-total">¥${Math.round(s.total).toLocaleString()}</div>
+    ${rate?`<div class="summary-twd">約 NT$${formatTwd(s.total*rate)}</div>`:""}
     <div class="list-meta">${TRIP.members.map(m=>`${esc(m)} 已付款 ¥${Math.round(s.paid[m]).toLocaleString()}`).join(" · ")}</div>
     <div class="settlement"><b>目前結算</b><br>${esc(settlementText(s.net))}</div>`;
   $("#expenseList").innerHTML=state.expenses.length?state.expenses.slice().reverse().map(i=>`
     <div class="list-item"><div class="list-main"><div><div class="list-title">${esc(i.name)}</div>
-      <div class="list-meta">¥${Number(i.amount).toLocaleString()} · ${esc(i.payer)} 付款 · 分攤：${esc((i.participants||TRIP.members).join("、"))}${i.date?` · ${esc(i.date)}`:""}</div>
+      <div class="list-meta">¥${Number(i.amount).toLocaleString()}${rate?` · 約 NT$${formatTwd(Number(i.amount)*rate)}`:""} · ${esc(i.payer)} 付款 · 分攤：${esc((i.participants||TRIP.members).join("、"))}${i.date?` · ${esc(i.date)}`:""}</div>
       </div><button class="mini-btn" data-delete-expense="${i.id}">刪</button></div></div>`).join(""):`<div class="empty">還沒有記帳紀錄。</div>`;
 }
 function renderNotes(){ $("#notesArea").value=state.notes||""; }
-function renderTools(){renderBookings();renderShopping();renderExpenses();renderNotes()}
+function renderTools(){renderBookings();renderShopping();renderExpenses();renderNotes();renderImportedPlaces()}
 function renderAll(){renderDays();renderSchedule();renderFood();renderTools()}
 
 function switchView(v){
@@ -2446,6 +2975,8 @@ function switchTool(t){
   state.tool=t;
   $$(".tool-card").forEach(x=>x.classList.toggle("active",x.dataset.tool===t));
   $$(".tool-panel").forEach(x=>x.classList.toggle("active",x.id===`${t}Panel`));
+  if(t==="expense")setTimeout(()=>ensureFxRate(),0);
+  if(t==="import")setTimeout(()=>renderImportedPlaces(),0);
   if(prev&&prev!==t)setTimeout(()=>maybePageSwitchDashEgg("tool"),260);
 }
 function localUpsert(key,obj){
@@ -2566,6 +3097,10 @@ function bind(){
     const decisionClear=e.target.closest("[data-decision-clear]");if(decisionClear){await clearDecision(decisionClear.dataset.decisionClear);return}
     const decision=e.target.closest("[data-decision-id]");if(decision){stageDecision(decision.dataset.decisionId,decision.dataset.decisionOption);return}
     const task=e.target.closest("[data-task-id]");if(task){await toggleBookingTask(task.dataset.taskId);return}
+    const importedDelete=e.target.closest("[data-delete-imported-place]");if(importedDelete){await deleteImportedPlace(importedDelete.dataset.deleteImportedPlace);return}
+    const openingEdit=e.target.closest("[data-edit-opening-hours]");if(openingEdit){openOpeningHoursModal(openingEdit.dataset.editOpeningHours);return}
+    const openingCheck=e.target.closest("[data-check-opening]");if(openingCheck){await checkImportedPlaceOpening(openingCheck.dataset.checkOpening,{notify:true,force:true});return}
+    const openingDay=e.target.closest("[data-check-opening-day]");if(openingDay){await checkOpeningHoursForDay(Number(openingDay.dataset.checkOpeningDay),{auto:false});return}
     for(const [attr,key,render] of [["data-check-food","foods",renderFood],["data-check-shopping","shopping",renderShopping]]){
       const x=e.target.closest(`[${attr}]`);if(x){const id=x.getAttribute(attr);const before=state[key].find(i=>i.id===id)?.checked;await toggleItem(key,id);render();if(!before)buddyCelebrate(key==="foods"?pickLine(BUDDY_DIALOG.food.complete):pickLine(BUDDY_DIALOG.shop.complete),key==="foods"?"./purin_clap.png?v=430":"./buddy_success.png?v=430",key==="foods"?"food":"shop");return}
     }
@@ -2673,6 +3208,23 @@ function bind(){
     applyDisplaySettings();
     toast("已恢復預設顯示");
   });
+  $("#fxJpyInput")?.addEventListener("input",updateFxCalculator);
+  $("#fxSettingsBtn")?.addEventListener("click",openFxRateModal);
+  $("#fxRefreshBtn")?.addEventListener("click",()=>ensureFxRate({force:true,notify:true}));
+  $("#fxRateClose")?.addEventListener("click",()=>$("#fxRateModal")?.close());
+  $("#fxRateModal")?.addEventListener("click",e=>{if(e.target===$("#fxRateModal"))$("#fxRateModal").close()});
+  $("#fxRateForm")?.addEventListener("submit",saveFxRateSettings);
+  $("#placeImportParseBtn")?.addEventListener("click",parsePlaceImportDrafts);
+  $("#placeImportAddBtn")?.addEventListener("click",addPlaceImportDrafts);
+  $("#placeImportText")?.addEventListener("paste",()=>setTimeout(()=>{if(($("#placeImportText")?.value||"").trim())parsePlaceImportDrafts()},30));
+  $("#placesApiSettingsBtn")?.addEventListener("click",openPlacesApiSettings);
+  $("#placesApiClose")?.addEventListener("click",()=>$("#placesApiModal")?.close());
+  $("#placesApiModal")?.addEventListener("click",e=>{if(e.target===$("#placesApiModal"))$("#placesApiModal").close()});
+  $("#placesApiForm")?.addEventListener("submit",savePlacesApiSettings);
+  $("#openingHoursClose")?.addEventListener("click",()=>$("#openingHoursModal")?.close());
+  $("#openingHoursModal")?.addEventListener("click",e=>{if(e.target===$("#openingHoursModal"))$("#openingHoursModal").close()});
+  $("#openingHoursForm")?.addEventListener("submit",saveOpeningHoursManual);
+  $("#openingHoursGoogleCheck")?.addEventListener("click",()=>{const id=state?.hoursEditId;if(id){$("#openingHoursModal")?.close();checkImportedPlaceOpening(id,{notify:true,force:true})}});
   $("#modalClose").addEventListener("click",()=>$("#formModal").close());
   $("#modalForm").addEventListener("submit",handleSubmit);
   $("#firebaseTestBtn").addEventListener("click", async()=>{
@@ -2785,11 +3337,13 @@ async function connectCloud({force=false}={}){
     mergeGuideNotesFromCloud(remoteGuideNotes,{syncPending:false});
   }catch(err){console.warn("Guide notes initial merge failed",err)}
   await syncPendingGuideNotes();
+  await syncPendingImportedPlaces();
 
   const mappings=[
     ["foods",v=>{if(v!==null){state.foods=normalizeCloud(v);saveLocal("foods",state.foods);renderFood()}}],
     ["shopping",v=>{if(v!==null){state.shopping=normalizeCloud(v);saveLocal("shopping",state.shopping);renderShopping()}}],
     ["expenses",v=>{if(v!==null){state.expenses=normalizeCloud(v);saveLocal("expenses",state.expenses);renderExpenses()}}],
+    ["importedPlaces",v=>{if(v!==null&&!state.importedPlacesPending){state.importedPlaces=normalizeImportedPlaces(v);saveLocal("importedPlaces",state.importedPlaces);renderImportedPlaces();renderSchedule()}}],
     ["taskStatus",v=>{if(v && typeof v==="object"){state.taskStatus=v;saveLocal("taskStatus",v);renderBookings()}}],
     ["decisions",v=>{if(v && typeof v==="object"){state.decisions=v;saveLocal("decisions",v);renderSchedule()}}],
     ["guideNotes",v=>mergeGuideNotesFromCloud(v)],
@@ -3030,7 +3584,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=5320",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=5323",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });

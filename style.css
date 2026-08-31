@@ -3327,3 +3327,63 @@ html[data-theme="buddy"] .buddy-speech-bubble.single-line.line-xlong{font-size:9
 /* v5.3.14 — long-press egg bottom caption changes on artwork tap, without moving the card. */
 html[data-theme="buddy"] #buddyCelebrateText.caption-swap{animation:buddyEggCaptionSwap .18s ease both}
 @keyframes buddyEggCaptionSwap{0%{opacity:.35}100%{opacity:1}}
+
+
+/* v5.3.21 · JPY/TWD exchange-rate calculator */
+.fx-card{margin:0 0 12px!important;padding:15px!important;overflow:hidden}
+.fx-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+.fx-head h3{margin:3px 0 0;font-size:17px}
+.fx-rate-line{display:flex;align-items:baseline;gap:7px;padding:9px 11px;border-radius:12px;background:rgba(119,151,206,.07);font-size:12px;color:var(--muted)}
+.fx-rate-line strong{font-family:Georgia,serif;font-size:22px;color:var(--accent);letter-spacing:.02em}
+.fx-rate-line em{margin-left:auto;padding:4px 7px;border-radius:999px;background:rgba(95,135,190,.09);font-style:normal;font-size:9px;font-weight:800;color:var(--muted);white-space:nowrap}
+.fx-rate-line em[data-mode="manual"]{background:#FFF0D9;color:#8A6331}
+.fx-converter{display:grid;grid-template-columns:minmax(0,1fr) 25px minmax(0,1fr);align-items:center;gap:8px;margin-top:11px}
+.fx-input-box,.fx-output-box{display:flex;align-items:center;gap:8px;min-width:0;padding:10px 12px;border-radius:13px;background:#F6F7FA;border:1px solid rgba(117,127,150,.08)}
+.fx-input-box small,.fx-output-box small{font-size:9px;font-weight:800;color:var(--muted)}
+.fx-input-box input{min-width:0;width:100%;border:0;background:transparent;outline:none;font-size:20px;color:var(--ink);font-variant-numeric:tabular-nums}
+.fx-output-box{justify-content:space-between;background:#EEF1F5}
+.fx-output-box strong{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:20px;font-variant-numeric:tabular-nums}
+.fx-arrow{text-align:center;color:#B5BDC8;font-size:19px}
+.fx-foot{display:flex;justify-content:space-between;gap:12px;margin-top:8px;font-size:8.5px;color:var(--muted);line-height:1.4}
+.fx-foot a{color:inherit;text-decoration:underline;text-underline-offset:2px;white-space:nowrap}
+.summary-twd{margin:-1px 0 5px;color:var(--accent);font-size:12px;font-weight:800}
+.fx-mode-options{display:grid;gap:8px;margin-bottom:13px}
+.fx-mode-options label{display:flex;gap:10px;align-items:flex-start;padding:11px;border:1px solid var(--line);border-radius:13px;background:#fff;cursor:pointer}
+.fx-mode-options input{margin-top:3px;accent-color:var(--accent)}
+.fx-mode-options span{display:grid;gap:2px}
+.fx-mode-options b{font-size:12px}
+.fx-mode-options small{font-size:9.5px;line-height:1.45;color:var(--muted)}
+.fx-refresh-btn{width:100%;margin:0 0 8px;padding:10px 12px}
+html[data-theme="buddy"] .fx-card{background:#FFFDF8!important;border-radius:22px!important}
+html[data-theme="buddy"] .fx-rate-line{background:#FFF8DF}
+html[data-theme="buddy"] .fx-input-box,html[data-theme="buddy"] .fx-output-box{background:#FFFDF7;border-color:#F0DEC2}
+@media(max-width:380px){.fx-rate-line{gap:5px}.fx-rate-line strong{font-size:19px}.fx-converter{grid-template-columns:minmax(0,1fr) 18px minmax(0,1fr)}.fx-foot{flex-direction:column;gap:3px}}
+
+/* v5.3.22 Place Quick Import */
+.place-import-card,.place-import-saved{margin-top:12px;padding:16px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.78);box-shadow:var(--shadow)}
+.place-import-saved{margin-top:16px}.place-import-help{margin:0 0 12px;color:var(--muted);font-size:11px;line-height:1.65}
+.place-import-text{box-sizing:border-box;width:100%;min-height:138px;resize:vertical;padding:13px 14px;border:1px solid var(--line);border-radius:14px;background:var(--card,#fff);color:var(--ink);font:inherit;font-size:13px;line-height:1.55;outline:none}
+.place-import-text:focus,.place-import-title-input:focus,.place-import-options input:focus,.place-import-options select:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 13%,transparent)}
+.place-import-options{display:grid;grid-template-columns:1.35fr .8fr .9fr;gap:9px;margin:12px 0}.place-import-options label{display:grid;gap:6px}.place-import-options label>span{color:var(--muted);font-size:10px;font-weight:700}
+.place-import-options input,.place-import-options select{box-sizing:border-box;width:100%;min-height:42px;padding:9px 10px;border:1px solid var(--line);border-radius:12px;background:var(--card,#fff);color:var(--ink);font:inherit;font-size:12px;outline:none}
+.place-import-actions{display:flex;gap:9px}.place-import-actions .primary-btn{flex:1;margin:0}.place-import-actions .mini-btn{min-width:94px}
+.place-import-status{margin:10px 2px;color:var(--muted);font-size:10px;line-height:1.5}
+.place-import-preview{display:grid;gap:8px}.place-import-preview-item{display:grid;grid-template-columns:28px 1fr;gap:8px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:13px;background:var(--soft-bg)}
+.place-import-check{display:grid;place-items:center}.place-import-check input{width:18px;height:18px;accent-color:var(--accent)}
+.place-import-preview-main{min-width:0}.place-import-title-input{box-sizing:border-box;width:100%;padding:8px 9px;border:1px solid transparent;border-radius:9px;background:rgba(255,255,255,.82);color:var(--ink);font:inherit;font-size:12px;font-weight:700;outline:none}
+.place-import-preview-meta{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:5px;color:var(--muted);font-size:9px}.place-import-preview-meta a{color:var(--accent-strong);text-decoration:none;white-space:nowrap}
+.event-imported .event-card{border-style:dashed}.imported-badge{display:inline-flex;align-items:center;padding:4px 7px;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,#fff);color:var(--accent-strong);font-size:9px;font-weight:800;white-space:nowrap}
+html[data-theme="buddy"] .place-import-card,html[data-theme="buddy"] .place-import-saved{background:#FFFCF5;border-color:#E8D9B9}html[data-theme="buddy"] .place-import-preview-item{background:#FFF8E9;border-color:#EADFC7}
+@media(max-width:520px){.place-import-options{grid-template-columns:1fr 1fr}.place-import-options label:first-child{grid-column:1/-1}.place-import-actions{align-items:stretch}.place-import-preview-meta{align-items:flex-start}.place-import-saved-item .list-main{gap:8px}}
+
+/* v5.3.23 — Opening Hours Guard */
+.opening-setup-card{margin-top:12px;padding:15px 16px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.78);box-shadow:var(--shadow)}
+.opening-setup-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.opening-setup-head h3{margin:3px 0 0;font-size:16px}.opening-setup-card>p{margin:9px 0 0;color:var(--muted);font-size:10px;line-height:1.6}
+.places-api-status{display:flex;align-items:center;gap:7px;margin-top:10px;padding:9px 10px;border-radius:12px;background:var(--soft-bg);color:var(--muted);font-size:10px;line-height:1.45}.status-dot{width:8px;height:8px;flex:0 0 auto;border-radius:50%;background:#B7BDC8}.status-dot.ready{background:#55C98A;box-shadow:0 0 0 4px rgba(85,201,138,.12)}
+.opening-guard-summary{margin:10px 0 14px;padding:13px 14px;border:1px solid var(--line);border-radius:17px;background:rgba(255,255,255,.8);box-shadow:var(--shadow)}.opening-summary-main{display:flex;align-items:center;justify-content:space-between;gap:12px}.opening-summary-main h3{margin:2px 0 2px;font-size:15px}.opening-summary-main p{margin:0;color:var(--muted);font-size:10px;line-height:1.45}
+.opening-guard{display:flex;align-items:flex-start;gap:8px;margin:8px 0 4px;padding:8px 9px;border:1px solid var(--line);border-radius:11px;background:var(--soft-bg);font-size:10px;line-height:1.4}.opening-guard-icon{display:grid;place-items:center;width:18px;height:18px;flex:0 0 auto;border-radius:50%;font-size:10px;font-weight:900}.opening-guard>span:nth-child(2){display:grid;gap:1px;min-width:0}.opening-guard b{font-size:10px}.opening-guard small{color:var(--muted);font-size:9px}.opening-guard em{margin-left:auto;font-style:normal;font-size:8px;color:var(--muted);white-space:nowrap}.opening-guard.ok{border-color:rgba(65,164,108,.2);background:rgba(72,184,120,.07)}.opening-guard.ok .opening-guard-icon{background:rgba(72,184,120,.14);color:#2C8A59}.opening-guard.warn{border-color:rgba(218,157,52,.28);background:rgba(255,190,70,.10)}.opening-guard.warn .opening-guard-icon{background:rgba(255,190,70,.18);color:#9A6814}.opening-guard.error{border-color:rgba(213,91,91,.25);background:rgba(222,95,95,.08)}.opening-guard.error .opening-guard-icon{background:rgba(222,95,95,.15);color:#A73A3A}.opening-guard.unknown .opening-guard-icon{background:rgba(128,137,153,.12);color:#777F8B}.opening-guard.compact{margin:5px 0 0;padding:5px 7px;align-items:center}.opening-guard.compact .opening-guard-icon{width:16px;height:16px}.opening-guard.compact b{font-size:9px}.opening-guard.compact em{font-size:7.5px}
+.place-import-saved-copy{min-width:0;flex:1}.place-hours-actions{flex-wrap:wrap;justify-content:flex-end}.place-hours-actions .mini-btn{padding:6px 8px}
+.places-api-help,.opening-hours-help{margin:0 0 13px;color:var(--muted);font-size:10px;line-height:1.6}.places-api-note{display:grid;gap:3px;margin:10px 0 14px;padding:10px 11px;border-radius:12px;background:var(--soft-bg);font-size:9.5px;line-height:1.5}.places-api-note span{color:var(--muted)}
+.opening-hours-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}.opening-hours-grid label{display:grid;grid-template-columns:36px 1fr;align-items:center;gap:7px}.opening-hours-grid label>span{font-size:10px;font-weight:800;color:var(--muted)}.opening-hours-grid input{box-sizing:border-box;width:100%;min-height:39px;padding:8px 9px;border:1px solid var(--line);border-radius:11px;background:var(--card,#fff);color:var(--ink);font:inherit;font-size:11px;outline:none}.opening-hours-grid input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 13%,transparent)}.opening-hours-actions{display:flex;gap:9px}.opening-hours-actions .primary-btn{flex:1;margin:0}.opening-hours-actions .mini-btn{min-width:120px}
+html[data-theme="buddy"] .opening-setup-card,html[data-theme="buddy"] .opening-guard-summary{background:#FFFCF5;border-color:#E8D9B9}html[data-theme="buddy"] .opening-guard{background:#FFF9ED;border-color:#EADFC7}
+@media(max-width:520px){.opening-hours-grid{grid-template-columns:1fr}.opening-hours-actions{flex-direction:column}.opening-hours-actions .mini-btn{width:100%}.opening-summary-main{align-items:flex-start}.place-hours-actions{max-width:145px}}
