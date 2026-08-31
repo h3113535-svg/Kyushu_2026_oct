@@ -75,3 +75,16 @@
 - Secret Life 相簿總張數由 11 張增加為 12 張；首頁頁碼初始顯示同步更新為 1 / 12。
 - 版本號提升至 v5.3.19，更新 `index.html`、`app.js`、`sw.js`、`manifest.json` 以確保 PWA 取得新相簿內容。
 - Secret Life 圖片仍只在首頁 Hero 長按成功後背景預載，不加入 Service Worker SHELL 初始預快取。
+
+
+更新：v5.3.20 Offline Cache First + Data Saver
+- Service Worker 改為靜態資源 Cache First：下載過的 HTML / CSS / JS / 圖片不再於每次開啟時重新向 GitHub Pages 下載。
+- 首次安裝新版 SW 時預快取目前 App 實際引用的所有同站靜態資源（約 21 MB，一次性），之後可完整離線讀取 UI 與圖片。
+- 同站 runtime cache 亦採 Cache First；未預快取但曾使用過的檔案，第一次下載後會留在 CacheStorage。
+- Navigation 改由快取 index.html 優先，版本更新依 app/style/sw query 版本與新版 Service Worker 重新建立 cache。
+- Cache 清理只刪除 `kyushu-oct-` 前綴，不再清掉同 origin 其他專案的 cache，避免未來 11 月 PWA 互相影響。
+- 移除 Firebase REST 每 4 秒背景輪詢；改為一次性同步。30 分鐘內重開 App 直接使用本機資料，不再重複讀取同一批雲端清單。
+- 私人完整 itinerary content 在同一已授權裝置上最多每 6 小時重新抓取一次；期間直接使用已授權 localStorage 快取。
+- 使用者編輯 Notes / Shopping / Expense / Booking 狀態等時，線上仍會立即嘗試寫入 Firebase；恢復網路時會強制做一次同步。
+- 設定頁的同步狀態可點擊，必要時手動強制同步一次。
+- 完全離線時仍使用已授權的私人行程 localStorage 快取；若弱網或 Firebase 暫時失敗，也會退回本機快取，不再卡在登入頁。

@@ -16,9 +16,9 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=5319" />
+  <link rel="stylesheet" href="./style.css?v=5320" />
   <title>私人旅程</title>
-  <meta name="app-version" content="5.3.19" />
+  <meta name="app-version" content="5.3.20" />
   <link rel="preload" as="image" href="./day-scene-v52-01.webp?v=520" fetchpriority="high">
 </head>
 <body>
@@ -244,7 +244,7 @@
         <div class="setting-label"><b>私人帳號</b><small id="accountEmail">—</small></div>
         <button type="button" class="logout-btn" id="logoutBtn">登出這台裝置</button>
       </section>
-      <section class="setting-section sync-setting"><div class="setting-label"><b>資料同步</b><small>Firebase 連線狀態</small></div><div class="sync-status" id="syncPill"><span class="dot"></span><span id="syncText">本機模式</span></div></section>
+      <section class="setting-section sync-setting"><div class="setting-label"><b>資料同步</b><small>省流量模式：不做背景輪詢；點狀態可手動同步</small></div><div class="sync-status" id="syncPill" role="button" tabindex="0" title="點一下手動同步"><span class="dot"></span><span id="syncText">本機模式</span></div></section>
       <button type="button" class="reset-display-btn" id="displayResetBtn">恢復預設顯示</button>
     </div>
   </dialog>
@@ -348,6 +348,6 @@
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=430"></script>
-  <script defer src="./app.js?v=5319"></script>
+  <script defer src="./app.js?v=5320"></script>
 </body>
 </html>

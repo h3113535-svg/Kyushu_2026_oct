@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.18 Secret Life Seal Gang */
+/* Private travel PWA · Firebase Auth gated content · v5.3.20 Offline Cache First */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -7,6 +7,12 @@ const OFFICIAL_TRIP_START = "2026-10-09";
 const OFFICIAL_TRIP_END = "2026-10-18";
 const PRIVATE_CONTENT_CACHE_KEY = "kyushu-private:content-cache";
 const PRIVATE_AUTH_CACHE_KEY = "kyushu-private:auth-cache";
+// Roaming/data-saver policy: the large private itinerary is refreshed at most once every 6 hours
+// on an already-authorized device. Mutable lists still sync separately when their low-data sync is due.
+const PRIVATE_CONTENT_REFRESH_MS = 6 * 60 * 60 * 1000;
+// Cloud reads are intentionally one-shot, never 4-second polling. Reopening the app within this
+// window uses the local copy; edits still attempt immediate cloud writes while online.
+const CLOUD_SYNC_COOLDOWN_MS = 30 * 60 * 1000;
 let TRIP = null;
 let state = null;
 let currentAuthUser = null;
@@ -92,25 +98,23 @@ async function initFirebase(){
 }
 
 function subscribe(key, callback){
+  // v5.3.20 data-saver behavior: one read only. The old 4-second REST polling loop was deliberately
+  // removed because it generated continuous roaming traffic. A new one-shot sync happens on boot
+  // when the cooldown expires, after reconnecting, or when the user taps the sync status manually.
   let active = true;
-  let previous = Symbol("initial");
-  const poll = async()=>{
+  const stop = ()=>{ active=false; pollers.delete(stop); };
+  pollers.add(stop);
+  Promise.resolve().then(async()=>{
     if(!active) return;
     try{
       const value = await request(pathFor(key), {method:"GET"});
-      const signature = JSON.stringify(value);
-      if(previous !== signature){
-        previous = signature;
-        callback(value);
-      }
+      if(active) callback(value);
     }catch(e){
-      console.error(`Realtime Database read failed (${key}):`, e);
+      console.error(`Realtime Database one-shot read failed (${key}):`, e);
+    }finally{
+      stop();
     }
-  };
-  poll();
-  const id = setInterval(poll, 4000);
-  const stop = ()=>{ active=false; clearInterval(id); pollers.delete(stop); };
-  pollers.add(stop);
+  });
   return stop;
 }
 
@@ -2689,6 +2693,18 @@ function bind(){
       toast(`Firebase：${err.message}`);
     }
   });
+  const syncPill=$("#syncPill");
+  const forceCloudSync=async()=>{
+    if(!navigator.onLine){toast("目前離線，資料已保存在本機");return}
+    if($("#syncText"))$("#syncText").textContent="手動同步中…";
+    const ok=await connectCloud({force:true});
+    toast(ok?"雲端同步完成":"同步失敗，繼續使用本機資料");
+  };
+  syncPill?.addEventListener("click",forceCloudSync);
+  syncPill?.addEventListener("keydown",e=>{
+    if(e.key==="Enter"||e.key===" "){e.preventDefault();forceCloudSync()}
+  });
+
   $("#notesArea").addEventListener("input",e=>{
     state.notes=e.target.value;saveLocal("notes",state.notes);$("#noteStatus").textContent="本機已儲存";
     clearTimeout(state.noteTimer);
@@ -2720,8 +2736,34 @@ function bind(){
 }
 
 function stopCloudPollers(){for(const stop of [...pollers]){try{stop()}catch{}}}
-async function connectCloud(){
+function cloudLastSyncAt(){
+  try{return Number(localStorage.getItem(storeKey("cloudLastSyncAt"))||0)}catch{return 0}
+}
+function markCloudSyncedNow(){
+  try{localStorage.setItem(storeKey("cloudLastSyncAt"),String(Date.now()))}catch{}
+}
+async function connectCloud({force=false}={}){
   stopCloudPollers();
+  if(!navigator.onLine){
+    enterOfflineMode();
+    return false;
+  }
+
+  // If this device synced recently, do not issue another batch of REST reads just because the page
+  // was reopened. This is the main roaming/data-saver behavior; writes still go to Firebase on edit.
+  const recentSync=Date.now()-cloudLastSyncAt()<CLOUD_SYNC_COOLDOWN_MS;
+  if(!force && recentSync){
+    state.cloud=true;
+    $("#syncPill")?.classList.add("cloud");
+    if($("#syncText"))$("#syncText").textContent="省流量模式・本機資料";
+    if(activeGuideContext){
+      const key=activeGuideContext.key;
+      if(state.guideNotePending?.[key])setGuideSaveStatus("已存本機・等待同步","pending");
+      else setGuideSaveStatus(guideNoteText(key)?"✓ 本機資料已就緒":"已開啟自動儲存","synced");
+    }
+    return true;
+  }
+
   const ok=await initFirebase();
   if(!ok){
     state.cloud=false;
@@ -2730,14 +2772,14 @@ async function connectCloud(){
     const msg=getLastFirebaseError();
     if(msg&&$("#noteStatus")) $("#noteStatus").textContent=`⚠ Firebase 未連線：${msg}`;
     if(activeGuideContext)setGuideSaveStatus("已存本機・等待重新同步","pending");
-    if(navigator.onLine)setTimeout(()=>resumeCloudAfterOnline(),2500);
     return false;
   }
   state.cloud=true;
   $("#syncPill")?.classList.add("cloud");
-  if($("#syncText"))$("#syncText").textContent="Firebase 已連線";
+  if($("#syncText"))$("#syncText").textContent="同步一次中…";
 
-  // Guide notes are merged before polling. Pending offline edits are never blindly overwritten.
+  // Guide notes are merged once before the rest of the one-shot sync. Pending offline edits are
+  // never blindly overwritten.
   try{
     const remoteGuideNotes=await request(pathFor("guideNotes"),{method:"GET"});
     mergeGuideNotesFromCloud(remoteGuideNotes,{syncPending:false});
@@ -2753,13 +2795,24 @@ async function connectCloud(){
     ["guideNotes",v=>mergeGuideNotesFromCloud(v)],
     ["notes",v=>{if(typeof v==="string" && document.activeElement!==$("#notesArea")){state.notes=v;saveLocal("notes",v);renderNotes()}}]
   ];
-  mappings.forEach(([k,cb])=>{try{subscribe(k,cb)}catch{}});
+  const results=await Promise.all(mappings.map(async([k,cb])=>{
+    try{
+      const value=await request(pathFor(k),{method:"GET"});
+      cb(value);
+      return true;
+    }catch(err){
+      console.warn(`Firebase one-shot sync failed (${k})`,err);
+      return false;
+    }
+  }));
+  if(results.some(Boolean)) markCloudSyncedNow();
+  if($("#syncText"))$("#syncText").textContent=results.some(Boolean)?"雲端已同步・省流量":"同步失敗・本機模式";
   if(activeGuideContext){
     const key=activeGuideContext.key;
     if(state.guideNotePending?.[key])setGuideSaveStatus("已存本機・同步中…","saving");
     else setGuideSaveStatus(guideNoteText(key)?"✓ 雲端同步完成":"已開啟自動儲存","synced");
   }
-  return true;
+  return results.some(Boolean);
 }
 
 
@@ -2791,7 +2844,7 @@ async function resumeCloudAfterOnline(){
       if(activeGuideContext)setGuideSaveStatus("本機已儲存・登入後再同步","pending");
       return;
     }
-    await connectCloud();
+    await connectCloud({force:true});
   }finally{cloudReconnectInFlight=false}
 }
 function enterOfflineMode(){
@@ -2878,6 +2931,15 @@ async function bootTrip(content,user,{offline=false}={}){
 async function handleAuthorizedUser(user){
   currentAuthUser=user;
   setAuthStatus("正在載入私人旅程…");
+  const cached=cachedTrip();
+  const sameUser=!cached?.auth?.email || !user?.email || cached.auth.email===user.email;
+  const cacheAge=Date.now()-Number(cached?.auth?.verifiedAt||0);
+  if(cached && sameUser && cacheAge>=0 && cacheAge<PRIVATE_CONTENT_REFRESH_MS){
+    // Large itinerary content is stable and already authorized on this device. Reuse it instead of
+    // downloading the same payload on every launch. Mutable app data has its own low-data sync.
+    await bootTrip(cached.content,user);
+    return;
+  }
   try{
     const content=await fetchPrivateTrip();
     cacheAuthorizedTrip(content,user);
@@ -2889,6 +2951,13 @@ async function handleAuthorizedUser(user){
       setAuthStatus("這個 Google 帳號沒有此旅程的存取權限。","error");
       try{await firebase.auth().signOut()}catch{}
       showAuthGate();
+      return;
+    }
+    if(cached && sameUser){
+      // Weak hotel Wi-Fi / tunnel / temporary Firebase outage: keep the trip usable from the last
+      // authorized local copy instead of throwing the user back to the login gate.
+      await bootTrip(cached.content,user,{offline:true});
+      if($("#syncText"))$("#syncText").textContent="本機快取模式";
       return;
     }
     setAuthStatus(`無法載入私人旅程：${err.message}`,"error");
@@ -2961,7 +3030,7 @@ startPrivateAuth();
 if("serviceWorker" in navigator){
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=5319",{updateViaCache:"none"});
+      const reg = await navigator.serviceWorker.register("./sw.js?v=5320",{updateViaCache:"none"});
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });

@@ -1,19 +1,21 @@
-const CACHE = "kyushu-private-v5.3.19";
-const SHELL = [
-  "./","./index.html","./style.css?v=5319","./app.js?v=5319",
-  "./manifest.json","./firebase-config.js?v=430","./icon-192.png","./icon-512.png","./hero-cover-v51.webp?v=510",
-  "./buddy_hero.png","./buddy_celebrate.png","./buddy_chill.png","./buddy_eat.png","./buddy_success.png",
-  "./egg-sendoff-v539.png","./egg-cry-v539.png","./egg-home-sleep-v539.png","./duck_gang.png","./seal_gang.png",
-  "./purin_peek_edge.png","./purin_walk.png","./usagi_peek.png","./usagi_dash.png","./usagi_success.png","./usagi_weather.png","./weather-rain-usagi-v47.webp",
-  "./weather-sunny-usagi-v536.webp","./weather-teruteru-usagi-v536.webp","./weather-cloudy-usagi-v536.webp","./weather-thunder-usagi-v536.webp","./weather-snow-usagi-v536.webp",
-  "./travel_shopping.png","./travel_ticket.png",
-  "./daily-d1.webp","./daily-d2.webp","./daily-d3.webp","./daily-d4.webp","./daily-d5.webp",
-  "./daily-d6.webp","./daily-d7.webp","./daily-d8.webp","./daily-d9.webp","./daily-d10.webp",
-  "./stamp-plane.webp","./stamp-train.webp","./stamp-onsen.webp","./stamp-camera.webp",
-  "./ui-cloud.webp","./ui-coffee.webp","./ui-suitcase.webp","./ui-purin-tip.webp","./hotel-purin.webp",
-  "./mini-purin-clap.webp","./mini-purin-hero.webp","./mini-purin-lie.webp","./mini-purin-surprise.webp",
-  "./mini-usagi-point.webp","./mini-usagi-excited.webp","./mini-usagi-success.webp","./mini-usagi-sticker.webp"
-,
+const CACHE_PREFIX = "kyushu-oct-";
+const STATIC_CACHE = "kyushu-oct-static-v5.3.20";
+const RUNTIME_CACHE = "kyushu-oct-runtime-v5.3.20";
+
+// All same-origin assets that the current app actually references. They are downloaded once when
+// this Service Worker installs, then served Cache First so reopening the PWA does not repeatedly
+// consume roaming data. Firebase/Google external requests are intentionally outside this cache.
+const PRECACHE = [
+  "./",
+  "./index.html",
+  "./app.js?v=5320",
+  "./booking-check-purin.webp?v=460",
+  "./booking-dash-usagi.webp?v=460",
+  "./buddy_celebrate.png?v=430",
+  "./buddy_chill.png?v=430",
+  "./buddy_eat.png?v=430",
+  "./buddy_hero.png?v=430",
+  "./buddy_success.png?v=430",
   "./day-scene-v52-01.webp?v=520",
   "./day-scene-v52-02.webp?v=520",
   "./day-scene-v52-03.webp?v=520",
@@ -24,51 +26,135 @@ const SHELL = [
   "./day-scene-v52-08.webp?v=520",
   "./day-scene-v52-09.webp?v=520",
   "./day-scene-v52-10.webp?v=520",
+  "./duck_gang.png?v=5311",
+  "./egg-cry-v539.png?v=539",
+  "./egg-home-sleep-v539.png?v=539",
+  "./egg-sendoff-v539.png?v=539",
+  "./firebase-config.js?v=430",
+  "./hero-cover-v51.webp?v=510",
+  "./hotel-return-duo.webp?v=460",
+  "./icon-192.png",
+  "./icon-512.png",
+  "./manifest.json",
+  "./mini-purin-clap.webp",
+  "./mini-purin-hero.webp",
+  "./mini-purin-lie.webp",
+  "./mini-purin-surprise.webp",
+  "./mini-usagi-excited.webp",
+  "./mini-usagi-point.webp",
+  "./mini-usagi-sticker.webp",
+  "./mini-usagi-success.webp",
+  "./purin-food-ui.png?v=380",
+  "./purin_clap.png?v=430",
+  "./purin_peek_edge.png?v=430",
+  "./purin_pudding.png?v=430",
+  "./purin_spoon.png?v=430",
+  "./purin_surprise.png?v=430",
+  "./purin_tip.png?v=430",
+  "./purin_walk.png?v=431",
+  "./seal_gang.png?v=5311",
+  "./secret-life-block-building.webp?v=5319",
+  "./secret-life-ditto-usagi.webp?v=5319",
+  "./secret-life-hide-and-seek.webp?v=5319",
+  "./secret-life-hotpot-party.webp?v=5319",
+  "./secret-life-house-mess.webp?v=5319",
+  "./secret-life-midnight-snack.webp?v=5319",
+  "./secret-life-olaf-bed.webp?v=5319",
+  "./secret-life-pillow-fight.webp?v=5319",
+  "./secret-life-seal-gang-mission.webp?v=5319",
+  "./secret-life-sofa-battle.webp?v=5319",
+  "./secret-life-want-to-travel.webp?v=5319",
+  "./secret-life-watchduty-sleep.webp?v=5319",
+  "./style.css?v=5320",
+  "./travel_camera.png?v=430",
+  "./travel_coffee.png?v=430",
+  "./travel_shopping.png?v=430",
+  "./travel_suitcase.png?v=430",
+  "./travel_ticket.png?v=431",
+  "./ui-cloud.webp?v=440",
+  "./ui-coffee.webp?v=440",
+  "./ui-purin-tip.webp?v=440",
+  "./ui-suitcase.webp?v=440",
+  "./usagi_dash.png?v=430",
+  "./usagi_dash.png?v=431",
+  "./usagi_excited.png?v=430",
+  "./usagi_peek.png?v=430",
+  "./usagi_point.png?v=430",
+  "./usagi_sticker.png?v=430",
+  "./usagi_success.png?v=430",
+  "./usagi_think.png?v=430",
+  "./weather-cloudy-usagi-v536.webp?v=536",
   "./weather-rain-usagi-v47.webp?v=470",
-  "./weather-sunny-usagi-v536.webp?v=536","./weather-teruteru-usagi-v536.webp?v=536","./weather-cloudy-usagi-v536.webp?v=536","./weather-thunder-usagi-v536.webp?v=536","./weather-snow-usagi-v536.webp?v=536",
-  "./booking-check-purin.webp?v=460",
-  "./booking-dash-usagi.webp?v=460",
-  "./hotel-return-duo.webp?v=460"];
+  "./weather-snow-usagi-v536.webp?v=536",
+  "./weather-sunny-usagi-v536.webp?v=536",
+  "./weather-teruteru-usagi-v536.webp?v=536",
+  "./weather-thunder-usagi-v536.webp?v=536"
+];
 
 self.addEventListener("install", event => {
   event.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting())
+    caches.open(STATIC_CACHE)
+      .then(cache => cache.addAll(PRECACHE))
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(keys => Promise.all(
+        keys
+          .filter(key => key.startsWith(CACHE_PREFIX) && key !== STATIC_CACHE && key !== RUNTIME_CACHE)
+          .map(key => caches.delete(key))
+      ))
       .then(() => self.clients.claim())
   );
 });
 
+async function cacheFirst(request) {
+  const staticHit = await caches.match(request);
+  if (staticHit) return staticHit;
+
+  try {
+    const response = await fetch(request);
+    if (response && response.ok) {
+      const cache = await caches.open(RUNTIME_CACHE);
+      cache.put(request, response.clone()).catch(() => {});
+    }
+    return response;
+  } catch (error) {
+    // Last chance for assets whose only difference is an old cache-busting query string.
+    const fallback = await caches.match(request, {ignoreSearch:true});
+    if (fallback) return fallback;
+    throw error;
+  }
+}
+
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin) return;
+  const scopePath = new URL(self.registration.scope).pathname;
+
+  // Do not intercept Firebase, Google Maps, CDN scripts, or assets belonging to another GitHub Pages repo.
+  if (url.origin !== self.location.origin || !url.pathname.startsWith(scopePath)) return;
 
   if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request, {cache:"no-store"})
-        .then(response => {
-          const copy = response.clone();
-          caches.open(CACHE).then(cache => cache.put("./index.html", copy));
-          return response;
-        })
-        .catch(() => caches.match("./index.html"))
-    );
+    event.respondWith((async()=>{
+      const cached = await caches.match("./index.html");
+      if (cached) return cached;
+      try {
+        const response = await fetch(event.request);
+        if (response && response.ok) {
+          const cache = await caches.open(RUNTIME_CACHE);
+          cache.put("./index.html", response.clone()).catch(() => {});
+        }
+        return response;
+      } catch (error) {
+        return new Response("Offline", {status:503, headers:{"Content-Type":"text/plain; charset=utf-8"}});
+      }
+    })());
     return;
   }
 
-  event.respondWith(
-    fetch(event.request, {cache:"no-store"})
-      .then(response => {
-        const copy = response.clone();
-        caches.open(CACHE).then(cache => cache.put(event.request, copy));
-        return response;
-      })
-      .catch(() => caches.match(event.request,{ignoreSearch:true}))
-  );
+  event.respondWith(cacheFirst(event.request));
 });
