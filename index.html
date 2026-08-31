@@ -16,9 +16,9 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=5325" />
+  <link rel="stylesheet" href="./style.css?v=5326" />
   <title>私人旅程</title>
-  <meta name="app-version" content="5.3.25" />
+  <meta name="app-version" content="5.3.26" />
   <link rel="preload" as="image" href="./day-scene-v52-01.webp?v=520" fetchpriority="high">
 </head>
 <body>
@@ -89,7 +89,6 @@
           <span class="day-scene-progress"><i><em id="daySceneProgressBar"></em></i></span>
         </button>
         <section id="dayBrief" class="day-brief"></section>
-        <section id="openingGuardSummary" class="opening-guard-summary" hidden></section>
         <div id="decisionArea"></div>
         <section id="timeline" class="timeline"></section>
         <section id="hotelReturnCard" class="hotel-return-card" hidden></section>
@@ -210,11 +209,6 @@
           <div class="panel-heading">
             <div><span class="eyebrow">QUICK IMPORT</span><h3>Google Maps 快速匯入</h3></div>
           </div>
-          <section class="opening-setup-card">
-            <div class="opening-setup-head"><div><span class="eyebrow">OPENING GUARD</span><h3>營業時間衝突檢查</h3></div><button type="button" id="placesApiSettingsBtn" class="mini-btn">Google 設定</button></div>
-            <div id="placesApiStatus" class="places-api-status"><span class="status-dot"></span><span>尚未設定 Google Places 金鑰</span></div>
-            <p>有金鑰時：行程進入 7 天內會自動用 Google Maps 的特殊營業時間檢查；更早可手動按「檢查」比對一般營業時間。沒有網路或沒有金鑰時，仍可為每個地點設定手動營業時間，完全離線判斷。</p>
-          </section>
           <section class="place-import-card">
             <p class="place-import-help">貼上 Google Maps 地點網址或店名／景點名稱，一行一個。解析在手機本機完成，不會因為輸入內容產生額外 API 流量。</p>
             <textarea id="placeImportText" class="place-import-text" placeholder="例如：
@@ -364,40 +358,6 @@ https://www.google.com/maps/place/...
     </form>
   </dialog>
 
-  <dialog id="placesApiModal" class="modal places-api-modal">
-    <form method="dialog" id="placesApiForm">
-      <div class="modal-head">
-        <div><span class="eyebrow">GOOGLE PLACES</span><h3>即時營業時間設定</h3></div>
-        <button type="button" class="close-btn" id="placesApiClose" aria-label="關閉">×</button>
-      </div>
-      <p class="places-api-help">API 金鑰只保存在這台裝置的 LocalStorage，不會同步到 Firebase，也不會寫進 GitHub。建議在 Google Cloud 對金鑰設定網站來源限制，並只啟用 Places API (New) / Maps JavaScript API。</p>
-      <div class="field"><label>Google Maps API Key</label><input id="placesApiKeyInput" name="apiKey" type="password" autocomplete="off" placeholder="AIza…"></div>
-      <div class="places-api-note"><b>省流量策略</b><span>不在首頁載入 Google Maps；只有按「檢查」或行程進入 7 天內自動檢查時才載入。Google 回傳的營業資料只放在記憶體，本機只保存 Place ID。</span></div>
-      <button class="primary-btn" type="submit">儲存到這台裝置</button>
-    </form>
-  </dialog>
-
-  <dialog id="openingHoursModal" class="modal opening-hours-modal">
-    <form method="dialog" id="openingHoursForm">
-      <div class="modal-head">
-        <div><span class="eyebrow">OFFLINE HOURS</span><h3 id="openingHoursPlaceTitle">營業時間</h3></div>
-        <button type="button" class="close-btn" id="openingHoursClose" aria-label="關閉">×</button>
-      </div>
-      <div id="openingHoursModalMeta"></div>
-      <p class="opening-hours-help">手動時段會永久保存在你的旅行資料中，離線也能判斷。格式：<b>10:00-18:00</b>；分段營業可用 <b>10:00-14:00,17:00-21:00</b>；公休輸入 <b>休</b>；24 小時輸入 <b>24h</b>。留白代表未知。</p>
-      <div class="opening-hours-grid">
-        <label><span>週日</span><input data-hours-day="0" placeholder="休 / 10:00-18:00"></label>
-        <label><span>週一</span><input data-hours-day="1" placeholder="休 / 10:00-18:00"></label>
-        <label><span>週二</span><input data-hours-day="2" placeholder="休 / 10:00-18:00"></label>
-        <label><span>週三</span><input data-hours-day="3" placeholder="休 / 10:00-18:00"></label>
-        <label><span>週四</span><input data-hours-day="4" placeholder="休 / 10:00-18:00"></label>
-        <label><span>週五</span><input data-hours-day="5" placeholder="休 / 10:00-18:00"></label>
-        <label><span>週六</span><input data-hours-day="6" placeholder="休 / 10:00-18:00"></label>
-      </div>
-      <div class="opening-hours-actions"><button type="button" id="openingHoursGoogleCheck" class="mini-btn">Google 即時檢查</button><button class="primary-btn" type="submit">儲存手動時段</button></div>
-    </form>
-  </dialog>
-
   <dialog id="formModal" class="modal">
     <form method="dialog" id="modalForm">
       <div class="modal-head">
@@ -450,6 +410,6 @@ https://www.google.com/maps/place/...
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=430"></script>
-  <script defer src="./app.js?v=5325"></script>
+  <script defer src="./app.js?v=5326"></script>
 </body>
 </html>

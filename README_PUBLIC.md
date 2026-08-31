@@ -140,3 +140,11 @@
 - Google 自動檢查仍維持旅行日前 7 天內、只針對目前查看的日期、同一 session 不重複查詢的省流量策略。
 - 交通移動、飯店入住/退房、自由時間、步行/開車等非營業型事件會自動排除；若未來 private trip event 需要強制加入或排除，可使用 `openingCheck: true` / `openingCheck: false`。
 - v5.3.24 的三層 CacheStorage 架構完整保留；圖片 assets cache 不因本次升版重新下載。
+
+## v5.3.26 — Simple Opening Hours
+- Removed the Google Places API-key setup, manual weekly-hours editor, day-level guard summary, and runtime opening-hours network checks.
+- Existing itinerary cards now show only a simple `營業` line when a venue matches the built-in opening-hours catalog.
+- Opening hours are bundled with the app, so they work offline and create zero runtime traffic.
+- Current catalog entries were refreshed from public/official venue information on 2026-08-31. Unknown/unmatched places simply show no opening-hours row instead of asking the traveler to configure anything.
+- Quick-imported places use the same catalog by title; map and delete actions remain unchanged.
+

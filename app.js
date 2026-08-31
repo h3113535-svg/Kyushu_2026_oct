@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.25 Existing Itinerary Opening Guard */
+/* Private travel PWA · Firebase Auth gated content · v5.3.26 Simple Opening Hours */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -20,11 +20,6 @@ const CLOUD_SYNC_COOLDOWN_MS = 30 * 60 * 1000;
 const FX_API_URL = "https://open.er-api.com/v6/latest/JPY";
 const FX_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
-// Optional Google Maps Places live-hours verifier. The API key is stored only in this device's
-// trip-namespaced LocalStorage and is never synced to Firebase or committed to the public repo.
-// Live Google data remains memory-only; only the stable Place ID may be persisted.
-const PLACES_AUTO_WINDOW_DAYS = 7;
-let googlePlacesLoaderPromise = null;
 let TRIP = null;
 let state = null;
 let currentAuthUser = null;
@@ -158,8 +153,6 @@ function createState(){
     dayIndex:0, view:"schedule", tool:"booking", shoppingMember:"全部",
     foods:loadLocal("foods",[]), shopping:loadLocal("shopping",[]), expenses:loadLocal("expenses",[]),
     importedPlaces:normalizeImportedPlaces(loadLocal("importedPlaces",[])), importedPlacesPending:!!loadLocal("importedPlacesPending",false), placeImportDrafts:[],
-    openingProfiles:normalizeOpeningProfiles(loadLocal("openingProfiles",{})), openingProfilesPending:!!loadLocal("openingProfilesPending",false),
-    placesApiKey:String(loadLocal("placesApiKey","")||""), placeLiveChecks:{}, hoursEditId:null,
     fx:normalizeFxState(loadLocal("fxRate",{})),
     taskStatus:loadLocal("taskStatus",{}), decisions:loadLocal("decisions",{}), decisionDrafts:{},
     notes:loadLocal("notes",""),
@@ -171,137 +164,45 @@ function createState(){
 }
 function loadLocal(key,fallback){try{const v=localStorage.getItem(storeKey(key));return v===null?fallback:JSON.parse(v)}catch{return fallback}}
 function saveLocal(key,value){localStorage.setItem(storeKey(key),JSON.stringify(value))}
-function normalizeManualHours(raw){
-  const src=raw&&typeof raw==="object"?raw:{};
-  const out={};
-  for(let day=0;day<7;day++)out[day]=String(src[day]??src[String(day)]??"").trim();
-  return out;
-}
-function normalizeImportedPlaces(raw){
-  const arr=Array.isArray(raw)?raw:normalizeCloud(raw);
-  return arr.filter(x=>x&&typeof x==="object").map((x,i)=>({
-    id:String(x.id||`import-${i}-${Date.now().toString(36)}`),
-    dayIndex:Math.max(0,Math.min(99,Number(x.dayIndex||0))),
-    time:String(x.time||""), title:String(x.title||x.name||"未命名景點"),
-    category:String(x.category||"景點"), mapUrl:String(x.mapUrl||""), query:String(x.query||x.title||x.name||""),
-    note:String(x.note||""), importedAt:Number(x.importedAt||0), source:String(x.source||"manual"),
-    placeId:String(x.placeId||""), manualHours:normalizeManualHours(x.manualHours)
-  }));
-}
-function normalizeOpeningProfiles(raw){
-  const src=raw&&typeof raw==="object"&&!Array.isArray(raw)?raw:{};
-  const out={};
-  for(const [id,value] of Object.entries(src)){
-    if(!value||typeof value!=="object")continue;
-    out[String(id)]={
-      placeId:String(value.placeId||""),
-      query:String(value.query||""),
-      manualHours:normalizeManualHours(value.manualHours),
-      updatedAt:Number(value.updatedAt||0)
-    };
-  }
-  return out;
-}
-function openingEventHash(value=""){
-  let h=2166136261;
-  for(const ch of String(value)){
-    h^=ch.codePointAt(0);h=Math.imul(h,16777619);
-  }
-  return (h>>>0).toString(36);
-}
-function openingEventId(event,dayIndex,eventIndex=0){
-  const explicit=String(event?.id||event?.eventId||"").trim();
-  if(explicit)return `itinerary:${explicit}`;
-  const seed=[dayIndex,eventIndex,event?.time||"",event?.title||"",event?.category||""].join("|");
-  return `itinerary:d${Number(dayIndex)+1}:${eventIndex}:${openingEventHash(seed)}`;
-}
-function openingCheckConfig(event){
-  if(event?.openingCheck===false||event?.openingHoursCheck===false)return false;
-  if(event?.openingCheck&&typeof event.openingCheck==="object")return event.openingCheck;
-  if(event?.openingHours&&typeof event.openingHours==="object")return {manualHours:event.openingHours};
-  return event?.openingCheck===true?{}:null;
-}
-function isOpeningRelevantEvent(event){
-  if(!event||event._imported)return !!event?._imported;
-  const cfg=openingCheckConfig(event);
-  if(cfg===false)return false;
-  if(cfg!==null)return true;
-  const text=`${event.category||""} ${event.title||""} ${event.note||""}`;
-  const strong=/(早餐|午餐|晚餐|餐廳|用餐|咖啡|coffee|cafe|café|甜點|燒肉|拉麵|壽司|居酒屋|食堂|麵包|ベーカリー|パン|水族館|動物園|博物館|美術館|展望|神社|寺|城|商場|百貨|購物|逛街|商店街|outlet|mall|market|市場|lalaport|amu|pok[eé]mon|pokemon|ポケモン|gundam|namco|nissan|租車|レンタカー|遊船|划船|小火車|トロッコ|factory|工房|道の駅|火口|纜車|ロープウェイ|體驗)/i;
-  if(strong.test(text))return true;
-  const exclude=/(住宿|飯店|旅館|hotel|check[- ]?in|check[- ]?out|入住|退房|移動|前往|返回|回飯店|搭乘|搭車|新幹線|jr\b|巴士|bus\b|計程車|taxi|開車|駕車|步行|散步|自由時間|休息|起床|整理|寄放|取行李|航班|機場|出發|抵達)/i;
-  if(exclude.test(text))return false;
-  return /(景點|觀光|公園|塔|廣場|園區|牧場|車站商場|店|shop)/i.test(text);
-}
-function itineraryOpeningSubject(event,dayIndex,eventIndex=0){
-  if(!event||!isOpeningRelevantEvent(event))return null;
-  const id=openingEventId(event,dayIndex,eventIndex);
-  const profile=state?.openingProfiles?.[id]||{};
-  const cfg=openingCheckConfig(event)||{};
-  const cfgHours=cfg.manualHours||cfg.hours||{};
-  const manualHours=hasManualHours(profile)?profile.manualHours:normalizeManualHours(cfgHours);
-  return {
-    id,dayIndex:Number(dayIndex),time:String(event.time||""),title:String(event.title||"未命名地點"),
-    category:String(event.category||"行程"),mapUrl:String(event.mapUrl||""),
-    query:String(profile.query||cfg.query||event.nav||event.title||""),
-    placeId:String(profile.placeId||cfg.placeId||""),manualHours,
-    _itinerary:true,_eventIndex:Number(eventIndex),_sourceEvent:event
-  };
-}
-function openingSubjectForRenderedEvent(event){
+// Simple opening-hours display.
+// No runtime API key, no manual setup, no background requests. These values are embedded in the
+// app from publicly listed opening hours and are available offline. If a venue changes its hours,
+// update this catalog in a future app release.
+const OPENING_HOURS_CATALOG=[
+  {match:/ポケモンセンター.*フクオカ|pok[eé]mon\s*center.*fukuoka/i,hours:"10:00–21:00"},
+  {match:/DACOMECCA/i,hours:"07:00–19:00",note:"不定休"},
+  {match:/dacō博多駅前|daco博多駅前|dac[oō]\s*博多駅前/i,hours:"08:00–20:00",note:"L.O. 19:30・不定休"},
+  {match:/すき焼き\s*山翔|山翔/i,hours:"11:00–15:00 / 17:00–22:00",note:"料理 L.O. 14:00 / 21:00"},
+  {match:/マリンワールド|Marine\s*World|海の中道.*水族館/i,hours:"09:30–17:30",note:"最終入館 16:30"},
+  {match:/福岡タワー|Fukuoka\s*Tower/i,hours:"09:30–22:00",note:"最終入館 21:30"},
+  {match:/にく屋\s*肉いち|NIKUICHI|肉いち/i,hours:"16:00–24:00",note:"Food L.O. 23:00"},
+  {match:/由布まぶし\s*心.*駅前|由布院駅前.*由布まぶし|由布まぶし\s*心/i,hours:"10:30–20:30",note:"L.O. 19:30・不定休"},
+  {match:/B[- ]?SPEAK|ビースピーク/i,hours:"10:00–17:00",note:"不定休"},
+  {match:/日産レンタカー.*湯布院|NISSAN.*湯布院|湯布院.*日産レンタカー/i,hours:"09:00–17:30"},
+  {match:/ASO\s*MILK\s*FACTORY|阿部牧場/i,hours:"09:30–18:00",note:"ジェラート・ドリンク L.O. 17:30"},
+  {match:/ごとう屋\s*阿蘇店/i,hours:"10:30–16:00",note:"L.O. 15:30・木曜、第3水曜休"},
+  {match:/ごとう屋\s*総本店/i,hours:"11:00–15:00頃",note:"L.O. 15:00・月曜休・売切次第終了"},
+  {match:/ごとう屋\s*門前町店/i,hours:"11:00–16:00",note:"L.O. 15:30・火曜、第3月曜休"},
+  {match:/道の駅\s*阿蘇/i,hours:"09:00–18:00",note:"年中無休・季節変動あり"},
+  {match:/阿蘇神社/i,hours:"06:00–18:00",note:"御札所 09:00–17:00"},
+  {match:/高千穂牛.*和|レストラン\s*和|高千穂.*なごみ/i,hours:"11:00–14:30 / 17:00–21:00",note:"L.O. 14:00 / 20:30・水曜休"},
+  {match:/たちや鳥/i,hours:"17:00–22:00",note:"料理 L.O. 21:00・木曜休（不定休あり）"},
+  {match:/勝烈亭.*アミュ|アミュ.*勝烈亭/i,hours:"11:00–22:00",note:"L.O. 21:00"},
+  {match:/勝烈亭.*新市街|新市街.*勝烈亭/i,hours:"11:00–21:30",note:"L.O. 21:00"},
+  {match:/勝烈亭/i,hours:"AMU店 11:00–22:00 / 新市街本店 11:00–21:30",note:"店舗で営業時間が異なります"},
+  {match:/AMU\s*PLAZA.*熊本|アミュプラザ.*くまもと|アミュプラザ.*熊本/i,hours:"10:00–20:00",note:"レストラン 11:00–22:00"},
+  {match:/ららぽーと福岡|LaLaport\s*Fukuoka/i,hours:"10:00–21:00",note:"レストラン・フードコート 11:00–22:00"}
+];
+function findOpeningHoursInfo(event){
   if(!event)return null;
-  if(event._imported)return event;
-  return itineraryOpeningSubject(event,Number(event._dayIndex??state?.dayIndex??0),Number(event._eventIndex??0));
+  const explicit=event.openingHoursText||event.hoursText;
+  if(explicit)return {hours:String(explicit),note:String(event.openingHoursNote||"")};
+  const text=`${event.title||""} ${event.nav||""}`;
+  return OPENING_HOURS_CATALOG.find(x=>x.match.test(text))||null;
 }
-function itineraryOpeningSubjectsForDay(dayIndex){
-  const day=TRIP?.days?.[Number(dayIndex)];if(!day)return [];
-  return (day.events||[]).map((event,eventIndex)=>({event,eventIndex}))
-    .filter(({event})=>eventVisible(event)&&isOpeningRelevantEvent(event))
-    .map(({event,eventIndex})=>itineraryOpeningSubject(event,dayIndex,eventIndex)).filter(Boolean);
-}
-function openingSubjectsForDay(dayIndex){
-  const existing=itineraryOpeningSubjectsForDay(dayIndex);
-  const imported=(state?.importedPlaces||[]).filter(p=>Number(p.dayIndex)===Number(dayIndex));
-  return [...existing,...imported];
-}
-function findOpeningSubject(id){
-  const imported=(state?.importedPlaces||[]).find(p=>p.id===id);if(imported)return imported;
-  for(let dayIndex=0;dayIndex<(TRIP?.days?.length||0);dayIndex++){
-    const day=TRIP.days[dayIndex];
-    for(let eventIndex=0;eventIndex<(day.events||[]).length;eventIndex++){
-      const subject=itineraryOpeningSubject(day.events[eventIndex],dayIndex,eventIndex);
-      if(subject?.id===id)return subject;
-    }
-  }
-  return null;
-}
-async function persistOpeningProfile(subject,{notify=false}={}){
-  if(!subject?._itinerary)return false;
-  const current=state.openingProfiles?.[subject.id]||{};
-  state.openingProfiles={...(state.openingProfiles||{}),[subject.id]:{
-    placeId:String(subject.placeId||current.placeId||""),
-    query:String(subject.query||current.query||subject.title||""),
-    manualHours:normalizeManualHours(subject.manualHours||current.manualHours),
-    updatedAt:Date.now()
-  }};
-  saveLocal("openingProfiles",state.openingProfiles);
-  state.openingProfilesPending=true;saveLocal("openingProfilesPending",true);
-  renderSchedule();
-  if(state.cloud&&navigator.onLine){
-    try{
-      await setCloud("openingProfiles",state.openingProfiles);
-      state.openingProfilesPending=false;saveLocal("openingProfilesPending",false);
-      if(notify)toast("營業資料已同步");
-    }catch(err){console.warn("Opening profiles sync failed",err);if(notify)toast("營業資料已存本機，稍後同步")}
-  }else if(notify)toast("營業資料已存本機");
-  return true;
-}
-async function syncPendingOpeningProfiles(){
-  if(!state?.openingProfilesPending||!state.cloud||!navigator.onLine)return false;
-  try{
-    await setCloud("openingProfiles",state.openingProfiles||{});
-    state.openingProfilesPending=false;saveLocal("openingProfilesPending",false);return true;
-  }catch(err){console.warn("Pending opening profiles sync failed",err);return false}
+function openingEventHtml(event){
+  const info=findOpeningHoursInfo(event);if(!info)return "";
+  return `<div class="opening-hours-info"><span class="opening-hours-label">營業</span><strong>${esc(info.hours)}</strong>${info.note?`<span class="opening-hours-note">${esc(info.note)}</span>`:""}</div>`;
 }
 
 function normalizeFxState(raw){
@@ -424,287 +325,6 @@ function saveFxRateSettings(e){
   if(mode==="auto"&&!state.fx.autoRate)ensureFxRate({force:true,notify:true});
 }
 
-const OPENING_DAY_LABELS=["日","一","二","三","四","五","六"];
-function tripDayDate(dayIndex){return String(TRIP?.days?.[Number(dayIndex)]?.date||"").slice(0,10)}
-function dayOfWeekForDate(dateKey){
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey||"")))return null;
-  return new Date(`${dateKey}T12:00:00+09:00`).getUTCDay();
-}
-function dateKeyInTokyo(date=new Date()){
-  try{
-    const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(date);
-    const get=t=>parts.find(x=>x.type===t)?.value||"";
-    return `${get("year")}-${get("month")}-${get("day")}`;
-  }catch{return date.toISOString().slice(0,10)}
-}
-function dateDiffDays(fromKey,toKey){
-  const a=Date.parse(`${fromKey}T00:00:00+09:00`),b=Date.parse(`${toKey}T00:00:00+09:00`);
-  if(!Number.isFinite(a)||!Number.isFinite(b))return Infinity;
-  return Math.round((b-a)/86400000);
-}
-function targetWithinCurrentHoursWindow(dateKey){
-  const diff=dateDiffDays(dateKeyInTokyo(),dateKey);
-  return diff>=0&&diff<PLACES_AUTO_WINDOW_DAYS;
-}
-function timeToMinutes(value){
-  const m=String(value||"").trim().match(/^(\d{1,2}):(\d{2})$/);if(!m)return null;
-  const h=Number(m[1]),min=Number(m[2]);if(h>23||min>59)return null;
-  return h*60+min;
-}
-function minutesToTime(total){
-  const n=((Number(total)||0)%1440+1440)%1440;
-  return `${String(Math.floor(n/60)).padStart(2,"0")}:${String(n%60).padStart(2,"0")}`;
-}
-function hasManualHours(place){
-  return Object.values(place?.manualHours||{}).some(v=>String(v||"").trim()!=="");
-}
-function parseManualHoursSpec(spec){
-  const raw=String(spec||"").trim();
-  if(!raw)return {known:false,intervals:[]};
-  if(/^(休|公休|店休|closed|休業)$/i.test(raw))return {known:true,closed:true,intervals:[]};
-  if(/^(24h|24小時|24時間|全天)$/i.test(raw))return {known:true,closed:false,intervals:[{start:0,end:1440}]};
-  const parts=raw.split(/[,，、;；]+/).map(x=>x.trim()).filter(Boolean);
-  const intervals=[];
-  for(const part of parts){
-    const m=part.match(/^(\d{1,2}):(\d{2})\s*[-–—~～]\s*(\d{1,2}):(\d{2})$/);
-    if(!m)return {known:true,invalid:true,intervals:[]};
-    const start=Number(m[1])*60+Number(m[2]),endRaw=Number(m[3])*60+Number(m[4]);
-    if(start<0||start>=1440||endRaw<0||endRaw>=1440)return {known:true,invalid:true,intervals:[]};
-    const end=endRaw<=start?endRaw+1440:endRaw;
-    intervals.push({start,end});
-  }
-  return {known:true,closed:false,intervals};
-}
-function evaluateIntervals(intervals,plannedMinute,{source="營業時間",closed=false,invalid=false}={}){
-  if(invalid)return {level:"unknown",label:"營業時間格式錯誤",detail:"請重新設定時段",source};
-  if(closed)return {level:"error",label:"公休／未營業",detail:`預計抵達日為公休日`,source};
-  if(plannedMinute===null)return {level:"unknown",label:"已有營業時間",detail:"尚未設定抵達時間，無法判斷衝突",source};
-  if(!intervals?.length)return {level:"error",label:"公休／未營業",detail:"當日沒有營業時段",source};
-  for(const it of intervals){
-    let t=plannedMinute;
-    if(it.start>=1440&&t<1440)t+=1440;
-    if(t>=it.start&&t<it.end){
-      const left=it.end-t;
-      if(left<=60)return {level:"warn",label:"快打烊",detail:`預計抵達後約剩 ${left} 分鐘 · ${minutesToTime(it.end)} 關門`,source};
-      return {level:"ok",label:"營業時間正常",detail:`預計抵達 ${minutesToTime(plannedMinute)} · ${minutesToTime(it.end)} 關門`,source};
-    }
-  }
-  const upcoming=intervals.filter(it=>it.start>plannedMinute).sort((a,b)=>a.start-b.start)[0];
-  if(upcoming)return {level:"error",label:"尚未營業",detail:`預計 ${minutesToTime(plannedMinute)} 抵達 · ${minutesToTime(upcoming.start)} 才開門`,source};
-  const latest=Math.max(...intervals.map(it=>it.end));
-  return {level:"error",label:"抵達時已打烊",detail:`預計 ${minutesToTime(plannedMinute)} 抵達 · 今日營業已結束（約 ${minutesToTime(latest)}）`,source};
-}
-function evaluateManualOpening(place){
-  const dateKey=tripDayDate(place?.dayIndex),dow=dayOfWeekForDate(dateKey);
-  if(dow===null)return {level:"unknown",label:"無法判斷日期",detail:"行程日期格式不完整",source:"手動營業時間"};
-  const parsed=parseManualHoursSpec(place?.manualHours?.[dow]);
-  if(!parsed.known)return {level:"unknown",label:"尚未設定營業時間",detail:"可設定每週營業時間，離線也能檢查",source:"手動營業時間"};
-  return evaluateIntervals(parsed.intervals,timeToMinutes(place?.time),{...parsed,source:"手動營業時間"});
-}
-function openingPointWeekMinute(point){
-  if(!point)return null;
-  const day=Number(point.day),hour=Number(point.hour||0),minute=Number(point.minute||0);
-  if(!Number.isFinite(day))return null;
-  return day*1440+hour*60+minute;
-}
-function intervalsFromGoogleHours(hours,targetDow){
-  const periods=Array.isArray(hours?.periods)?hours.periods:[];
-  if(!periods.length)return [];
-  const targetBase=targetDow*1440;
-  const intervals=[];
-  periods.forEach(period=>{
-    const open=openingPointWeekMinute(period?.open);if(open===null)return;
-    let close=openingPointWeekMinute(period?.close);
-    if(close===null)close=open+10080;
-    if(close<=open)close+=10080;
-    [targetBase,targetBase+10080].forEach(base=>{
-      const targetEnd=base+1440;
-      if(open<targetEnd&&close>base)intervals.push({start:Math.max(open,base)-base,end:Math.min(close,targetEnd)-base});
-    });
-  });
-  return intervals;
-}
-function evaluateGooglePlaceOpening(placeData,imported){
-  const status=String(placeData?.businessStatus||"");
-  if(/CLOSED_PERMANENTLY/i.test(status))return {level:"error",label:"已永久歇業",detail:"Google Maps 顯示已永久歇業",source:"Google Maps"};
-  if(/CLOSED_TEMPORARILY/i.test(status))return {level:"error",label:"暫停營業",detail:"Google Maps 顯示暫停營業",source:"Google Maps"};
-  const dateKey=tripDayDate(imported?.dayIndex),dow=dayOfWeekForDate(dateKey);
-  if(dow===null)return {level:"unknown",label:"無法判斷日期",detail:"行程日期格式不完整",source:"Google Maps"};
-  const useCurrent=targetWithinCurrentHoursWindow(dateKey)&&placeData?.currentOpeningHours;
-  const hours=useCurrent?placeData.currentOpeningHours:placeData?.regularOpeningHours;
-  if(!hours)return {level:"unknown",label:"查不到營業時間",detail:"Google Maps 沒有提供此地點的營業時段",source:"Google Maps"};
-  const intervals=intervalsFromGoogleHours(hours,dow);
-  const result=evaluateIntervals(intervals,timeToMinutes(imported?.time),{source:useCurrent?"Google Maps · 近期特殊營業時間":"Google Maps · 一般營業時間"});
-  if(!useCurrent&&result.level!=="unknown")result.detail+=` · 距離行程超過 7 天，特殊休業請出發前再確認`;
-  return result;
-}
-function openingGuardForPlace(place){
-  const live=state?.placeLiveChecks?.[place?.id];
-  if(live?.result)return live.result;
-  return evaluateManualOpening(place);
-}
-function openingBadgeHtml(result,{compact=false}={}){
-  if(!result)return "";
-  const icon={ok:"✓",warn:"⚠",error:"!",unknown:"?"}[result.level]||"?";
-  return `<div class="opening-guard ${esc(result.level)} ${compact?"compact":""}"><span class="opening-guard-icon">${icon}</span><span><b>${esc(result.label)}</b>${compact?"":`<small>${esc(result.detail||"")}</small>`}</span>${result.source?.startsWith("Google Maps")?`<em translate="no">Google Maps</em>`:""}</div>`;
-}
-function openingEventHtml(event){
-  const subject=openingSubjectForRenderedEvent(event);if(!subject)return "";
-  const live=state?.placeLiveChecks?.[subject.id];
-  const badge=live?.loading
-    ? `<div class="opening-guard unknown"><span class="opening-guard-icon">…</span><span><b>正在檢查營業時間</b><small>只在需要時連線，不會背景輪詢</small></span><em translate="no">Google Maps</em></div>`
-    : openingBadgeHtml(openingGuardForPlace(subject));
-  return `${badge}<div class="opening-event-actions"><button type="button" class="opening-inline-btn" data-edit-opening-hours="${esc(subject.id)}">設定時段</button><button type="button" class="opening-inline-btn" data-check-opening="${esc(subject.id)}">Google 檢查</button></div>`;
-}
-function renderOpeningGuardSummary(dayIndex=state?.dayIndex||0){
-  const box=$("#openingGuardSummary");if(!box)return;
-  const list=openingSubjectsForDay(dayIndex);
-  if(!list.length){box.hidden=true;box.innerHTML="";return;}
-  const results=list.map(p=>openingGuardForPlace(p));
-  const counts={ok:0,warn:0,error:0,unknown:0};results.forEach(r=>{const k=r?.level||"unknown";counts[k]=(counts[k]||0)+1});
-  const danger=counts.error+counts.warn;
-  const summary=danger
-    ? `⚠ ${danger} 個地點需要注意${counts.ok?` · ${counts.ok} 個正常`:""}`
-    : counts.ok
-      ? `✓ ${counts.ok} 個地點時間正常`
-      : `尚未有可判斷的營業時間`;
-  box.hidden=false;
-  box.innerHTML=`<div class="opening-summary-main"><div><span class="eyebrow">OPENING HOURS</span><h3>今日營業檢查</h3><p>${summary}${counts.unknown?` · ${counts.unknown} 個待確認`:""} · 共 ${list.length} 個地點</p></div><button type="button" class="mini-btn" data-check-opening-day="${dayIndex}">立即檢查</button></div>`;
-}
-function renderPlacesApiStatus(){
-  const el=$("#placesApiStatus");if(!el||!state)return;
-  const hasKey=!!String(state.placesApiKey||"").trim();
-  el.innerHTML=hasKey?`<span class="status-dot ready"></span><span>Google 即時檢查已設定 · 金鑰只存在這台裝置</span>`:`<span class="status-dot"></span><span>尚未設定 Google Places 金鑰 · 可先用手動營業時間離線檢查</span>`;
-}
-function loadGooglePlacesLibrary(){
-  if(window.google?.maps?.importLibrary)return Promise.resolve(window.google.maps);
-  if(googlePlacesLoaderPromise)return googlePlacesLoaderPromise;
-  const key=String(state?.placesApiKey||"").trim();
-  if(!key)return Promise.reject(new Error("尚未設定 Google Places API 金鑰"));
-  googlePlacesLoaderPromise=new Promise((resolve,reject)=>{
-    const existing=document.querySelector('script[data-kyushu-google-maps="1"]');
-    if(existing){existing.addEventListener("load",()=>resolve(window.google?.maps));existing.addEventListener("error",()=>reject(new Error("Google Maps 載入失敗")));return;}
-    const script=document.createElement("script");script.async=true;script.defer=true;script.dataset.kyushuGoogleMaps="1";
-    script.src=`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly&libraries=places&language=zh-TW&region=JP`;
-    script.onload=()=>window.google?.maps?.importLibrary?resolve(window.google.maps):reject(new Error("Places Library 未載入"));
-    script.onerror=()=>reject(new Error("Google Maps 載入失敗"));document.head.appendChild(script);
-  }).catch(err=>{googlePlacesLoaderPromise=null;throw err});
-  return googlePlacesLoaderPromise;
-}
-async function fetchGooglePlaceForSubject(subject){
-  await loadGooglePlacesLibrary();
-  const {Place}=await google.maps.importLibrary("places");
-  const fields=["id","displayName","businessStatus","currentOpeningHours","regularOpeningHours"];
-  if(subject.placeId){
-    const place=new Place({id:subject.placeId});
-    await place.fetchFields({fields});
-    return place;
-  }
-  const day=TRIP?.days?.[subject.dayIndex];
-  const textQuery=[subject.query||subject.title,day?.location,"Japan"].filter(Boolean).join(" ");
-  const {places}=await Place.searchByText({textQuery,fields,language:"ja",region:"jp",maxResultCount:1});
-  return places?.[0]||null;
-}
-async function quietlyPersistResolvedPlaceId(subject,placeId){
-  if(!placeId||subject.placeId===placeId)return;
-  subject.placeId=String(placeId);
-  if(subject._itinerary){
-    const current=state.openingProfiles?.[subject.id]||{};
-    state.openingProfiles={...(state.openingProfiles||{}),[subject.id]:{
-      placeId:String(placeId),query:String(subject.query||current.query||subject.title||""),
-      manualHours:normalizeManualHours(subject.manualHours||current.manualHours),updatedAt:Date.now()
-    }};
-    saveLocal("openingProfiles",state.openingProfiles);
-    state.openingProfilesPending=true;saveLocal("openingProfilesPending",true);
-    if(state.cloud&&navigator.onLine){
-      try{await setCloud("openingProfiles",state.openingProfiles);state.openingProfilesPending=false;saveLocal("openingProfilesPending",false)}
-      catch(err){console.warn("Opening Place ID sync failed",err)}
-    }
-    return;
-  }
-  const imported=(state.importedPlaces||[]).find(p=>p.id===subject.id);
-  if(!imported)return;
-  imported.placeId=String(placeId);saveLocal("importedPlaces",state.importedPlaces||[]);
-  if(state.cloud&&navigator.onLine){try{await setCloud("importedPlaces",state.importedPlaces||[])}catch(err){console.warn("Place ID sync failed",err)}}
-}
-async function checkOpeningSubject(id,{notify=true,force=false}={}){
-  const subject=findOpeningSubject(id);if(!subject)return null;
-  const existing=state?.placeLiveChecks?.[id];
-  if(existing?.loading)return null;
-  if(!force&&existing?.result&&Date.now()-Number(existing.checkedAt||0)<10*60*1000)return existing.result;
-  if(!String(state.placesApiKey||"").trim()){
-    openPlacesApiSettings();if(notify)toast("先設定 Google Places 金鑰；手動營業時間仍可離線使用");return null;
-  }
-  if(!navigator.onLine){if(notify)toast("目前離線，改用手動營業時間檢查");return openingGuardForPlace(subject)}
-  state.placeLiveChecks[id]={loading:true};renderImportedPlaces();renderOpeningGuardSummary(subject.dayIndex);renderSchedule();
-  try{
-    const place=await fetchGooglePlaceForSubject(subject);
-    if(!place)throw new Error("找不到相符的 Google Maps 地點");
-    const result=evaluateGooglePlaceOpening(place,subject);
-    state.placeLiveChecks[id]={loading:false,result,checkedAt:Date.now(),placeName:String(place.displayName||subject.title)};
-    if(place.id)await quietlyPersistResolvedPlaceId(subject,place.id);
-    renderImportedPlaces();renderSchedule();
-    if(notify)toast(result.level==="error"?`⚠ ${subject.title}：${result.label}`:`${subject.title}：${result.label}`);
-    return result;
-  }catch(err){
-    console.warn("Google opening-hours check failed",err);
-    state.placeLiveChecks[id]={loading:false,result:{level:"unknown",label:"Google 檢查失敗",detail:String(err.message||"無法取得營業時間"),source:"Google Maps"},checkedAt:Date.now()};
-    renderImportedPlaces();renderSchedule();if(notify)toast(`營業時間檢查失敗：${err.message}`);return null;
-  }
-}
-async function checkImportedPlaceOpening(id,options={}){return checkOpeningSubject(id,options)}
-async function checkOpeningHoursForDay(dayIndex,{auto=false}={}){
-  const list=openingSubjectsForDay(dayIndex);
-  if(!list.length){if(!auto)toast("這一天沒有需要營業時間檢查的地點");return}
-  if(auto){
-    const dateKey=tripDayDate(dayIndex);
-    if(!targetWithinCurrentHoursWindow(dateKey)||!navigator.onLine||!String(state.placesApiKey||"").trim())return;
-  }
-  if(!String(state.placesApiKey||"").trim()){
-    openPlacesApiSettings();if(!auto)toast("先設定 Google Places 金鑰；手動營業時間仍可離線使用");return;
-  }
-  for(const p of list){
-    if(auto&&state.placeLiveChecks?.[p.id])continue;
-    await checkOpeningSubject(p.id,{notify:!auto,force:!auto});
-  }
-}
-function maybeAutoCheckOpeningHours(dayIndex){
-  setTimeout(()=>checkOpeningHoursForDay(dayIndex,{auto:true}),120);
-}
-function openPlacesApiSettings(){
-  const modal=$("#placesApiModal"),input=$("#placesApiKeyInput");if(!modal||!input)return;
-  input.value=state?.placesApiKey||"";modal.showModal();
-}
-function savePlacesApiSettings(e){
-  e.preventDefault();
-  const key=String(new FormData(e.currentTarget).get("apiKey")||"").trim();
-  state.placesApiKey=key;saveLocal("placesApiKey",key);googlePlacesLoaderPromise=null;
-  renderPlacesApiStatus();$("#placesApiModal")?.close();toast(key?"Google Places 金鑰已只存在這台裝置":"已清除 Google Places 金鑰");
-}
-function openOpeningHoursModal(id){
-  const subject=findOpeningSubject(id);if(!subject)return;
-  state.hoursEditId=id;
-  const modal=$("#openingHoursModal");if(!modal)return;
-  const title=$("#openingHoursPlaceTitle");if(title)title.textContent=subject.title;
-  for(let day=0;day<7;day++){
-    const input=modal.querySelector(`[data-hours-day="${day}"]`);if(input)input.value=subject.manualHours?.[day]||"";
-  }
-  const meta=$("#openingHoursModalMeta");if(meta){const r=openingGuardForPlace(subject);meta.innerHTML=openingBadgeHtml(r)}
-  modal.showModal();
-}
-async function saveOpeningHoursManual(e){
-  e.preventDefault();
-  const subject=findOpeningSubject(state.hoursEditId);if(!subject)return;
-  const hours={};for(let day=0;day<7;day++)hours[day]=String(e.currentTarget.querySelector(`[data-hours-day="${day}"]`)?.value||"").trim();
-  subject.manualHours=normalizeManualHours(hours);delete state.placeLiveChecks[subject.id];
-  if(subject._itinerary)await persistOpeningProfile(subject,{notify:false});
-  else{
-    const imported=(state.importedPlaces||[]).find(p=>p.id===subject.id);if(imported)imported.manualHours=subject.manualHours;
-    await persistImportedPlaces({notify:false});
-  }
-  $("#openingHoursModal")?.close();toast("營業時間已儲存，離線也會自動檢查");
-}
-
 function decodeMapComponent(v=""){
   try{return decodeURIComponent(String(v).replace(/\+/g," ")).trim()}catch{return String(v).trim()}
 }
@@ -761,13 +381,13 @@ function renderPlaceImportPreview(){
   if(add)add.disabled=false;
 }
 function renderImportedPlaces(){
-  populatePlaceImportDaySelect();renderPlacesApiStatus();
+  populatePlaceImportDaySelect();
   const box=$("#importedPlacesList");if(!box)return;
   const list=(state.importedPlaces||[]).slice().sort((a,b)=>(a.dayIndex-b.dayIndex)||String(a.time).localeCompare(String(b.time)));
   box.innerHTML=list.length?list.map(p=>{
-    const live=state.placeLiveChecks?.[p.id],result=openingGuardForPlace(p);
-    const badge=live?.loading?`<div class="opening-guard unknown compact"><span class="opening-guard-icon">…</span><span><b>正在檢查營業時間</b></span><em translate="no">Google Maps</em></div>`:openingBadgeHtml(result,{compact:true});
-    return `<div class="list-item place-import-saved-item"><div class="list-main"><div class="place-import-saved-copy"><div class="list-title">${esc(p.title)}</div><div class="list-meta">D${p.dayIndex+1}${p.time?` · ${esc(p.time)}`:""} · ${esc(p.category||"景點")}${p.placeId?` · Place ID 已綁定`:""}</div>${badge}</div><div class="list-actions place-hours-actions"><a class="mini-btn" target="_blank" rel="noopener" href="${esc(p.mapUrl||mapSearch(p.query||p.title))}">地圖</a><button class="mini-btn" data-edit-opening-hours="${esc(p.id)}">營業</button><button class="mini-btn" data-check-opening="${esc(p.id)}">檢查</button><button class="mini-btn" data-delete-imported-place="${esc(p.id)}">刪</button></div></div></div>`;
+    const info=findOpeningHoursInfo(p);
+    const hours=info?`<div class="opening-hours-info compact"><span class="opening-hours-label">營業</span><strong>${esc(info.hours)}</strong>${info.note?`<span class="opening-hours-note">${esc(info.note)}</span>`:""}</div>`:"";
+    return `<div class="list-item place-import-saved-item"><div class="list-main"><div class="place-import-saved-copy"><div class="list-title">${esc(p.title)}</div><div class="list-meta">D${p.dayIndex+1}${p.time?` · ${esc(p.time)}`:""} · ${esc(p.category||"景點")}</div>${hours}</div><div class="list-actions"><a class="mini-btn" target="_blank" rel="noopener" href="${esc(p.mapUrl||mapSearch(p.query||p.title))}">地圖</a><button class="mini-btn" data-delete-imported-place="${esc(p.id)}">刪</button></div></div></div>`;
   }).join(""):`<div class="empty">還沒有快速匯入的景點。</div>`;
 }
 async function persistImportedPlaces({notify=false}={}){
@@ -807,7 +427,7 @@ async function addPlaceImportDrafts(){
     if(!checked)return;
     const title=$(`[data-import-title="${i}"]`)?.value?.trim()||d.title;
     if(!title)return;
-    selected.push({id:uid(),dayIndex,time,title,category,mapUrl:d.mapUrl||mapSearch(title),query:title,note:"快速匯入",source:d.source,importedAt:Date.now(),placeId:"",manualHours:normalizeManualHours({})});
+    selected.push({id:uid(),dayIndex,time,title,category,mapUrl:d.mapUrl||mapSearch(title),query:title,note:"快速匯入",source:d.source,importedAt:Date.now(),placeId:""});
   });
   if(!selected.length){toast("請至少勾選一個景點");return;}
   state.importedPlaces=[...(state.importedPlaces||[]),...selected];
@@ -2931,11 +2551,9 @@ function renderSchedule(){
         </div>
       </div>
     </article>`).join("");
-  renderOpeningGuardSummary(state.dayIndex);
   renderHotelReturnCard();
   renderWeather(d);
   requestAnimationFrame(()=>bindGuideTargets(visibleEvents));
-  maybeAutoCheckOpeningHours(state.dayIndex);
 }
 async function renderWeather(d){
   const card=$("#weatherCard");card.classList.add("skeleton");card.classList.remove("weather-no-forecast");
@@ -3245,9 +2863,6 @@ function bind(){
     const decision=e.target.closest("[data-decision-id]");if(decision){stageDecision(decision.dataset.decisionId,decision.dataset.decisionOption);return}
     const task=e.target.closest("[data-task-id]");if(task){await toggleBookingTask(task.dataset.taskId);return}
     const importedDelete=e.target.closest("[data-delete-imported-place]");if(importedDelete){await deleteImportedPlace(importedDelete.dataset.deleteImportedPlace);return}
-    const openingEdit=e.target.closest("[data-edit-opening-hours]");if(openingEdit){openOpeningHoursModal(openingEdit.dataset.editOpeningHours);return}
-    const openingCheck=e.target.closest("[data-check-opening]");if(openingCheck){await checkImportedPlaceOpening(openingCheck.dataset.checkOpening,{notify:true,force:true});return}
-    const openingDay=e.target.closest("[data-check-opening-day]");if(openingDay){await checkOpeningHoursForDay(Number(openingDay.dataset.checkOpeningDay),{auto:false});return}
     for(const [attr,key,render] of [["data-check-food","foods",renderFood],["data-check-shopping","shopping",renderShopping]]){
       const x=e.target.closest(`[${attr}]`);if(x){const id=x.getAttribute(attr);const before=state[key].find(i=>i.id===id)?.checked;await toggleItem(key,id);render();if(!before)buddyCelebrate(key==="foods"?pickLine(BUDDY_DIALOG.food.complete):pickLine(BUDDY_DIALOG.shop.complete),key==="foods"?"./purin_clap.png?v=430":"./buddy_success.png?v=430",key==="foods"?"food":"shop");return}
     }
@@ -3364,14 +2979,6 @@ function bind(){
   $("#placeImportParseBtn")?.addEventListener("click",parsePlaceImportDrafts);
   $("#placeImportAddBtn")?.addEventListener("click",addPlaceImportDrafts);
   $("#placeImportText")?.addEventListener("paste",()=>setTimeout(()=>{if(($("#placeImportText")?.value||"").trim())parsePlaceImportDrafts()},30));
-  $("#placesApiSettingsBtn")?.addEventListener("click",openPlacesApiSettings);
-  $("#placesApiClose")?.addEventListener("click",()=>$("#placesApiModal")?.close());
-  $("#placesApiModal")?.addEventListener("click",e=>{if(e.target===$("#placesApiModal"))$("#placesApiModal").close()});
-  $("#placesApiForm")?.addEventListener("submit",savePlacesApiSettings);
-  $("#openingHoursClose")?.addEventListener("click",()=>$("#openingHoursModal")?.close());
-  $("#openingHoursModal")?.addEventListener("click",e=>{if(e.target===$("#openingHoursModal"))$("#openingHoursModal").close()});
-  $("#openingHoursForm")?.addEventListener("submit",saveOpeningHoursManual);
-  $("#openingHoursGoogleCheck")?.addEventListener("click",()=>{const id=state?.hoursEditId;if(id){$("#openingHoursModal")?.close();checkImportedPlaceOpening(id,{notify:true,force:true})}});
   $("#modalClose").addEventListener("click",()=>$("#formModal").close());
   $("#modalForm").addEventListener("submit",handleSubmit);
   $("#firebaseTestBtn").addEventListener("click", async()=>{
@@ -3485,14 +3092,12 @@ async function connectCloud({force=false}={}){
   }catch(err){console.warn("Guide notes initial merge failed",err)}
   await syncPendingGuideNotes();
   await syncPendingImportedPlaces();
-  await syncPendingOpeningProfiles();
 
   const mappings=[
     ["foods",v=>{if(v!==null){state.foods=normalizeCloud(v);saveLocal("foods",state.foods);renderFood()}}],
     ["shopping",v=>{if(v!==null){state.shopping=normalizeCloud(v);saveLocal("shopping",state.shopping);renderShopping()}}],
     ["expenses",v=>{if(v!==null){state.expenses=normalizeCloud(v);saveLocal("expenses",state.expenses);renderExpenses()}}],
     ["importedPlaces",v=>{if(v!==null&&!state.importedPlacesPending){state.importedPlaces=normalizeImportedPlaces(v);saveLocal("importedPlaces",state.importedPlaces);renderImportedPlaces();renderSchedule()}}],
-    ["openingProfiles",v=>{if(v!==null&&!state.openingProfilesPending){state.openingProfiles=normalizeOpeningProfiles(v);saveLocal("openingProfiles",state.openingProfiles);renderSchedule()}}],
     ["taskStatus",v=>{if(v && typeof v==="object"){state.taskStatus=v;saveLocal("taskStatus",v);renderBookings()}}],
     ["decisions",v=>{if(v && typeof v==="object"){state.decisions=v;saveLocal("decisions",v);renderSchedule()}}],
     ["guideNotes",v=>mergeGuideNotesFromCloud(v)],
@@ -3749,7 +3354,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5325",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5326",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
