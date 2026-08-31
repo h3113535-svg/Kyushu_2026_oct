@@ -1,3 +1,8 @@
+
+## v5.3.30 ImportedPlaces Boot Fix
+- Fixes a deterministic startup crash introduced in v5.3.26: `normalizeImportedPlaces` was deleted while `createState()` and cloud sync still called it.
+- Restores only the quick-import normalizer; does not reintroduce the removed API-key/manual-opening-hours UI.
+- Keeps v5.3.29 Chrome/PWA recovery behavior and stable asset cache.
 ## v5.3.29 Chrome/PWA Recovery
 - Fixes Chrome and installed-PWA clients remaining on an older waiting service worker while a fresh browser sees the latest site.
 - New service workers activate automatically; existing images remain in the shared asset cache and are not redownloaded just because the shell changes.

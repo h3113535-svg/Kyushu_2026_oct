@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.29 Chrome/PWA Recovery */
+/* Private travel PWA · Firebase Auth gated content · v5.3.30 ImportedPlaces Boot Fix */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -188,6 +188,26 @@ function createState(){
 }
 function loadLocal(key,fallback){try{const v=localStorage.getItem(storeKey(key));return v===null?fallback:JSON.parse(v)}catch{return fallback}}
 function saveLocal(key,value){localStorage.setItem(storeKey(key),JSON.stringify(value))}
+
+// Quick-import state normalizer. This must exist before createState() is executed.
+// v5.3.26 accidentally removed it while simplifying Opening Hours, leaving two live callers behind.
+function normalizeImportedPlaces(raw){
+  const arr=Array.isArray(raw)?raw:normalizeCloud(raw);
+  return arr.filter(x=>x&&typeof x==="object").map((x,i)=>({
+    id:String(x.id||`import-${i}-${Date.now().toString(36)}`),
+    dayIndex:Math.max(0,Math.min(99,Number(x.dayIndex||0))),
+    time:String(x.time||""),
+    title:String(x.title||x.name||"未命名景點"),
+    category:String(x.category||"景點"),
+    mapUrl:String(x.mapUrl||""),
+    query:String(x.query||x.title||x.name||""),
+    note:String(x.note||""),
+    importedAt:Number(x.importedAt||0),
+    source:String(x.source||"manual"),
+    placeId:String(x.placeId||"")
+  }));
+}
+
 // Simple opening-hours display.
 // No runtime API key, no manual setup, no background requests. These values are embedded in the
 // app from publicly listed opening hours and are available offline. If a venue changes its hours,
@@ -3395,7 +3415,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5329",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5330",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
