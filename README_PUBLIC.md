@@ -148,3 +148,10 @@
 - Current catalog entries were refreshed from public/official venue information on 2026-08-31. Unknown/unmatched places simply show no opening-hours row instead of asking the traveler to configure anything.
 - Quick-imported places use the same catalog by title; map and delete actions remain unchanged.
 
+
+
+## v5.3.27 Auth Reliability
+- Fixes a login-gate stall where an authenticated user could remain on “正在載入私人旅程…” indefinitely when Firebase REST/token access stalled.
+- Authorized local trip cache now opens immediately regardless of its refresh age; a >6h content refresh happens in the background instead of blocking app entry.
+- Firebase token retrieval and REST requests now have bounded timeouts, so failures surface instead of hanging forever.
+- Existing offline-first/static cache architecture and v5.3.21–v5.3.26 features are preserved.

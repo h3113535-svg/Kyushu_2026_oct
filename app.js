@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.26 Simple Opening Hours */
+/* Private travel PWA · Firebase Auth gated content · v5.3.27 Auth Reliability */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -61,32 +61,54 @@ function pathFor(key){
 function endpoint(path){
   return `${DATABASE_URL}/${path}.json`;
 }
+const AUTH_TOKEN_TIMEOUT_MS = 8000;
+const FIREBASE_REQUEST_TIMEOUT_MS = 12000;
+function promiseTimeout(promise, ms, message){
+  let timer;
+  return Promise.race([
+    Promise.resolve(promise).finally(()=>clearTimeout(timer)),
+    new Promise((_,reject)=>{ timer=setTimeout(()=>reject(new Error(message)),ms); })
+  ]);
+}
 async function authToken(forceRefresh=false){
   if(!window.firebase?.auth) return null;
   const user=firebase.auth().currentUser;
   if(!user) return null;
-  return user.getIdToken(forceRefresh);
+  return promiseTimeout(user.getIdToken(forceRefresh),AUTH_TOKEN_TIMEOUT_MS,"Google 登入憑證取得逾時");
 }
 async function request(path, options = {}){
   const token=await authToken();
   if(!token) throw new Error("尚未登入");
   const url=new URL(endpoint(path));
   url.searchParams.set("auth",token);
-  const res = await fetch(url.toString(), {
-    cache: "no-store",
-    headers: {"Content-Type":"application/json"},
-    ...options
-  });
-  const text = await res.text();
-  let body = null;
-  try { body = text ? JSON.parse(text) : null; } catch { body = text; }
-  if(!res.ok){
-    const msg = body?.error || body || `${res.status} ${res.statusText}`;
-    lastError = String(msg);
-    throw new Error(lastError);
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),FIREBASE_REQUEST_TIMEOUT_MS);
+  try{
+    const res = await fetch(url.toString(), {
+      cache: "no-store",
+      headers: {"Content-Type":"application/json"},
+      ...options,
+      signal: controller.signal
+    });
+    const text = await res.text();
+    let body = null;
+    try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+    if(!res.ok){
+      const msg = body?.error || body || `${res.status} ${res.statusText}`;
+      lastError = String(msg);
+      throw new Error(lastError);
+    }
+    lastError = "";
+    return body;
+  }catch(err){
+    if(err?.name==="AbortError"){
+      lastError="Firebase 連線逾時";
+      throw new Error(lastError);
+    }
+    throw err;
+  }finally{
+    clearTimeout(timer);
   }
-  lastError = "";
-  return body;
 }
 
 function getLastFirebaseError(){
@@ -3236,18 +3258,33 @@ async function bootTrip(content,user,{offline=false}={}){
     connectCloud();
   }
 }
+async function refreshPrivateTripCacheInBackground(user){
+  if(!navigator.onLine)return;
+  try{
+    const content=await fetchPrivateTrip();
+    cacheAuthorizedTrip(content,user);
+  }catch(err){
+    // Never block an already-authorized device because a background refresh is slow or unavailable.
+    console.warn("Private trip background refresh skipped",err);
+  }
+}
 async function handleAuthorizedUser(user){
   currentAuthUser=user;
   setAuthStatus("正在載入私人旅程…");
   const cached=cachedTrip();
   const sameUser=!cached?.auth?.email || !user?.email || cached.auth.email===user.email;
   const cacheAge=Date.now()-Number(cached?.auth?.verifiedAt||0);
-  if(cached && sameUser && cacheAge>=0 && cacheAge<PRIVATE_CONTENT_REFRESH_MS){
-    // Large itinerary content is stable and already authorized on this device. Reuse it instead of
-    // downloading the same payload on every launch. Mutable app data has its own low-data sync.
-    await bootTrip(cached.content,user);
+
+  // Offline-first auth boot: once this device has an authorized copy, open it immediately even if
+  // the 6-hour refresh window has expired. Refreshing Firebase must never trap the user on the gate.
+  if(cached && sameUser){
+    await bootTrip(cached.content,user,{offline:!navigator.onLine});
+    if(navigator.onLine && (cacheAge<0 || cacheAge>=PRIVATE_CONTENT_REFRESH_MS)){
+      refreshPrivateTripCacheInBackground(user);
+    }
     return;
   }
+
   try{
     const content=await fetchPrivateTrip();
     cacheAuthorizedTrip(content,user);
@@ -3261,14 +3298,7 @@ async function handleAuthorizedUser(user){
       showAuthGate();
       return;
     }
-    if(cached && sameUser){
-      // Weak hotel Wi-Fi / tunnel / temporary Firebase outage: keep the trip usable from the last
-      // authorized local copy instead of throwing the user back to the login gate.
-      await bootTrip(cached.content,user,{offline:true});
-      if($("#syncText"))$("#syncText").textContent="本機快取模式";
-      return;
-    }
-    setAuthStatus(`無法載入私人旅程：${err.message}`,"error");
+    setAuthStatus(`無法載入私人旅程：${err.message}。請確認網路後重試。`,"error");
     showAuthGate();
   }
 }
@@ -3354,7 +3384,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5326",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5327",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
