@@ -3402,3 +3402,10 @@ html[data-theme="buddy"] .opening-setup-card,html[data-theme="buddy"] .opening-g
 .app-update-copy small{color:var(--muted);font-size:10px;line-height:1.45}
 .app-update-btn{flex:0 0 auto;border:0;border-radius:999px;padding:9px 12px;background:var(--accent,#a8673f);color:#fff;font-size:11px;font-weight:800;box-shadow:0 5px 14px rgba(94,67,47,.16)}
 .app-update-btn:disabled{opacity:.58}
+
+/* v5.3.25 existing-itinerary Opening Hours Guard */
+.opening-event-actions{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 2px}
+.opening-inline-btn{border:0;background:transparent;color:var(--accent);padding:2px 1px;font-size:9px;font-weight:800;line-height:1.35;text-decoration:underline;text-decoration-color:color-mix(in srgb,var(--accent) 35%,transparent);text-underline-offset:2px}
+.opening-inline-btn:active{opacity:.62}
+.opening-summary-main p{max-width:290px}
+html[data-theme="buddy"] .opening-inline-btn{color:#9B6B29}

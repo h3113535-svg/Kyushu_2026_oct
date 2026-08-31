@@ -130,3 +130,13 @@
 - 未來版本偵測到 waiting Service Worker 時，App 會顯示「新版本已準備完成／立即更新」，使用者按下後才切換新版並 reload。
 - 完全離線仍由已快取的最新 App Shell + stable assets 開啟；Firebase、Google Places/Maps、匯率 API 等跨網域請求不由 Service Worker 攔截。
 - Cache 清理仍限定 `kyushu-oct-` namespace，不會刪除未來 11 月 PWA 或其他 GitHub Pages repo 的 cache。
+
+
+更新：v5.3.25 Existing Itinerary Opening Guard
+- Opening Hours Guard 不再只檢查「快速匯入」地點，現在會自動辨識 D1–D10 既有行程中有營業時間意義的餐廳、咖啡、景點、商場、店舖、租車、體驗等項目。
+- 每日頁面的「今日營業檢查」會同時計入既有行程與快速匯入地點；每個可檢查的既有行程卡也會直接顯示營業狀態與「設定時段 / Google 檢查」操作。
+- 既有行程不需要改寫 Firebase 主行程 schema；營業設定以獨立 `openingProfiles` 儲存，包含 Place ID、查詢字串與手動營業時間，並支援 LocalStorage + Firebase 低流量同步。
+- 手動營業時間仍可完全離線判斷；Google 即時資料仍只在記憶體中，不永久保存營業內容。
+- Google 自動檢查仍維持旅行日前 7 天內、只針對目前查看的日期、同一 session 不重複查詢的省流量策略。
+- 交通移動、飯店入住/退房、自由時間、步行/開車等非營業型事件會自動排除；若未來 private trip event 需要強制加入或排除，可使用 `openingCheck: true` / `openingCheck: false`。
+- v5.3.24 的三層 CacheStorage 架構完整保留；圖片 assets cache 不因本次升版重新下載。

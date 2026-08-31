@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.24 Cache Architecture Fix */
+/* Private travel PWA · Firebase Auth gated content · v5.3.25 Existing Itinerary Opening Guard */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -158,6 +158,7 @@ function createState(){
     dayIndex:0, view:"schedule", tool:"booking", shoppingMember:"全部",
     foods:loadLocal("foods",[]), shopping:loadLocal("shopping",[]), expenses:loadLocal("expenses",[]),
     importedPlaces:normalizeImportedPlaces(loadLocal("importedPlaces",[])), importedPlacesPending:!!loadLocal("importedPlacesPending",false), placeImportDrafts:[],
+    openingProfiles:normalizeOpeningProfiles(loadLocal("openingProfiles",{})), openingProfilesPending:!!loadLocal("openingProfilesPending",false),
     placesApiKey:String(loadLocal("placesApiKey","")||""), placeLiveChecks:{}, hoursEditId:null,
     fx:normalizeFxState(loadLocal("fxRate",{})),
     taskStatus:loadLocal("taskStatus",{}), decisions:loadLocal("decisions",{}), decisionDrafts:{},
@@ -187,6 +188,122 @@ function normalizeImportedPlaces(raw){
     placeId:String(x.placeId||""), manualHours:normalizeManualHours(x.manualHours)
   }));
 }
+function normalizeOpeningProfiles(raw){
+  const src=raw&&typeof raw==="object"&&!Array.isArray(raw)?raw:{};
+  const out={};
+  for(const [id,value] of Object.entries(src)){
+    if(!value||typeof value!=="object")continue;
+    out[String(id)]={
+      placeId:String(value.placeId||""),
+      query:String(value.query||""),
+      manualHours:normalizeManualHours(value.manualHours),
+      updatedAt:Number(value.updatedAt||0)
+    };
+  }
+  return out;
+}
+function openingEventHash(value=""){
+  let h=2166136261;
+  for(const ch of String(value)){
+    h^=ch.codePointAt(0);h=Math.imul(h,16777619);
+  }
+  return (h>>>0).toString(36);
+}
+function openingEventId(event,dayIndex,eventIndex=0){
+  const explicit=String(event?.id||event?.eventId||"").trim();
+  if(explicit)return `itinerary:${explicit}`;
+  const seed=[dayIndex,eventIndex,event?.time||"",event?.title||"",event?.category||""].join("|");
+  return `itinerary:d${Number(dayIndex)+1}:${eventIndex}:${openingEventHash(seed)}`;
+}
+function openingCheckConfig(event){
+  if(event?.openingCheck===false||event?.openingHoursCheck===false)return false;
+  if(event?.openingCheck&&typeof event.openingCheck==="object")return event.openingCheck;
+  if(event?.openingHours&&typeof event.openingHours==="object")return {manualHours:event.openingHours};
+  return event?.openingCheck===true?{}:null;
+}
+function isOpeningRelevantEvent(event){
+  if(!event||event._imported)return !!event?._imported;
+  const cfg=openingCheckConfig(event);
+  if(cfg===false)return false;
+  if(cfg!==null)return true;
+  const text=`${event.category||""} ${event.title||""} ${event.note||""}`;
+  const strong=/(早餐|午餐|晚餐|餐廳|用餐|咖啡|coffee|cafe|café|甜點|燒肉|拉麵|壽司|居酒屋|食堂|麵包|ベーカリー|パン|水族館|動物園|博物館|美術館|展望|神社|寺|城|商場|百貨|購物|逛街|商店街|outlet|mall|market|市場|lalaport|amu|pok[eé]mon|pokemon|ポケモン|gundam|namco|nissan|租車|レンタカー|遊船|划船|小火車|トロッコ|factory|工房|道の駅|火口|纜車|ロープウェイ|體驗)/i;
+  if(strong.test(text))return true;
+  const exclude=/(住宿|飯店|旅館|hotel|check[- ]?in|check[- ]?out|入住|退房|移動|前往|返回|回飯店|搭乘|搭車|新幹線|jr\b|巴士|bus\b|計程車|taxi|開車|駕車|步行|散步|自由時間|休息|起床|整理|寄放|取行李|航班|機場|出發|抵達)/i;
+  if(exclude.test(text))return false;
+  return /(景點|觀光|公園|塔|廣場|園區|牧場|車站商場|店|shop)/i.test(text);
+}
+function itineraryOpeningSubject(event,dayIndex,eventIndex=0){
+  if(!event||!isOpeningRelevantEvent(event))return null;
+  const id=openingEventId(event,dayIndex,eventIndex);
+  const profile=state?.openingProfiles?.[id]||{};
+  const cfg=openingCheckConfig(event)||{};
+  const cfgHours=cfg.manualHours||cfg.hours||{};
+  const manualHours=hasManualHours(profile)?profile.manualHours:normalizeManualHours(cfgHours);
+  return {
+    id,dayIndex:Number(dayIndex),time:String(event.time||""),title:String(event.title||"未命名地點"),
+    category:String(event.category||"行程"),mapUrl:String(event.mapUrl||""),
+    query:String(profile.query||cfg.query||event.nav||event.title||""),
+    placeId:String(profile.placeId||cfg.placeId||""),manualHours,
+    _itinerary:true,_eventIndex:Number(eventIndex),_sourceEvent:event
+  };
+}
+function openingSubjectForRenderedEvent(event){
+  if(!event)return null;
+  if(event._imported)return event;
+  return itineraryOpeningSubject(event,Number(event._dayIndex??state?.dayIndex??0),Number(event._eventIndex??0));
+}
+function itineraryOpeningSubjectsForDay(dayIndex){
+  const day=TRIP?.days?.[Number(dayIndex)];if(!day)return [];
+  return (day.events||[]).map((event,eventIndex)=>({event,eventIndex}))
+    .filter(({event})=>eventVisible(event)&&isOpeningRelevantEvent(event))
+    .map(({event,eventIndex})=>itineraryOpeningSubject(event,dayIndex,eventIndex)).filter(Boolean);
+}
+function openingSubjectsForDay(dayIndex){
+  const existing=itineraryOpeningSubjectsForDay(dayIndex);
+  const imported=(state?.importedPlaces||[]).filter(p=>Number(p.dayIndex)===Number(dayIndex));
+  return [...existing,...imported];
+}
+function findOpeningSubject(id){
+  const imported=(state?.importedPlaces||[]).find(p=>p.id===id);if(imported)return imported;
+  for(let dayIndex=0;dayIndex<(TRIP?.days?.length||0);dayIndex++){
+    const day=TRIP.days[dayIndex];
+    for(let eventIndex=0;eventIndex<(day.events||[]).length;eventIndex++){
+      const subject=itineraryOpeningSubject(day.events[eventIndex],dayIndex,eventIndex);
+      if(subject?.id===id)return subject;
+    }
+  }
+  return null;
+}
+async function persistOpeningProfile(subject,{notify=false}={}){
+  if(!subject?._itinerary)return false;
+  const current=state.openingProfiles?.[subject.id]||{};
+  state.openingProfiles={...(state.openingProfiles||{}),[subject.id]:{
+    placeId:String(subject.placeId||current.placeId||""),
+    query:String(subject.query||current.query||subject.title||""),
+    manualHours:normalizeManualHours(subject.manualHours||current.manualHours),
+    updatedAt:Date.now()
+  }};
+  saveLocal("openingProfiles",state.openingProfiles);
+  state.openingProfilesPending=true;saveLocal("openingProfilesPending",true);
+  renderSchedule();
+  if(state.cloud&&navigator.onLine){
+    try{
+      await setCloud("openingProfiles",state.openingProfiles);
+      state.openingProfilesPending=false;saveLocal("openingProfilesPending",false);
+      if(notify)toast("營業資料已同步");
+    }catch(err){console.warn("Opening profiles sync failed",err);if(notify)toast("營業資料已存本機，稍後同步")}
+  }else if(notify)toast("營業資料已存本機");
+  return true;
+}
+async function syncPendingOpeningProfiles(){
+  if(!state?.openingProfilesPending||!state.cloud||!navigator.onLine)return false;
+  try{
+    await setCloud("openingProfiles",state.openingProfiles||{});
+    state.openingProfilesPending=false;saveLocal("openingProfilesPending",false);return true;
+  }catch(err){console.warn("Pending opening profiles sync failed",err);return false}
+}
+
 function normalizeFxState(raw){
   const v=raw&&typeof raw==="object"?raw:{};
   return {
@@ -432,20 +549,27 @@ function openingBadgeHtml(result,{compact=false}={}){
   return `<div class="opening-guard ${esc(result.level)} ${compact?"compact":""}"><span class="opening-guard-icon">${icon}</span><span><b>${esc(result.label)}</b>${compact?"":`<small>${esc(result.detail||"")}</small>`}</span>${result.source?.startsWith("Google Maps")?`<em translate="no">Google Maps</em>`:""}</div>`;
 }
 function openingEventHtml(event){
-  if(!event?._imported)return "";
-  const live=state?.placeLiveChecks?.[event.id];
-  if(live?.loading)return `<div class="opening-guard unknown"><span class="opening-guard-icon">…</span><span><b>正在檢查營業時間</b><small>只會在需要時連線查詢，不會背景輪詢</small></span><em translate="no">Google Maps</em></div>`;
-  return openingBadgeHtml(openingGuardForPlace(event));
+  const subject=openingSubjectForRenderedEvent(event);if(!subject)return "";
+  const live=state?.placeLiveChecks?.[subject.id];
+  const badge=live?.loading
+    ? `<div class="opening-guard unknown"><span class="opening-guard-icon">…</span><span><b>正在檢查營業時間</b><small>只在需要時連線，不會背景輪詢</small></span><em translate="no">Google Maps</em></div>`
+    : openingBadgeHtml(openingGuardForPlace(subject));
+  return `${badge}<div class="opening-event-actions"><button type="button" class="opening-inline-btn" data-edit-opening-hours="${esc(subject.id)}">設定時段</button><button type="button" class="opening-inline-btn" data-check-opening="${esc(subject.id)}">Google 檢查</button></div>`;
 }
 function renderOpeningGuardSummary(dayIndex=state?.dayIndex||0){
   const box=$("#openingGuardSummary");if(!box)return;
-  const list=(state?.importedPlaces||[]).filter(p=>Number(p.dayIndex)===Number(dayIndex));
+  const list=openingSubjectsForDay(dayIndex);
   if(!list.length){box.hidden=true;box.innerHTML="";return;}
   const results=list.map(p=>openingGuardForPlace(p));
-  const counts={ok:0,warn:0,error:0,unknown:0};results.forEach(r=>counts[r?.level]++);
+  const counts={ok:0,warn:0,error:0,unknown:0};results.forEach(r=>{const k=r?.level||"unknown";counts[k]=(counts[k]||0)+1});
   const danger=counts.error+counts.warn;
+  const summary=danger
+    ? `⚠ ${danger} 個地點需要注意${counts.ok?` · ${counts.ok} 個正常`:""}`
+    : counts.ok
+      ? `✓ ${counts.ok} 個地點時間正常`
+      : `尚未有可判斷的營業時間`;
   box.hidden=false;
-  box.innerHTML=`<div class="opening-summary-main"><div><span class="eyebrow">OPENING HOURS</span><h3>今日營業檢查</h3><p>${danger?`⚠ ${danger} 個地點需要注意`:`${counts.ok?`✓ ${counts.ok} 個地點時間正常`:`尚未有可判斷的營業時間`}`}${counts.unknown?` · ${counts.unknown} 個待確認`:""}</p></div><button type="button" class="mini-btn" data-check-opening-day="${dayIndex}">立即檢查</button></div>`;
+  box.innerHTML=`<div class="opening-summary-main"><div><span class="eyebrow">OPENING HOURS</span><h3>今日營業檢查</h3><p>${summary}${counts.unknown?` · ${counts.unknown} 個待確認`:""} · 共 ${list.length} 個地點</p></div><button type="button" class="mini-btn" data-check-opening-day="${dayIndex}">立即檢查</button></div>`;
 }
 function renderPlacesApiStatus(){
   const el=$("#placesApiStatus");if(!el||!state)return;
@@ -467,43 +591,60 @@ function loadGooglePlacesLibrary(){
   }).catch(err=>{googlePlacesLoaderPromise=null;throw err});
   return googlePlacesLoaderPromise;
 }
-async function fetchGooglePlaceForImported(imported){
+async function fetchGooglePlaceForSubject(subject){
   await loadGooglePlacesLibrary();
   const {Place}=await google.maps.importLibrary("places");
   const fields=["id","displayName","businessStatus","currentOpeningHours","regularOpeningHours"];
-  if(imported.placeId){
-    const place=new Place({id:imported.placeId});
+  if(subject.placeId){
+    const place=new Place({id:subject.placeId});
     await place.fetchFields({fields});
     return place;
   }
-  const day=TRIP?.days?.[imported.dayIndex];
-  const textQuery=[imported.query||imported.title,day?.location,"Japan"].filter(Boolean).join(" ");
+  const day=TRIP?.days?.[subject.dayIndex];
+  const textQuery=[subject.query||subject.title,day?.location,"Japan"].filter(Boolean).join(" ");
   const {places}=await Place.searchByText({textQuery,fields,language:"ja",region:"jp",maxResultCount:1});
   return places?.[0]||null;
 }
-async function quietlyPersistResolvedPlaceId(imported,placeId){
-  if(!placeId||imported.placeId===placeId)return;
+async function quietlyPersistResolvedPlaceId(subject,placeId){
+  if(!placeId||subject.placeId===placeId)return;
+  subject.placeId=String(placeId);
+  if(subject._itinerary){
+    const current=state.openingProfiles?.[subject.id]||{};
+    state.openingProfiles={...(state.openingProfiles||{}),[subject.id]:{
+      placeId:String(placeId),query:String(subject.query||current.query||subject.title||""),
+      manualHours:normalizeManualHours(subject.manualHours||current.manualHours),updatedAt:Date.now()
+    }};
+    saveLocal("openingProfiles",state.openingProfiles);
+    state.openingProfilesPending=true;saveLocal("openingProfilesPending",true);
+    if(state.cloud&&navigator.onLine){
+      try{await setCloud("openingProfiles",state.openingProfiles);state.openingProfilesPending=false;saveLocal("openingProfilesPending",false)}
+      catch(err){console.warn("Opening Place ID sync failed",err)}
+    }
+    return;
+  }
+  const imported=(state.importedPlaces||[]).find(p=>p.id===subject.id);
+  if(!imported)return;
   imported.placeId=String(placeId);saveLocal("importedPlaces",state.importedPlaces||[]);
   if(state.cloud&&navigator.onLine){try{await setCloud("importedPlaces",state.importedPlaces||[])}catch(err){console.warn("Place ID sync failed",err)}}
 }
-async function checkImportedPlaceOpening(id,{notify=true,force=false}={}){
-  const imported=(state?.importedPlaces||[]).find(p=>p.id===id);if(!imported)return null;
+async function checkOpeningSubject(id,{notify=true,force=false}={}){
+  const subject=findOpeningSubject(id);if(!subject)return null;
   const existing=state?.placeLiveChecks?.[id];
   if(existing?.loading)return null;
   if(!force&&existing?.result&&Date.now()-Number(existing.checkedAt||0)<10*60*1000)return existing.result;
   if(!String(state.placesApiKey||"").trim()){
     openPlacesApiSettings();if(notify)toast("先設定 Google Places 金鑰；手動營業時間仍可離線使用");return null;
   }
-  if(!navigator.onLine){if(notify)toast("目前離線，改用手動營業時間檢查");return openingGuardForPlace(imported)}
-  state.placeLiveChecks[id]={loading:true};renderImportedPlaces();renderOpeningGuardSummary(imported.dayIndex);renderSchedule();
+  if(!navigator.onLine){if(notify)toast("目前離線，改用手動營業時間檢查");return openingGuardForPlace(subject)}
+  state.placeLiveChecks[id]={loading:true};renderImportedPlaces();renderOpeningGuardSummary(subject.dayIndex);renderSchedule();
   try{
-    const place=await fetchGooglePlaceForImported(imported);
+    const place=await fetchGooglePlaceForSubject(subject);
     if(!place)throw new Error("找不到相符的 Google Maps 地點");
-    const result=evaluateGooglePlaceOpening(place,imported);
-    state.placeLiveChecks[id]={loading:false,result,checkedAt:Date.now(),placeName:String(place.displayName||imported.title)};
-    if(place.id)await quietlyPersistResolvedPlaceId(imported,place.id);
+    const result=evaluateGooglePlaceOpening(place,subject);
+    state.placeLiveChecks[id]={loading:false,result,checkedAt:Date.now(),placeName:String(place.displayName||subject.title)};
+    if(place.id)await quietlyPersistResolvedPlaceId(subject,place.id);
     renderImportedPlaces();renderSchedule();
-    if(notify)toast(result.level==="error"?`⚠ ${imported.title}：${result.label}`:`${imported.title}：${result.label}`);
+    if(notify)toast(result.level==="error"?`⚠ ${subject.title}：${result.label}`:`${subject.title}：${result.label}`);
     return result;
   }catch(err){
     console.warn("Google opening-hours check failed",err);
@@ -511,9 +652,10 @@ async function checkImportedPlaceOpening(id,{notify=true,force=false}={}){
     renderImportedPlaces();renderSchedule();if(notify)toast(`營業時間檢查失敗：${err.message}`);return null;
   }
 }
+async function checkImportedPlaceOpening(id,options={}){return checkOpeningSubject(id,options)}
 async function checkOpeningHoursForDay(dayIndex,{auto=false}={}){
-  const list=(state?.importedPlaces||[]).filter(p=>Number(p.dayIndex)===Number(dayIndex));
-  if(!list.length){if(!auto)toast("這一天沒有快速匯入的地點");return}
+  const list=openingSubjectsForDay(dayIndex);
+  if(!list.length){if(!auto)toast("這一天沒有需要營業時間檢查的地點");return}
   if(auto){
     const dateKey=tripDayDate(dayIndex);
     if(!targetWithinCurrentHoursWindow(dateKey)||!navigator.onLine||!String(state.placesApiKey||"").trim())return;
@@ -523,7 +665,7 @@ async function checkOpeningHoursForDay(dayIndex,{auto=false}={}){
   }
   for(const p of list){
     if(auto&&state.placeLiveChecks?.[p.id])continue;
-    await checkImportedPlaceOpening(p.id,{notify:!auto});
+    await checkOpeningSubject(p.id,{notify:!auto,force:!auto});
   }
 }
 function maybeAutoCheckOpeningHours(dayIndex){
@@ -540,22 +682,27 @@ function savePlacesApiSettings(e){
   renderPlacesApiStatus();$("#placesApiModal")?.close();toast(key?"Google Places 金鑰已只存在這台裝置":"已清除 Google Places 金鑰");
 }
 function openOpeningHoursModal(id){
-  const imported=(state?.importedPlaces||[]).find(p=>p.id===id);if(!imported)return;
+  const subject=findOpeningSubject(id);if(!subject)return;
   state.hoursEditId=id;
   const modal=$("#openingHoursModal");if(!modal)return;
-  const title=$("#openingHoursPlaceTitle");if(title)title.textContent=imported.title;
+  const title=$("#openingHoursPlaceTitle");if(title)title.textContent=subject.title;
   for(let day=0;day<7;day++){
-    const input=modal.querySelector(`[data-hours-day="${day}"]`);if(input)input.value=imported.manualHours?.[day]||"";
+    const input=modal.querySelector(`[data-hours-day="${day}"]`);if(input)input.value=subject.manualHours?.[day]||"";
   }
-  const meta=$("#openingHoursModalMeta");if(meta){const r=openingGuardForPlace(imported);meta.innerHTML=openingBadgeHtml(r)}
+  const meta=$("#openingHoursModalMeta");if(meta){const r=openingGuardForPlace(subject);meta.innerHTML=openingBadgeHtml(r)}
   modal.showModal();
 }
 async function saveOpeningHoursManual(e){
   e.preventDefault();
-  const imported=(state?.importedPlaces||[]).find(p=>p.id===state.hoursEditId);if(!imported)return;
+  const subject=findOpeningSubject(state.hoursEditId);if(!subject)return;
   const hours={};for(let day=0;day<7;day++)hours[day]=String(e.currentTarget.querySelector(`[data-hours-day="${day}"]`)?.value||"").trim();
-  imported.manualHours=normalizeManualHours(hours);delete state.placeLiveChecks[imported.id];
-  await persistImportedPlaces({notify:false});$("#openingHoursModal")?.close();toast("營業時間已儲存，離線也會自動檢查");
+  subject.manualHours=normalizeManualHours(hours);delete state.placeLiveChecks[subject.id];
+  if(subject._itinerary)await persistOpeningProfile(subject,{notify:false});
+  else{
+    const imported=(state.importedPlaces||[]).find(p=>p.id===subject.id);if(imported)imported.manualHours=subject.manualHours;
+    await persistImportedPlaces({notify:false});
+  }
+  $("#openingHoursModal")?.close();toast("營業時間已儲存，離線也會自動檢查");
 }
 
 function decodeMapComponent(v=""){
@@ -2766,7 +2913,7 @@ function renderSchedule(){
   renderDayBrief(d);
   renderDailyScene();
   $("#decisionArea").innerHTML=renderDecisionCards(d);
-  const baseEvents=d.events.filter(eventVisible);
+  const baseEvents=(d.events||[]).map((event,eventIndex)=>({...event,_dayIndex:state.dayIndex,_eventIndex:eventIndex})).filter(eventVisible);
   const visibleEvents=[...baseEvents,...importedEventsForDay(state.dayIndex)];
   $("#timeline").innerHTML=visibleEvents.map((e,i)=>`
     <article class="event ${e._imported?"event-imported ":""}${buddyRole(e)?`buddy-${buddyRole(e)}`:""}">
@@ -3338,12 +3485,14 @@ async function connectCloud({force=false}={}){
   }catch(err){console.warn("Guide notes initial merge failed",err)}
   await syncPendingGuideNotes();
   await syncPendingImportedPlaces();
+  await syncPendingOpeningProfiles();
 
   const mappings=[
     ["foods",v=>{if(v!==null){state.foods=normalizeCloud(v);saveLocal("foods",state.foods);renderFood()}}],
     ["shopping",v=>{if(v!==null){state.shopping=normalizeCloud(v);saveLocal("shopping",state.shopping);renderShopping()}}],
     ["expenses",v=>{if(v!==null){state.expenses=normalizeCloud(v);saveLocal("expenses",state.expenses);renderExpenses()}}],
     ["importedPlaces",v=>{if(v!==null&&!state.importedPlacesPending){state.importedPlaces=normalizeImportedPlaces(v);saveLocal("importedPlaces",state.importedPlaces);renderImportedPlaces();renderSchedule()}}],
+    ["openingProfiles",v=>{if(v!==null&&!state.openingProfilesPending){state.openingProfiles=normalizeOpeningProfiles(v);saveLocal("openingProfiles",state.openingProfiles);renderSchedule()}}],
     ["taskStatus",v=>{if(v && typeof v==="object"){state.taskStatus=v;saveLocal("taskStatus",v);renderBookings()}}],
     ["decisions",v=>{if(v && typeof v==="object"){state.decisions=v;saveLocal("decisions",v);renderSchedule()}}],
     ["guideNotes",v=>mergeGuideNotesFromCloud(v)],
@@ -3600,7 +3749,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5324",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5325",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
