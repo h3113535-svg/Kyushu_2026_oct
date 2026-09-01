@@ -16,9 +16,9 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=5330" />
+  <link rel="stylesheet" href="./style.css?v=5331" />
   <title>私人旅程</title>
-  <meta name="app-version" content="5.3.30" />
+  <meta name="app-version" content="5.3.31" />
   <link rel="preload" as="image" href="./day-scene-v52-01.webp?v=520" fetchpriority="high">
 </head>
 <body>
@@ -30,7 +30,7 @@
       <p>行程內容只有已授權的 Google 帳號才能載入。</p>
       <button type="button" class="google-login-btn" id="googleLoginBtn"><span>G</span> 使用 Google 登入</button>
       <div class="auth-status" id="authStatus">正在確認登入狀態…</div>
-      <div class="auth-build" aria-label="App version">v5.3.30</div>
+      <div class="auth-build" aria-label="App version">v5.3.31</div>
     </div>
   </section>
   <div id="app" hidden>
@@ -82,6 +82,7 @@
           <div class="day-title-main">
             <span id="dayNumber">D1</span>
             <h2 id="dayTitle">行程</h2>
+            <span id="dayVariantBadge" class="day-variant-badge" hidden></span>
           </div>
           <p id="daySubtitle"></p>
         </section>
@@ -283,6 +284,14 @@ https://www.google.com/maps/place/...
           </button>
         </div>
       </section>
+      <section class="setting-section private-variant-setting">
+        <div class="setting-label"><b>私人行程方案</b><small id="variantConfigStatus">尚未匯入私人方案設定檔。</small></div>
+        <div class="variant-config-actions">
+          <label class="mini-btn variant-config-import">匯入方案設定檔<input id="variantConfigInput" type="file" accept="application/json,.json" hidden></label>
+          <button type="button" class="mini-btn" id="variantConfigClear">清除方案資料</button>
+        </div>
+        <small class="variant-config-privacy">方案內容只存這台瀏覽器的 LocalStorage，不會寫進公開 GitHub 程式碼。</small>
+      </section>
       <section class="setting-section account-setting">
         <div class="setting-label"><b>私人帳號</b><small id="accountEmail">—</small></div>
         <button type="button" class="logout-btn" id="logoutBtn">登出這台裝置</button>
@@ -411,6 +420,6 @@ https://www.google.com/maps/place/...
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=430"></script>
-  <script defer src="./app.js?v=5330"></script>
+  <script defer src="./app.js?v=5331"></script>
 </body>
 </html>

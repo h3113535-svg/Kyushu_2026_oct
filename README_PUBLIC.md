@@ -167,3 +167,12 @@
 - Existing authorized local private trip cache boots immediately; Firebase refresh is background-only.
 - Firebase token/read requests now have finite timeouts instead of leaving the private gate spinning forever.
 - UpdateOnly archive is intentionally flat so files replace the GitHub Pages repo root correctly.
+
+## v5.3.31 Linked D3/D9 Itinerary Variants
+- Adds a generic linked-variant engine for mutually exclusive multi-day itinerary configurations. One choice can atomically switch multiple days together, preventing invalid mixed combinations.
+- Variant selection is stored in trip-namespaced LocalStorage and defaults to undecided; the app never auto-selects an option.
+- D3/D9 can show a single shared selector, a compact current-plan badge, two large option cards, and decision-reference notes using the existing decision-card visual language.
+- When undecided, linked days do not silently fall back to one itinerary version; detailed events remain hidden until A or B is chosen.
+- Schedule rendering, TODAY behavior, event guides, simple opening-hours rows, and the day detail all use only the currently selected variant.
+- Exact private itinerary payloads are intentionally NOT embedded in the public GitHub shell. A private JSON variant file can be imported once from Settings; it is stored only in this browser's trip-namespaced LocalStorage.
+- D1, D2, D4-D8, and D10 rendering/data are unchanged.

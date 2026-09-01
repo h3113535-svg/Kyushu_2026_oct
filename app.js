@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.30 ImportedPlaces Boot Fix */
+/* Private travel PWA · Firebase Auth gated content · v5.3.31 Linked Itinerary Variants */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -177,6 +177,7 @@ function createState(){
     dayIndex:0, view:"schedule", tool:"booking", shoppingMember:"全部",
     foods:loadLocal("foods",[]), shopping:loadLocal("shopping",[]), expenses:loadLocal("expenses",[]),
     importedPlaces:normalizeImportedPlaces(loadLocal("importedPlaces",[])), importedPlacesPending:!!loadLocal("importedPlacesPending",false), placeImportDrafts:[],
+    variantSets:normalizeVariantSets(loadLocal("variantSets",[])), variantSelections:normalizeVariantSelections(loadLocal("variantSelections",{})),
     fx:normalizeFxState(loadLocal("fxRate",{})),
     taskStatus:loadLocal("taskStatus",{}), decisions:loadLocal("decisions",{}), decisionDrafts:{},
     notes:loadLocal("notes",""),
@@ -188,6 +189,125 @@ function createState(){
 }
 function loadLocal(key,fallback){try{const v=localStorage.getItem(storeKey(key));return v===null?fallback:JSON.parse(v)}catch{return fallback}}
 function saveLocal(key,value){localStorage.setItem(storeKey(key),JSON.stringify(value))}
+
+// Linked itinerary variants are private configuration data. The public GitHub shell only contains
+// this generic engine; exact A/B itinerary payloads are imported locally after authentication so
+// private trip details never need to be committed to the public repository.
+function normalizeVariantSelections(raw){
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))return {};
+  return Object.fromEntries(Object.entries(raw).filter(([k,v])=>k&&typeof v==="string"));
+}
+function normalizeVariantSets(raw){
+  const list=Array.isArray(raw)?raw:[];
+  return list.filter(x=>x&&typeof x==="object"&&x.id).map(x=>({
+    id:String(x.id),
+    title:String(x.title||"行程配置"),
+    statusLabel:String(x.statusLabel||"行程方案"),
+    dayIndexes:(Array.isArray(x.dayIndexes)?x.dayIndexes:[]).map(Number).filter(Number.isInteger),
+    options:(Array.isArray(x.options)?x.options:[]).filter(o=>o&&o.id).map(o=>({
+      id:String(o.id), label:String(o.label||o.id), shortLabel:String(o.shortLabel||`方案 ${o.id}`),
+      detail:String(o.detail||""), days:(o.days&&typeof o.days==="object")?o.days:{}
+    })),
+    reference:(x.reference&&typeof x.reference==="object")?x.reference:{},
+    pendingTitle:String(x.pendingTitle||"行程方案尚未決定"),
+    pendingSubtitle:String(x.pendingSubtitle||"先選擇方案後，才顯示這一天的詳細行程。")
+  })).filter(x=>x.dayIndexes.length&&x.options.length);
+}
+function variantSetForDay(dayIndex){
+  return (state?.variantSets||[]).find(set=>set.dayIndexes.includes(Number(dayIndex)))||null;
+}
+function selectedVariantId(setOrId){
+  const id=typeof setOrId==="string"?setOrId:setOrId?.id;
+  return id?String(state?.variantSelections?.[id]||""):"";
+}
+function selectedVariantOption(set){
+  const id=selectedVariantId(set);
+  return set?.options?.find(o=>o.id===id)||null;
+}
+function effectiveDay(dayIndex){
+  const base=TRIP?.days?.[dayIndex];
+  if(!base)return base;
+  const set=variantSetForDay(dayIndex);
+  if(!set)return base;
+  const option=selectedVariantOption(set);
+  if(!option){
+    return {...base,title:set.pendingTitle,subtitle:set.pendingSubtitle,events:[],decisionIds:[],alert:"",brief:[],rainPlan:""};
+  }
+  const override=option.days?.[String(dayIndex)]||option.days?.[dayIndex];
+  if(!override||typeof override!=="object")return base;
+  return {...base,...override,events:Array.isArray(override.events)?override.events:(base.events||[]),decisionIds:Array.isArray(override.decisionIds)?override.decisionIds:(base.decisionIds||[])};
+}
+function variantStatusForDay(dayIndex){
+  const set=variantSetForDay(dayIndex);
+  if(!set)return null;
+  const option=selectedVariantOption(set);
+  return {set,option,label:option?.shortLabel||"尚未決定",pending:!option};
+}
+function renderVariantConfigStatus(){
+  const el=$("#variantConfigStatus");if(!el||!state)return;
+  const count=(state.variantSets||[]).length;
+  el.textContent=count?`已載入 ${count} 組私人方案設定；詳細內容只存在這個瀏覽器。`:"尚未匯入私人方案設定檔。";
+}
+function mergeVariantSets(existing,incoming){
+  const map=new Map((existing||[]).map(x=>[x.id,x]));
+  for(const item of incoming||[])map.set(item.id,item);
+  return [...map.values()];
+}
+async function importVariantConfigFile(file){
+  if(!file)return;
+  const text=await file.text();
+  const payload=JSON.parse(text);
+  if(payload?.type!=="kyushu-private-itinerary-variant-patch")throw new Error("不是有效的私人行程方案設定檔");
+  if(payload.tripId&&TRIP?.id&&String(payload.tripId)!==String(TRIP.id))throw new Error("這份設定檔不屬於目前旅程");
+  const incoming=normalizeVariantSets(payload.variantSets);
+  if(!incoming.length)throw new Error("設定檔內沒有可用方案");
+  state.variantSets=mergeVariantSets(state.variantSets,incoming);
+  saveLocal("variantSets",state.variantSets);
+  renderVariantConfigStatus();
+  renderSchedule();
+}
+function clearVariantConfig(){
+  state.variantSets=[];state.variantSelections={};
+  saveLocal("variantSets",[]);saveLocal("variantSelections",{});
+  renderVariantConfigStatus();renderSchedule();
+}
+function chooseLinkedVariant(setId,optionId){
+  const set=(state.variantSets||[]).find(x=>x.id===setId);
+  if(!set||!set.options.some(o=>o.id===optionId))return;
+  state.variantSelections={...(state.variantSelections||{}),[setId]:optionId};
+  saveLocal("variantSelections",state.variantSelections);
+  renderSchedule();
+  toast(`${set.statusLabel}：方案 ${optionId}`);
+}
+function clearLinkedVariant(setId){
+  if(!state.variantSelections)return;
+  delete state.variantSelections[setId];
+  saveLocal("variantSelections",state.variantSelections);
+  renderSchedule();
+  toast("已改回尚未決定");
+}
+function renderLinkedVariantCards(dayIndex){
+  const set=variantSetForDay(dayIndex);if(!set)return "";
+  const selected=selectedVariantId(set);
+  const ref=set.reference||{};
+  const advantages=ref.advantages||{};
+  const advantageHtml=set.options.map(o=>{
+    const items=Array.isArray(advantages[o.id])?advantages[o.id]:[];
+    return items.length?`<div class="linked-variant-ref-block"><b>${esc(o.id)} 優勢</b><ul>${items.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:"";
+  }).join("");
+  const waitFor=Array.isArray(ref.waitFor)?ref.waitFor:[];
+  return `<section class="decision-card linked-variant-card">
+    <div class="decision-kicker">互斥行程方案</div>
+    <h3>${esc(set.statusLabel)}：${selected?`方案 ${esc(selected)}`:"尚未決定"}</h3>
+    <p>${esc(set.title)}</p>
+    <div class="linked-variant-options" role="radiogroup" aria-label="${esc(set.title)}">${set.options.map(o=>{
+      const active=selected===o.id;
+      return `<button type="button" class="decision-option linked-variant-option ${active?"selected":""}" role="radio" aria-checked="${active?"true":"false"}" data-linked-variant-set="${esc(set.id)}" data-linked-variant-option="${esc(o.id)}"><span class="decision-icon">${esc(o.id)}</span><span><b>${esc(o.label)}</b>${o.detail?`<small>${esc(o.detail)}</small>`:""}</span><em>${active?"已選":"選擇"}</em></button>`;
+    }).join("")}</div>
+    <div class="linked-variant-actions"><button type="button" class="decision-clear-btn" data-linked-variant-clear="${esc(set.id)}">先不決定</button></div>
+    <div class="linked-variant-reference"><div class="linked-variant-reference-title">決策參考</div>${advantageHtml}${waitFor.length?`<div class="linked-variant-ref-block wait"><b>等這些資訊確定後再選</b><ul>${waitFor.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:""}</div>
+  </section>`;
+}
 
 // Quick-import state normalizer. This must exist before createState() is executed.
 // v5.3.26 accidentally removed it while simplifying Opening Hours, leaving two live callers behind.
@@ -2076,8 +2196,8 @@ function selectedDecision(id){
 }
 function draftDecision(id){return state.decisionDrafts?.[id]||""}
 function renderDecisionArea(){
-  const d=TRIP.days[state.dayIndex];
-  const area=$("#decisionArea");if(area)area.innerHTML=renderDecisionCards(d);
+  const d=effectiveDay(state.dayIndex);
+  const area=$("#decisionArea");if(area)area.innerHTML=renderLinkedVariantCards(state.dayIndex)+renderDecisionCards(d);
 }
 function stageDecision(id,option){
   state.decisionDrafts=state.decisionDrafts||{};
@@ -2343,7 +2463,7 @@ function buildEventGuide(e){
     key:stableKey,
     legacyKey:stableKey===legacyKey?"":legacyKey,
     title:saved?.title||e?.title||"行程攻略",
-    meta:`D${state.dayIndex+1} · ${e?.time||TRIP.days[state.dayIndex]?.shortDate||""}`,
+    meta:`D${state.dayIndex+1} · ${e?.time||effectiveDay(state.dayIndex)?.shortDate||""}`,
     mascot:saved?.mascot||eventGuideMascot(e),
     sections:unique.length?unique:[{label:"這一站",items:["目前沒有額外攻略；你可以先把自己的備忘存進下方。"]}],
     map:saved?.map||e?.nav||e?.title||"",
@@ -2353,8 +2473,8 @@ function buildEventGuide(e){
   };
 }
 function buildDayGuide(){
-  const d=TRIP.days[state.dayIndex];
-  const saved=privateGuideForDay();
+  const d=effectiveDay(state.dayIndex);
+  const saved=variantSetForDay(state.dayIndex)?null:privateGuideForDay();
   const sections=[...normalizeGuideSections(saved?.sections)];
   if(d?.alert)sections.push({label:"今天先注意",items:[d.alert]});
   if(Array.isArray(d?.brief)&&d.brief.length)sections.push({label:"今日提醒",items:d.brief});
@@ -2570,16 +2690,23 @@ function bindGuideTargets(visibleEvents=[]){
 }
 
 function renderSchedule(){
-  const d=TRIP.days[state.dayIndex];
+  const d=effectiveDay(state.dayIndex);
   $("#dayNumber").textContent=`D${state.dayIndex+1}`;
   $("#dayTitle").textContent=d.title;
   $("#daySubtitle").textContent=d.subtitle;
+  const variantStatus=variantStatusForDay(state.dayIndex);
+  const variantBadge=$("#dayVariantBadge");
+  if(variantBadge){
+    variantBadge.hidden=!variantStatus;
+    variantBadge.textContent=variantStatus?.label||"";
+    variantBadge.classList.toggle("pending",!!variantStatus?.pending);
+  }
   renderDayBrief(d);
   renderDailyScene();
-  $("#decisionArea").innerHTML=renderDecisionCards(d);
+  renderDecisionArea();
   const baseEvents=(d.events||[]).map((event,eventIndex)=>({...event,_dayIndex:state.dayIndex,_eventIndex:eventIndex})).filter(eventVisible);
   const visibleEvents=[...baseEvents,...importedEventsForDay(state.dayIndex)];
-  $("#timeline").innerHTML=visibleEvents.map((e,i)=>`
+  const timelineHtml=visibleEvents.map((e,i)=>`
     <article class="event ${e._imported?"event-imported ":""}${buddyRole(e)?`buddy-${buddyRole(e)}`:""}">
       <span class="event-dot"></span>
       ${i>0 && e.travel?`<div class="travel">${esc(e.transport||"→")} ${esc(e.travel)}</div>`:""}
@@ -2595,6 +2722,8 @@ function renderSchedule(){
         </div>
       </div>
     </article>`).join("");
+  const linkedSet=variantSetForDay(state.dayIndex);
+  $("#timeline").innerHTML=timelineHtml || (linkedSet&&!selectedVariantId(linkedSet)?`<div class="variant-pending-state"><b>這一天的詳細行程尚未套用</b><span>請先在上方選 A 或 B；D3 與 D9 會整組一起切換，不會出現重複水族館或重複 Gundam 的組合。</span></div>`:"");
   renderHotelReturnCard();
   renderWeather(d);
   requestAnimationFrame(()=>bindGuideTargets(visibleEvents));
@@ -2902,6 +3031,8 @@ function bind(){
     const t=e.target.closest("[data-tool]");if(t){switchTool(t.dataset.tool);return}
     const o=e.target.closest("[data-open-modal]");if(o){openModal(o.dataset.openModal);return}
     const m=e.target.closest("[data-member]");if(m){state.shoppingMember=m.dataset.member;renderShopping();return}
+    const linkedVariant=e.target.closest("[data-linked-variant-option]");if(linkedVariant){chooseLinkedVariant(linkedVariant.dataset.linkedVariantSet,linkedVariant.dataset.linkedVariantOption);return}
+    const linkedVariantClear=e.target.closest("[data-linked-variant-clear]");if(linkedVariantClear){clearLinkedVariant(linkedVariantClear.dataset.linkedVariantClear);return}
     const decisionConfirm=e.target.closest("[data-decision-confirm]");if(decisionConfirm){await confirmDecision(decisionConfirm.dataset.decisionConfirm);return}
     const decisionClear=e.target.closest("[data-decision-clear]");if(decisionClear){await clearDecision(decisionClear.dataset.decisionClear);return}
     const decision=e.target.closest("[data-decision-id]");if(decision){stageDecision(decision.dataset.decisionId,decision.dataset.decisionOption);return}
@@ -3003,9 +3134,18 @@ function bind(){
   $("#foodNearbyOpen")?.addEventListener("click",()=>$("#foodNearbyModal")?.showModal());
   $("#foodNearbyClose")?.addEventListener("click",()=>$("#foodNearbyModal")?.close());
   $("#foodNearbyModal")?.addEventListener("click",e=>{if(e.target===$("#foodNearbyModal"))$("#foodNearbyModal").close()});
-  $("#settingsBtn").addEventListener("click",()=>{$("#settingsModal").showModal();applyDisplaySettings()});
+  $("#settingsBtn").addEventListener("click",()=>{$("#settingsModal").showModal();applyDisplaySettings();renderVariantConfigStatus()});
   $("#settingsClose").addEventListener("click",()=>$("#settingsModal").close());
   $("#settingsModal").addEventListener("click",e=>{if(e.target===$("#settingsModal"))$("#settingsModal").close()});
+  $("#variantConfigInput")?.addEventListener("change",async e=>{
+    const file=e.target.files?.[0];if(!file)return;
+    try{await importVariantConfigFile(file);toast("D3 / D9 私人方案已匯入")}
+    catch(err){console.error(err);toast(`匯入失敗：${err.message}`)}
+    finally{e.target.value=""}
+  });
+  $("#variantConfigClear")?.addEventListener("click",()=>{
+    if(confirm("清除這台裝置的私人行程方案設定與 A/B 選擇？"))clearVariantConfig();
+  });
   $("#displayResetBtn").addEventListener("click",()=>{
     try{
       localStorage.removeItem(DISPLAY_THEME_KEY);
@@ -3415,7 +3555,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5330",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5331",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
