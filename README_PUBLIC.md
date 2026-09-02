@@ -176,3 +176,18 @@
 - Schedule rendering, TODAY behavior, event guides, simple opening-hours rows, and the day detail all use only the currently selected variant.
 - Exact private itinerary payloads are intentionally NOT embedded in the public GitHub shell. A private JSON variant file can be imported once from Settings; it is stored only in this browser's trip-namespaced LocalStorage.
 - D1, D2, D4-D8, and D10 rendering/data are unchanged.
+
+## v5.3.32 Booking Attachments
+- Adds PDF/image attachments to every Booking / ticket task. Files are stored as Blob records in IndexedDB (`kyushu-oct-booking-attachments-v1`) and can be opened fully offline.
+- Attachment files are device-local only: they are not uploaded to Firebase and are not committed to GitHub. Chrome and a PWA installed from Chrome share the same origin storage; separate browsers do not.
+- Supports multiple PDF/image files per booking task, attachment count badges, preview, open-in-new-page, download/save, and deletion.
+- Single-file guard is 25 MB. The UI clearly warns that clearing site data removes local attachments.
+- Existing Booking completion state, linked D3/D9 variants, simple opening-hours display, exchange rate, Quick Import, and v5.3.24+ low-data/offline cache architecture are otherwise unchanged.
+
+
+## v5.3.33 D5 Afternoon Options
+- Extends the private itinerary-config import format with device-local `dayPatches` and `decisions`.
+- D5 can keep one fixed morning/main route while presenting mutually exclusive afternoon branches without exposing private itinerary content in the public repository.
+- A branch decision may use `hideUntilSelected: true`, so unselected alternative stops do not clutter the timeline; only the fixed route remains visible until a choice is confirmed.
+- D3/D9 linked-variant behavior and v5.3.32 booking PDF/image attachments are unchanged.
+- New local keys: `${TRIP.id}:privateDayPatches` and `${TRIP.id}:privateDecisions`.

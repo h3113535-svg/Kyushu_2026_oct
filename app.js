@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.31 Linked Itinerary Variants */
+/* Private travel PWA · Firebase Auth gated content · v5.3.33 D5 Afternoon Options */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -22,6 +22,14 @@ const FIREBASE_REQUEST_TIMEOUT_MS = 12000;
 // Expense tool is opened, preserving the low-data/offline-first behavior.
 const FX_API_URL = "https://open.er-api.com/v6/latest/JPY";
 const FX_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+// Booking attachments are intentionally device-local. PDF/image blobs live in IndexedDB so they
+// remain available offline without inflating LocalStorage or sending sensitive ticket data to Firebase.
+const BOOKING_ATTACHMENT_DB_NAME = "kyushu-oct-booking-attachments-v1";
+const BOOKING_ATTACHMENT_STORE = "files";
+const BOOKING_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;
+let activeBookingAttachmentTaskId = "";
+let bookingAttachmentPreviewUrl = "";
 
 let TRIP = null;
 let state = null;
@@ -178,6 +186,7 @@ function createState(){
     foods:loadLocal("foods",[]), shopping:loadLocal("shopping",[]), expenses:loadLocal("expenses",[]),
     importedPlaces:normalizeImportedPlaces(loadLocal("importedPlaces",[])), importedPlacesPending:!!loadLocal("importedPlacesPending",false), placeImportDrafts:[],
     variantSets:normalizeVariantSets(loadLocal("variantSets",[])), variantSelections:normalizeVariantSelections(loadLocal("variantSelections",{})),
+    privateDayPatches:normalizePrivateDayPatches(loadLocal("privateDayPatches",{})), privateDecisions:normalizePrivateDecisions(loadLocal("privateDecisions",[])),
     fx:normalizeFxState(loadLocal("fxRate",{})),
     taskStatus:loadLocal("taskStatus",{}), decisions:loadLocal("decisions",{}), decisionDrafts:{},
     notes:loadLocal("notes",""),
@@ -213,6 +222,41 @@ function normalizeVariantSets(raw){
     pendingSubtitle:String(x.pendingSubtitle||"先選擇方案後，才顯示這一天的詳細行程。")
   })).filter(x=>x.dayIndexes.length&&x.options.length);
 }
+function normalizePrivateDayPatches(raw){
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))return {};
+  const out={};
+  for(const [key,value] of Object.entries(raw)){
+    const idx=Number(key);
+    if(!Number.isInteger(idx)||idx<0||!value||typeof value!=="object"||Array.isArray(value))continue;
+    out[String(idx)]={...value};
+    if(Array.isArray(value.events))out[String(idx)].events=value.events.filter(x=>x&&typeof x==="object").map(x=>({...x}));
+    if(Array.isArray(value.decisionIds))out[String(idx)].decisionIds=value.decisionIds.map(String);
+  }
+  return out;
+}
+function normalizePrivateDecisions(raw){
+  const list=Array.isArray(raw)?raw:[];
+  return list.filter(x=>x&&typeof x==="object"&&x.id).map(x=>({
+    id:String(x.id), title:String(x.title||"行程選擇"), hint:String(x.hint||""),
+    checklist:(Array.isArray(x.checklist)?x.checklist:[]).map(String),
+    hideUntilSelected:!!x.hideUntilSelected,
+    options:(Array.isArray(x.options)?x.options:[]).filter(o=>o&&o.id).map(o=>({
+      id:String(o.id), icon:String(o.icon||"→"), label:String(o.label||o.id), detail:String(o.detail||"")
+    }))
+  })).filter(x=>x.options.length);
+}
+function mergePrivateDecisions(existing,incoming){
+  const map=new Map((existing||[]).map(x=>[x.id,x]));
+  for(const item of incoming||[])map.set(item.id,item);
+  return [...map.values()];
+}
+function privateDayPatchFor(dayIndex){
+  return state?.privateDayPatches?.[String(Number(dayIndex))]||null;
+}
+function decisionById(id){
+  return (state?.privateDecisions||[]).find(x=>x.id===id)||(TRIP?.decisions||[]).find(x=>x.id===id)||null;
+}
+
 function variantSetForDay(dayIndex){
   return (state?.variantSets||[]).find(set=>set.dayIndexes.includes(Number(dayIndex)))||null;
 }
@@ -225,8 +269,10 @@ function selectedVariantOption(set){
   return set?.options?.find(o=>o.id===id)||null;
 }
 function effectiveDay(dayIndex){
-  const base=TRIP?.days?.[dayIndex];
-  if(!base)return base;
+  const original=TRIP?.days?.[dayIndex];
+  if(!original)return original;
+  const patch=privateDayPatchFor(dayIndex);
+  const base=patch?{...original,...patch,events:Array.isArray(patch.events)?patch.events:(original.events||[]),decisionIds:Array.isArray(patch.decisionIds)?patch.decisionIds:(original.decisionIds||[])}:original;
   const set=variantSetForDay(dayIndex);
   if(!set)return base;
   const option=selectedVariantOption(set);
@@ -245,8 +291,14 @@ function variantStatusForDay(dayIndex){
 }
 function renderVariantConfigStatus(){
   const el=$("#variantConfigStatus");if(!el||!state)return;
-  const count=(state.variantSets||[]).length;
-  el.textContent=count?`已載入 ${count} 組私人方案設定；詳細內容只存在這個瀏覽器。`:"尚未匯入私人方案設定檔。";
+  const linked=(state.variantSets||[]).length;
+  const patches=Object.keys(state.privateDayPatches||{}).length;
+  const decisions=(state.privateDecisions||[]).length;
+  const parts=[];
+  if(linked)parts.push(`${linked} 組互斥方案`);
+  if(patches)parts.push(`${patches} 個日程補丁`);
+  if(decisions)parts.push(`${decisions} 組行程選項`);
+  el.textContent=parts.length?`已載入 ${parts.join("＋")}；詳細內容只存在這個瀏覽器。`:"尚未匯入私人方案設定檔。";
 }
 function mergeVariantSets(existing,incoming){
   const map=new Map((existing||[]).map(x=>[x.id,x]));
@@ -260,15 +312,23 @@ async function importVariantConfigFile(file){
   if(payload?.type!=="kyushu-private-itinerary-variant-patch")throw new Error("不是有效的私人行程方案設定檔");
   if(payload.tripId&&TRIP?.id&&String(payload.tripId)!==String(TRIP.id))throw new Error("這份設定檔不屬於目前旅程");
   const incoming=normalizeVariantSets(payload.variantSets);
-  if(!incoming.length)throw new Error("設定檔內沒有可用方案");
+  const incomingPatches=normalizePrivateDayPatches(payload.dayPatches);
+  const incomingDecisions=normalizePrivateDecisions(payload.decisions);
+  if(!incoming.length&&!Object.keys(incomingPatches).length&&!incomingDecisions.length)throw new Error("設定檔內沒有可用方案或行程選項");
   state.variantSets=mergeVariantSets(state.variantSets,incoming);
+  state.privateDayPatches={...(state.privateDayPatches||{}),...incomingPatches};
+  state.privateDecisions=mergePrivateDecisions(state.privateDecisions,incomingDecisions);
   saveLocal("variantSets",state.variantSets);
+  saveLocal("privateDayPatches",state.privateDayPatches);
+  saveLocal("privateDecisions",state.privateDecisions);
   renderVariantConfigStatus();
   renderSchedule();
 }
 function clearVariantConfig(){
-  state.variantSets=[];state.variantSelections={};
-  saveLocal("variantSets",[]);saveLocal("variantSelections",{});
+  const privateDecisionIds=(state.privateDecisions||[]).map(x=>x.id);
+  for(const id of privateDecisionIds){if(state.decisions)delete state.decisions[id];if(state.decisionDrafts)delete state.decisionDrafts[id]}
+  state.variantSets=[];state.variantSelections={};state.privateDayPatches={};state.privateDecisions=[];
+  saveLocal("variantSets",[]);saveLocal("variantSelections",{});saveLocal("privateDayPatches",{});saveLocal("privateDecisions",[]);saveLocal("decisions",state.decisions||{});
   renderVariantConfigStatus();renderSchedule();
 }
 function chooseLinkedVariant(setId,optionId){
@@ -2230,7 +2290,7 @@ function renderDecisionCards(day){
   const ids=day.decisionIds||[];
   if(!ids.length)return "";
   return `<div class="decision-stack">${ids.map(id=>{
-    const d=TRIP.decisions.find(x=>x.id===id); if(!d)return "";
+    const d=decisionById(id); if(!d)return "";
     const selected=selectedDecision(id), draft=draftDecision(id);
     const selectedLabel=d.options.find(o=>o.id===selected)?.label||"";
     const draftLabel=d.options.find(o=>o.id===draft)?.label||"";
@@ -2260,7 +2320,9 @@ function renderDecisionCards(day){
 function eventVisible(e){
   if(!e.decisionId)return true;
   const selected=selectedDecision(e.decisionId);
-  return !selected || selected===e.optionId;
+  const decision=decisionById(e.decisionId);
+  if(!selected)return !decision?.hideUntilSelected;
+  return selected===e.optionId;
 }
 
 function renderDays(){
@@ -2788,6 +2850,128 @@ function renderFood(){
       </div></div>
     </div>`).join(""):`<div class="empty">還沒有額外想吃清單，右上角 ＋ 可以新增。</div>`;
 }
+function openBookingAttachmentDb(){
+  return new Promise((resolve,reject)=>{
+    if(!("indexedDB" in window)){reject(new Error("此瀏覽器不支援離線附件儲存"));return}
+    const req=indexedDB.open(BOOKING_ATTACHMENT_DB_NAME,1);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      const store=db.objectStoreNames.contains(BOOKING_ATTACHMENT_STORE)
+        ? req.transaction.objectStore(BOOKING_ATTACHMENT_STORE)
+        : db.createObjectStore(BOOKING_ATTACHMENT_STORE,{keyPath:"id"});
+      if(!store.indexNames.contains("taskId"))store.createIndex("taskId","taskId",{unique:false});
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error||new Error("無法開啟離線附件資料庫"));
+  });
+}
+function bookingAttachmentRequest(req){
+  return new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error("附件資料庫操作失敗"))});
+}
+async function listBookingAttachments(taskId){
+  const db=await openBookingAttachmentDb();
+  try{
+    const tx=db.transaction(BOOKING_ATTACHMENT_STORE,"readonly");
+    const list=await bookingAttachmentRequest(tx.objectStore(BOOKING_ATTACHMENT_STORE).index("taskId").getAll(String(taskId)));
+    return (list||[]).sort((a,b)=>Number(b.addedAt||0)-Number(a.addedAt||0));
+  }finally{db.close()}
+}
+async function getBookingAttachment(id){
+  const db=await openBookingAttachmentDb();
+  try{return await bookingAttachmentRequest(db.transaction(BOOKING_ATTACHMENT_STORE,"readonly").objectStore(BOOKING_ATTACHMENT_STORE).get(String(id)))}finally{db.close()}
+}
+function bookingAttachmentExt(name=""){return String(name).toLowerCase().split(".").pop()||""}
+function bookingAttachmentAllowed(file){
+  const type=String(file?.type||"").toLowerCase(),ext=bookingAttachmentExt(file?.name||"");
+  return type==="application/pdf"||type.startsWith("image/")||["pdf","jpg","jpeg","png","webp","heic","heif"].includes(ext);
+}
+function bookingAttachmentId(taskId){
+  const uuid=globalThis.crypto?.randomUUID?.()||`${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
+  return `${taskId}:${uuid}`;
+}
+async function saveBookingAttachment(taskId,file){
+  if(!file||!bookingAttachmentAllowed(file))throw new Error(`${file?.name||"檔案"}：只支援 PDF 或圖片`);
+  if(Number(file.size||0)>BOOKING_ATTACHMENT_MAX_BYTES)throw new Error(`${file.name}：單檔不可超過 25 MB`);
+  const record={id:bookingAttachmentId(taskId),taskId:String(taskId),name:String(file.name||"附件"),type:String(file.type||""),size:Number(file.size||0),addedAt:Date.now(),blob:file};
+  const db=await openBookingAttachmentDb();
+  try{await bookingAttachmentRequest(db.transaction(BOOKING_ATTACHMENT_STORE,"readwrite").objectStore(BOOKING_ATTACHMENT_STORE).put(record))}finally{db.close()}
+  try{await navigator.storage?.persist?.()}catch{}
+  return record;
+}
+async function deleteBookingAttachment(id){
+  const db=await openBookingAttachmentDb();
+  try{await bookingAttachmentRequest(db.transaction(BOOKING_ATTACHMENT_STORE,"readwrite").objectStore(BOOKING_ATTACHMENT_STORE).delete(String(id)))}finally{db.close()}
+}
+function formatAttachmentBytes(bytes){
+  const n=Number(bytes||0);if(n<1024)return `${n} B`;if(n<1024*1024)return `${(n/1024).toFixed(n<10240?1:0)} KB`;return `${(n/1024/1024).toFixed(1)} MB`;
+}
+function attachmentIcon(item){
+  const type=String(item?.type||"").toLowerCase(),ext=bookingAttachmentExt(item?.name||"");
+  return type==="application/pdf"||ext==="pdf"?"📄":"🖼️";
+}
+async function refreshBookingAttachmentBadges(){
+  const buttons=$$("[data-booking-attachments]");
+  await Promise.all(buttons.map(async btn=>{
+    try{
+      const count=(await listBookingAttachments(btn.dataset.bookingAttachments)).length;
+      btn.textContent=count?`📎 附件 ${count}`:"📎 附件";
+      btn.classList.toggle("has-attachments",count>0);
+    }catch{btn.textContent="📎 附件"}
+  }));
+}
+async function renderBookingAttachmentManager(){
+  const box=$("#bookingAttachmentList");if(!box||!activeBookingAttachmentTaskId)return;
+  box.innerHTML='<div class="empty">正在讀取本機附件…</div>';
+  try{
+    const list=await listBookingAttachments(activeBookingAttachmentTaskId);
+    box.innerHTML=list.length?list.map(item=>`<div class="booking-attachment-item">
+      <div class="booking-attachment-file-icon">${attachmentIcon(item)}</div>
+      <div class="booking-attachment-file-main"><b>${esc(item.name)}</b><small>${formatAttachmentBytes(item.size)} · ${new Date(item.addedAt).toLocaleString("zh-TW")}</small></div>
+      <div class="booking-attachment-item-actions"><button type="button" class="mini-btn" data-booking-attachment-open="${esc(item.id)}">開啟</button><button type="button" class="mini-btn danger" data-booking-attachment-delete="${esc(item.id)}">刪除</button></div>
+    </div>`).join(""):'<div class="empty booking-attachment-empty">還沒有附件。可加入電子票券 PDF、QR Code 截圖或訂位確認圖片。</div>';
+    const total=list.reduce((sum,item)=>sum+Number(item.size||0),0);
+    if($("#bookingAttachmentStorage"))$("#bookingAttachmentStorage").textContent=`${list.length} 個附件 · 約 ${formatAttachmentBytes(total)} · 僅此裝置`;
+  }catch(err){box.innerHTML=`<div class="empty">無法讀取附件：${esc(err.message)}</div>`}
+}
+async function openBookingAttachmentManager(taskId){
+  const task=TRIP?.bookingTasks?.find(t=>String(t.id)===String(taskId));
+  activeBookingAttachmentTaskId=String(taskId||"");
+  if($("#bookingAttachmentTitle"))$("#bookingAttachmentTitle").textContent=task?.title?`附件｜${task.title}`:"票券附件";
+  $("#bookingAttachmentModal")?.showModal();
+  await renderBookingAttachmentManager();
+}
+function closeBookingAttachmentPreview(){
+  const dlg=$("#bookingAttachmentPreview");if(dlg?.open)dlg.close();
+  const frame=$("#bookingAttachmentPreviewFrame"),img=$("#bookingAttachmentPreviewImage");
+  if(frame){frame.src="about:blank";frame.hidden=true}if(img){img.removeAttribute("src");img.hidden=true}
+  if(bookingAttachmentPreviewUrl){URL.revokeObjectURL(bookingAttachmentPreviewUrl);bookingAttachmentPreviewUrl=""}
+}
+async function openBookingAttachmentPreview(id){
+  const item=await getBookingAttachment(id);if(!item?.blob){toast("找不到這個附件");return}
+  closeBookingAttachmentPreview();
+  bookingAttachmentPreviewUrl=URL.createObjectURL(item.blob);
+  if($("#bookingAttachmentPreviewTitle"))$("#bookingAttachmentPreviewTitle").textContent=item.name||"附件預覽";
+  const frame=$("#bookingAttachmentPreviewFrame"),img=$("#bookingAttachmentPreviewImage"),unsupported=$("#bookingAttachmentPreviewUnsupported");
+  if(unsupported)unsupported.hidden=true;
+  const type=String(item.type||"").toLowerCase(),ext=bookingAttachmentExt(item.name||"");
+  if(type==="application/pdf"||ext==="pdf"){frame.src=bookingAttachmentPreviewUrl;frame.hidden=false;img.hidden=true}
+  else if(type.startsWith("image/")||["jpg","jpeg","png","webp","heic","heif"].includes(ext)){img.src=bookingAttachmentPreviewUrl;img.hidden=false;frame.hidden=true}
+  else{frame.hidden=true;img.hidden=true;if(unsupported)unsupported.hidden=false}
+  const extLink=$("#bookingAttachmentExternal"),download=$("#bookingAttachmentDownload");
+  if(extLink)extLink.href=bookingAttachmentPreviewUrl;
+  if(download){download.href=bookingAttachmentPreviewUrl;download.download=item.name||"ticket"}
+  $("#bookingAttachmentPreview")?.showModal();
+}
+async function handleBookingAttachmentFiles(files){
+  if(!activeBookingAttachmentTaskId)return;
+  const list=[...(files||[])];if(!list.length)return;
+  let added=0;const errors=[];
+  for(const file of list){try{await saveBookingAttachment(activeBookingAttachmentTaskId,file);added++}catch(err){errors.push(err.message)}}
+  await renderBookingAttachmentManager();await refreshBookingAttachmentBadges();
+  if(added)toast(`已加入 ${added} 個離線附件`);
+  if(errors.length)toast(errors[0]);
+}
+
 function taskDone(task){
   return Object.prototype.hasOwnProperty.call(state.taskStatus,task.id) ? !!state.taskStatus[task.id] : !!task.defaultDone;
 }
@@ -2823,7 +3007,10 @@ function bookingTaskCard(t){
       <div class="task-title">${esc(t.title)}</div>
       <div class="task-detail">${esc(t.detail||"")}</div>
       ${!done?`<div class="task-countdown">${esc(countdownText(t))}</div>`:""}
-      ${t.map?`<a class="mini-action-link" target="_blank" rel="noopener" href="${mapSearch(t.map)}">↗ 位置</a>`:""}
+      <div class="task-inline-actions">
+        ${t.map?`<a class="mini-action-link" target="_blank" rel="noopener" href="${mapSearch(t.map)}">↗ 位置</a>`:""}
+        <button type="button" class="mini-action-link booking-attachment-btn" data-booking-attachments="${esc(t.id)}">📎 附件</button>
+      </div>
     </div>
   </div>`;
 }
@@ -2839,6 +3026,7 @@ function renderBookings(){
       <div class="task-section-title"><span>✅</span><div><b>已完成／已訂</b><small>${done.length} 項</small></div></div>
       <div class="task-stack">${done.map(bookingTaskCard).join("")}</div>
     </section>`;
+  refreshBookingAttachmentBadges().catch(err=>console.warn("Attachment badge refresh failed",err));
 }
 function renderShopping(){
   const members=["全部",...TRIP.members];
@@ -3036,6 +3224,9 @@ function bind(){
     const decisionConfirm=e.target.closest("[data-decision-confirm]");if(decisionConfirm){await confirmDecision(decisionConfirm.dataset.decisionConfirm);return}
     const decisionClear=e.target.closest("[data-decision-clear]");if(decisionClear){await clearDecision(decisionClear.dataset.decisionClear);return}
     const decision=e.target.closest("[data-decision-id]");if(decision){stageDecision(decision.dataset.decisionId,decision.dataset.decisionOption);return}
+    const attachmentManager=e.target.closest("[data-booking-attachments]");if(attachmentManager){await openBookingAttachmentManager(attachmentManager.dataset.bookingAttachments);return}
+    const attachmentOpen=e.target.closest("[data-booking-attachment-open]");if(attachmentOpen){await openBookingAttachmentPreview(attachmentOpen.dataset.bookingAttachmentOpen);return}
+    const attachmentDelete=e.target.closest("[data-booking-attachment-delete]");if(attachmentDelete){if(confirm("刪除這個本機附件？")){await deleteBookingAttachment(attachmentDelete.dataset.bookingAttachmentDelete);await renderBookingAttachmentManager();await refreshBookingAttachmentBadges();toast("附件已刪除")}return}
     const task=e.target.closest("[data-task-id]");if(task){await toggleBookingTask(task.dataset.taskId);return}
     const importedDelete=e.target.closest("[data-delete-imported-place]");if(importedDelete){await deleteImportedPlace(importedDelete.dataset.deleteImportedPlace);return}
     for(const [attr,key,render] of [["data-check-food","foods",renderFood],["data-check-shopping","shopping",renderShopping]]){
@@ -3134,12 +3325,18 @@ function bind(){
   $("#foodNearbyOpen")?.addEventListener("click",()=>$("#foodNearbyModal")?.showModal());
   $("#foodNearbyClose")?.addEventListener("click",()=>$("#foodNearbyModal")?.close());
   $("#foodNearbyModal")?.addEventListener("click",e=>{if(e.target===$("#foodNearbyModal"))$("#foodNearbyModal").close()});
+  $("#bookingAttachmentClose")?.addEventListener("click",()=>$("#bookingAttachmentModal")?.close());
+  $("#bookingAttachmentModal")?.addEventListener("click",e=>{if(e.target===$("#bookingAttachmentModal"))$("#bookingAttachmentModal").close()});
+  $("#bookingAttachmentInput")?.addEventListener("change",async e=>{try{await handleBookingAttachmentFiles(e.target.files)}finally{e.target.value=""}});
+  $("#bookingAttachmentPreviewClose")?.addEventListener("click",closeBookingAttachmentPreview);
+  $("#bookingAttachmentPreview")?.addEventListener("click",e=>{if(e.target===$("#bookingAttachmentPreview"))closeBookingAttachmentPreview()});
+  $("#bookingAttachmentPreview")?.addEventListener("cancel",e=>{e.preventDefault();closeBookingAttachmentPreview()});
   $("#settingsBtn").addEventListener("click",()=>{$("#settingsModal").showModal();applyDisplaySettings();renderVariantConfigStatus()});
   $("#settingsClose").addEventListener("click",()=>$("#settingsModal").close());
   $("#settingsModal").addEventListener("click",e=>{if(e.target===$("#settingsModal"))$("#settingsModal").close()});
   $("#variantConfigInput")?.addEventListener("change",async e=>{
     const file=e.target.files?.[0];if(!file)return;
-    try{await importVariantConfigFile(file);toast("D3 / D9 私人方案已匯入")}
+    try{await importVariantConfigFile(file);toast("私人行程方案已匯入")}
     catch(err){console.error(err);toast(`匯入失敗：${err.message}`)}
     finally{e.target.value=""}
   });
@@ -3555,7 +3752,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5331",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5333",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
