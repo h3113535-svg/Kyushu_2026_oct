@@ -199,3 +199,10 @@
 - `位置` and `附件` now use the same fixed width and height on booking cards.
 - Attachment count is rendered as a compact badge, so `附件 1/2/...` no longer changes button size.
 - Reduced the visual weight of the paperclip icon and aligned both action labels consistently.
+
+
+## v5.3.35 — Booking Action Alignment Fix
+- 修正 Buddy 主題待處理訂位卡仍保留右側舊 padding，導致「位置 / 附件」在手機上被迫上下換行。
+- 修正附件 button 使用 `font: inherit` 蓋掉共用按鈕字級/字重，造成「位置」與「附件」字體看起來不一致。
+- 位置與附件現在固定同寬、同高、同字型、同基線，並改用單色 SVG 圖示，避免 Samsung/Chrome emoji 字型差異。
+- 不修改 Booking 附件資料、登入、D3/D9、D5 或其他行程邏輯。

@@ -1,28 +1,24 @@
 {
-  "name": "2026 九州家族紅葉旅",
-  "short_name": "九州家族旅",
-  "description": "2026/11 九州家族紅葉旅行私人 PWA",
-  "start_url": "./?pwa=11110",
+  "name": "私人旅程",
+  "short_name": "私人旅程",
+  "description": "Private travel companion",
+  "start_url": "./?pwa=5335",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#F8F5EE",
-  "theme_color": "#F6F2E9",
+  "background_color": "#F6F0E7",
+  "theme_color": "#A8673F",
   "icons": [
     {
       "src": "./icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "./icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
-    },
-    {
-      "src": "./icon-maskable-512.png",
-      "sizes": "512x512",
       "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     }
   ]
 }

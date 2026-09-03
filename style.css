@@ -3483,3 +3483,98 @@ html[data-font-size="xlarge"] #bookingPanel .task-inline-actions .task-action-bt
 @media(max-width:380px){
   #bookingPanel .task-inline-actions .task-action-btn{width:98px;min-width:98px}
 }
+
+
+/* v5.3.35 · Booking action alignment fix
+   Fixes two real mobile issues from v5.3.34:
+   1) pending buddy cards kept a legacy right padding and forced the two actions to wrap;
+   2) the attachment <button> used font:inherit, overriding the shared action typography.
+   Both controls now use the exact same layout, typography and monochrome SVG icon treatment. */
+#bookingPanel .task-body{min-width:0}
+html[data-theme="buddy"] #bookingPanel .buddy-task-pending .task-body{padding-right:0!important}
+#bookingPanel .task-inline-actions{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,112px));
+  gap:8px;
+  align-items:center;
+  justify-content:start;
+  margin-top:10px;
+}
+#bookingPanel .task-inline-actions .task-action-btn,
+#bookingPanel .booking-attachment-btn{
+  box-sizing:border-box;
+  width:112px;
+  min-width:112px;
+  height:42px;
+  min-height:42px;
+  margin:0;
+  padding:0 12px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff;
+  color:var(--accent);
+  text-decoration:none;
+  font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  font-size:11px;
+  font-weight:800;
+  font-style:normal;
+  letter-spacing:0;
+  line-height:1;
+  white-space:nowrap;
+  appearance:none;
+  -webkit-appearance:none;
+  cursor:pointer;
+}
+#bookingPanel .task-action-icon{
+  width:16px;
+  height:16px;
+  flex:0 0 16px;
+  display:block;
+  font-size:0;
+  line-height:0;
+}
+#bookingPanel .task-action-icon svg{
+  display:block;
+  width:16px;
+  height:16px;
+  stroke:currentColor;
+  fill:none;
+  stroke-width:2;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+#bookingPanel .booking-attachment-count{
+  min-width:16px;
+  height:16px;
+  padding:0 4px;
+  display:inline-grid;
+  place-items:center;
+  border-radius:999px;
+  background:var(--accent);
+  color:#fff;
+  font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  font-size:8px;
+  font-weight:900;
+  line-height:1;
+}
+#bookingPanel .booking-attachment-count[hidden]{display:none!important}
+#bookingPanel .booking-attachment-btn.has-attachments{background:var(--soft-bg)}
+html[data-font-size="large"] #bookingPanel .task-inline-actions{grid-template-columns:repeat(2,minmax(0,124px))}
+html[data-font-size="large"] #bookingPanel .task-inline-actions .task-action-btn,
+html[data-font-size="large"] #bookingPanel .booking-attachment-btn{
+  width:124px;min-width:124px;height:48px;min-height:48px;padding:0 13px;font-size:13px
+}
+html[data-font-size="xlarge"] #bookingPanel .task-inline-actions{grid-template-columns:repeat(2,minmax(0,138px))}
+html[data-font-size="xlarge"] #bookingPanel .task-inline-actions .task-action-btn,
+html[data-font-size="xlarge"] #bookingPanel .booking-attachment-btn{
+  width:138px;min-width:138px;height:54px;min-height:54px;padding:0 14px;font-size:15px
+}
+@media(max-width:380px){
+  #bookingPanel .task-inline-actions{grid-template-columns:repeat(2,minmax(0,104px))}
+  #bookingPanel .task-inline-actions .task-action-btn,
+  #bookingPanel .booking-attachment-btn{width:104px;min-width:104px}
+}

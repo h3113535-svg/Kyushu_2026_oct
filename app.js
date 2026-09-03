@@ -1,14 +1,36 @@
-/* Kyushu family autumn PWA · November 2026 · v1.11.10 D1 taxi + map-link cleanup */
+/* Private travel PWA · Firebase Auth gated content · v5.3.35 Booking Action Alignment Fix */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
-const APP_NAMESPACE = "kyushu-nov-2026";
-const APP_VERSION = "1.11.10";
-const ROOT = window.KYUSHU_PRIVATE_PATH || "trips/kyushu-nov-2026";
-const OFFICIAL_TRIP_START = "2026-11-21";
-const OFFICIAL_TRIP_END = "2026-11-29";
-const PRIVATE_CONTENT_CACHE_KEY = `${APP_NAMESPACE}:content-cache`;
-const PRIVATE_AUTH_CACHE_KEY = `${APP_NAMESPACE}:auth-cache`;
+const ROOT = window.KYUSHU_PRIVATE_PATH || "trips/kyushu-oct-2026";
+const OFFICIAL_TRIP_START = "2026-10-09";
+const OFFICIAL_TRIP_END = "2026-10-18";
+const PRIVATE_CONTENT_CACHE_KEY = "kyushu-private:content-cache";
+const PRIVATE_AUTH_CACHE_KEY = "kyushu-private:auth-cache";
+// Roaming/data-saver policy: the large private itinerary is refreshed at most once every 6 hours
+// on an already-authorized device. Mutable lists still sync separately when their low-data sync is due.
+const PRIVATE_CONTENT_REFRESH_MS = 6 * 60 * 60 * 1000;
+// Cloud reads are intentionally one-shot, never 4-second polling. Reopening the app within this
+// window uses the local copy; edits still attempt immediate cloud writes while online.
+const CLOUD_SYNC_COOLDOWN_MS = 30 * 60 * 1000;
+// Authentication/database requests must never leave the private gate spinning forever on weak mobile networks.
+const AUTH_TOKEN_TIMEOUT_MS = 8000;
+const FIREBASE_REQUEST_TIMEOUT_MS = 12000;
+
+// JPY→TWD exchange-rate helper. The open endpoint refreshes daily, so the app stores one response
+// per 24 hours and performs all conversions locally. It is intentionally lazy-loaded only when the
+// Expense tool is opened, preserving the low-data/offline-first behavior.
+const FX_API_URL = "https://open.er-api.com/v6/latest/JPY";
+const FX_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+// Booking attachments are intentionally device-local. PDF/image blobs live in IndexedDB so they
+// remain available offline without inflating LocalStorage or sending sensitive ticket data to Firebase.
+const BOOKING_ATTACHMENT_DB_NAME = "kyushu-oct-booking-attachments-v1";
+const BOOKING_ATTACHMENT_STORE = "files";
+const BOOKING_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;
+let activeBookingAttachmentTaskId = "";
+let bookingAttachmentPreviewUrl = "";
+
 let TRIP = null;
 let state = null;
 let currentAuthUser = null;
@@ -17,141 +39,32 @@ let appBound = false;
 let lastError = "";
 const pollers = new Set();
 let cloudReconnectInFlight = false;
-const GUIDE_DEVICE_ID_KEY = `${APP_NAMESPACE}:guide-device-id`;
-const OFFLINE_PACK_CACHE = "kyushu-nov-offline-pack-v1";
-const OFFLINE_PACK_META_KEY = `${APP_NAMESPACE}:offline-pack-meta`;
-const OFFLINE_PACK_APPROX_MB = 48;
-const OFFLINE_PACK_ASSETS = [
-  ...Array.from({length:9},(_,i)=>`./day-scene-zh-v17-${String(i+1).padStart(2,"0")}.webp?v=170`),
-  ...Array.from({length:9},(_,i)=>`./day-scene-v52-${String(i+1).padStart(2,"0")}.webp?v=550`),
-  ...Array.from({length:9},(_,i)=>`./day-scene-full-zh-${String(i+1).padStart(2,"0")}.png?v=11110`),
-  "./nov_decision_d4_ropeway.webp?v=160","./nov_decision_d4_chill.webp?v=160",
-  "./nov_decision_d5_autumn.webp?v=160","./nov_decision_d5_chill.webp?v=160",
-  "./nov_decision_d7_crater_open.webp?v=160","./nov_decision_d7_museum.webp?v=160",
-  "./nov_weather_sunny.webp?v=160","./nov_weather_cloudy.webp?v=160","./nov_weather_rainy.webp?v=160","./nov_weather_storm.webp?v=160","./nov_weather_snow.webp?v=160",
-  "./autumn-status-unknown.webp?v=160","./autumn-status-coloring.webp?v=160","./autumn-status-peak.webp?v=160","./autumn-status-past.webp?v=160","./autumn-status-skip.webp?v=160",
-  "./nov_empty_autumnwatch.webp?v=160","./nov_empty_expense.webp?v=160","./nov_empty_notes.webp?v=160","./nov_empty_shopping.webp?v=160"
+const GUIDE_DEVICE_ID_KEY = "kyushu-private:guide-device-id";
+
+const BUDDY_FAST_ASSETS=[
+  "./day-scene-v52-01.webp?v=520","./day-scene-v52-02.webp?v=520","./day-scene-v52-03.webp?v=520","./day-scene-v52-04.webp?v=520","./day-scene-v52-05.webp?v=520",
+  "./day-scene-v52-06.webp?v=520","./day-scene-v52-07.webp?v=520","./day-scene-v52-08.webp?v=520","./day-scene-v52-09.webp?v=520","./day-scene-v52-10.webp?v=520",
+  "./weather-rain-usagi-v47.webp?v=470","./weather-sunny-usagi-v536.webp?v=536","./weather-teruteru-usagi-v536.webp?v=536","./weather-cloudy-usagi-v536.webp?v=536","./weather-thunder-usagi-v536.webp?v=536","./weather-snow-usagi-v536.webp?v=536","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
+  "./egg-sendoff-v539.png?v=539","./egg-cry-v539.png?v=539","./egg-home-sleep-v539.png?v=539",
+  "./duck_gang.png?v=5311","./seal_gang.png?v=5311",
+  "./ui-cloud.webp?v=440","./ui-coffee.webp?v=440","./ui-suitcase.webp?v=440","./ui-purin-tip.webp?v=440"
 ];
-let offlinePackBusy = false;
-
-// PDF attachments are intentionally stored in IndexedDB on this device.
-// Ticket / hotel PDFs often contain private reservation details, so they are never
-// committed to GitHub or Realtime Database. They remain available offline in the PWA.
-const PDF_DB_NAME = `${APP_NAMESPACE}-pdf-attachments-v1`;
-const PDF_STORE_NAME = "pdfs";
-const PDF_MAX_BYTES = 30 * 1024 * 1024;
-let pdfAttachmentIndex = new Map();
-let pdfDbPromise = null;
-
-function openPdfDb(){
-  if(pdfDbPromise)return pdfDbPromise;
-  pdfDbPromise=new Promise((resolve,reject)=>{
-    if(!window.indexedDB){reject(new Error("此瀏覽器不支援本機 PDF 附件"));return;}
-    const req=indexedDB.open(PDF_DB_NAME,1);
-    req.onupgradeneeded=()=>{
-      const db=req.result;
-      if(!db.objectStoreNames.contains(PDF_STORE_NAME))db.createObjectStore(PDF_STORE_NAME,{keyPath:"key"});
-    };
-    req.onsuccess=()=>resolve(req.result);
-    req.onerror=()=>reject(req.error||new Error("無法開啟 PDF 儲存空間"));
-  });
-  return pdfDbPromise;
+const buddyFastImageCache=[];
+function preloadBuddyFastAssets(){
+  if(preloadBuddyFastAssets.started)return;
+  preloadBuddyFastAssets.started=true;
+  const load=(src,priority="auto")=>{
+    const img=new Image(); img.decoding="async";
+    try{img.fetchPriority=priority}catch{}
+    img.src=src; buddyFastImageCache.push(img);
+    if(img.decode) img.decode().catch(()=>{});
+  };
+  BUDDY_FAST_ASSETS.slice(0,2).forEach(src=>load(src,"high"));
+  const rest=()=>BUDDY_FAST_ASSETS.slice(2).forEach(src=>load(src,"low"));
+  if("requestIdleCallback" in window) requestIdleCallback(rest,{timeout:1200});
+  else setTimeout(rest,450);
 }
-function pdfSizeText(bytes=0){
-  const n=Number(bytes)||0;
-  if(n<1024)return `${n} B`;
-  if(n<1024*1024)return `${(n/1024).toFixed(1)} KB`;
-  return `${(n/1024/1024).toFixed(1)} MB`;
-}
-function bookingPdfKey(task){return `booking:${task?.attachmentKey||task?.id||"unknown"}`}
-function hotelPdfKey(hotel){
-  const basis=`${cleanHotelTitle(hotel?.title||"")}|${hotel?.nav||""}`;
-  return `hotel:${guideHash(basis)}`;
-}
-async function loadPdfAttachmentIndex(){
-  try{
-    const db=await openPdfDb();
-    const rows=await new Promise((resolve,reject)=>{
-      const tx=db.transaction(PDF_STORE_NAME,"readonly");
-      const req=tx.objectStore(PDF_STORE_NAME).getAll();
-      req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);
-    });
-    pdfAttachmentIndex=new Map(rows.map(r=>[r.key,{name:r.name,size:r.size,updatedAt:r.updatedAt}]));
-  }catch(err){console.warn("PDF attachment index unavailable",err);pdfAttachmentIndex=new Map();}
-}
-async function getPdfAttachment(key){
-  const db=await openPdfDb();
-  return new Promise((resolve,reject)=>{
-    const tx=db.transaction(PDF_STORE_NAME,"readonly");
-    const req=tx.objectStore(PDF_STORE_NAME).get(key);
-    req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error);
-  });
-}
-async function savePdfAttachment(key,file,label="PDF附件"){
-  if(!file)return;
-  const isPdf=file.type==="application/pdf"||/\.pdf$/i.test(file.name||"");
-  if(!isPdf)throw new Error("只能附加 PDF 檔案");
-  if(file.size>PDF_MAX_BYTES)throw new Error("PDF 太大，單一附件上限 30 MB");
-  const db=await openPdfDb();
-  const record={key,name:file.name||`${label}.pdf`,type:"application/pdf",size:file.size,updatedAt:Date.now(),blob:file};
-  await new Promise((resolve,reject)=>{
-    const tx=db.transaction(PDF_STORE_NAME,"readwrite");
-    tx.objectStore(PDF_STORE_NAME).put(record);
-    tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
-  });
-  pdfAttachmentIndex.set(key,{name:record.name,size:record.size,updatedAt:record.updatedAt});
-  try{await navigator.storage?.persist?.()}catch{}
-}
-async function removePdfAttachment(key){
-  const db=await openPdfDb();
-  await new Promise((resolve,reject)=>{
-    const tx=db.transaction(PDF_STORE_NAME,"readwrite");
-    tx.objectStore(PDF_STORE_NAME).delete(key);
-    tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
-  });
-  pdfAttachmentIndex.delete(key);
-}
-function choosePdfFile(){
-  return new Promise(resolve=>{
-    const input=document.createElement("input");
-    input.type="file";input.accept="application/pdf,.pdf";input.style.display="none";
-    const cleanup=()=>{try{input.remove()}catch{}};
-    input.addEventListener("change",()=>{const file=input.files?.[0]||null;cleanup();resolve(file)},{once:true});
-    document.body.appendChild(input);input.click();
-  });
-}
-async function attachPdf(key,label){
-  try{
-    const file=await choosePdfFile();if(!file)return;
-    await savePdfAttachment(key,file,label);
-    renderBookings();renderHotelReturnCard();
-    toast(`已附加 PDF：${file.name}`);
-  }catch(err){toast(err?.message||"PDF 附件儲存失敗");}
-}
-async function openPdfAttachment(key){
-  // Open a blank window during the user gesture so Android Chrome/PWA will not block it.
-  let viewer=null;try{viewer=window.open("","_blank")}catch{}
-  try{
-    const record=await getPdfAttachment(key);
-    if(!record?.blob)throw new Error("找不到這份 PDF，可能已被系統清除");
-    const url=URL.createObjectURL(record.blob);
-    if(viewer){viewer.location.href=url;viewer.document.title=record.name||"PDF附件";}
-    else{
-      const a=document.createElement("a");a.href=url;a.target="_blank";a.rel="noopener";document.body.appendChild(a);a.click();a.remove();
-    }
-    setTimeout(()=>URL.revokeObjectURL(url),120000);
-  }catch(err){try{viewer?.close()}catch{};toast(err?.message||"PDF 開啟失敗");}
-}
-async function deletePdfAttachment(key){
-  if(!confirm("要移除這份 PDF 附件嗎？"))return;
-  try{await removePdfAttachment(key);renderBookings();renderHotelReturnCard();toast("PDF 附件已移除");}
-  catch(err){toast(err?.message||"移除失敗");}
-}
-function pdfAttachmentControls(key,label){
-  const info=pdfAttachmentIndex.get(key);
-  if(!info)return `<button class="mini-btn pdf-attach-btn" type="button" data-pdf-attach="${esc(key)}" data-pdf-label="${esc(label)}">📎 附件 PDF</button>`;
-  return `<span class="pdf-file-note" title="${esc(info.name)}">📄 ${esc(info.name)} · ${esc(pdfSizeText(info.size))}</span><button class="mini-action-link" type="button" data-pdf-open="${esc(key)}">開啟 PDF</button><button class="mini-btn" type="button" data-pdf-attach="${esc(key)}" data-pdf-label="${esc(label)}">更換</button><button class="mini-btn pdf-remove-btn" type="button" data-pdf-delete="${esc(key)}">移除</button>`;
-}
+preloadBuddyFastAssets();
 
 function pathFor(key){
   return `${ROOT}/${key}`;
@@ -159,22 +72,43 @@ function pathFor(key){
 function endpoint(path){
   return `${DATABASE_URL}/${path}.json`;
 }
+function promiseTimeout(promise,ms,label){
+  let timer;
+  return Promise.race([
+    promise.finally(()=>clearTimeout(timer)),
+    new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(`${label}逾時`)),ms)})
+  ]);
+}
 async function authToken(forceRefresh=false){
   if(!window.firebase?.auth) return null;
   const user=firebase.auth().currentUser;
   if(!user) return null;
-  return user.getIdToken(forceRefresh);
+  return promiseTimeout(user.getIdToken(forceRefresh),AUTH_TOKEN_TIMEOUT_MS,"Google 登入憑證");
 }
 async function request(path, options = {}){
   const token=await authToken();
   if(!token) throw new Error("尚未登入");
   const url=new URL(endpoint(path));
   url.searchParams.set("auth",token);
-  const res = await fetch(url.toString(), {
-    cache: "no-store",
-    headers: {"Content-Type":"application/json"},
-    ...options
-  });
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),FIREBASE_REQUEST_TIMEOUT_MS);
+  let res;
+  try{
+    res = await fetch(url.toString(), {
+      cache: "no-store",
+      headers: {"Content-Type":"application/json"},
+      ...options,
+      signal: controller.signal
+    });
+  }catch(err){
+    if(err?.name==="AbortError"){
+      lastError="Firebase 連線逾時";
+      throw new Error(lastError);
+    }
+    throw err;
+  }finally{
+    clearTimeout(timer);
+  }
   const text = await res.text();
   let body = null;
   try { body = text ? JSON.parse(text) : null; } catch { body = text; }
@@ -203,25 +137,23 @@ async function initFirebase(){
 }
 
 function subscribe(key, callback){
+  // v5.3.22 data-saver behavior: one read only. The old 4-second REST polling loop was deliberately
+  // removed because it generated continuous roaming traffic. A new one-shot sync happens on boot
+  // when the cooldown expires, after reconnecting, or when the user taps the sync status manually.
   let active = true;
-  let previous = Symbol("initial");
-  const poll = async()=>{
+  const stop = ()=>{ active=false; pollers.delete(stop); };
+  pollers.add(stop);
+  Promise.resolve().then(async()=>{
     if(!active) return;
     try{
       const value = await request(pathFor(key), {method:"GET"});
-      const signature = JSON.stringify(value);
-      if(previous !== signature){
-        previous = signature;
-        callback(value);
-      }
+      if(active) callback(value);
     }catch(e){
-      console.error(`Realtime Database read failed (${key}):`, e);
+      console.error(`Realtime Database one-shot read failed (${key}):`, e);
+    }finally{
+      stop();
     }
-  };
-  poll();
-  const id = setInterval(poll, 4000);
-  const stop = ()=>{ active=false; clearInterval(id); pollers.delete(stop); };
-  pollers.add(stop);
+  });
   return stop;
 }
 
@@ -251,9 +183,12 @@ const storeKey=k=>`${TRIP?.id||"private-trip"}:${k}`;
 function createState(){
   return {
     dayIndex:0, view:"schedule", tool:"booking", shoppingMember:"全部",
-    foods:loadLocal("foods",[]), shopping:loadLocal("shopping",[]), expenses:loadLocal("expenses",[]), mapPlaces:loadLocal("mapPlaces",[]), bookingItems:loadLocal("bookingItems",[]),
+    foods:loadLocal("foods",[]), shopping:loadLocal("shopping",[]), expenses:loadLocal("expenses",[]),
+    importedPlaces:normalizeImportedPlaces(loadLocal("importedPlaces",[])), importedPlacesPending:!!loadLocal("importedPlacesPending",false), placeImportDrafts:[],
+    variantSets:normalizeVariantSets(loadLocal("variantSets",[])), variantSelections:normalizeVariantSelections(loadLocal("variantSelections",{})),
+    privateDayPatches:normalizePrivateDayPatches(loadLocal("privateDayPatches",{})), privateDecisions:normalizePrivateDecisions(loadLocal("privateDecisions",[])),
+    fx:normalizeFxState(loadLocal("fxRate",{})),
     taskStatus:loadLocal("taskStatus",{}), decisions:loadLocal("decisions",{}), decisionDrafts:{},
-    autumnStatus:loadLocal("autumnStatus",{}),
     notes:loadLocal("notes",""),
     guideNotes:normalizeGuideNotesMap(loadLocal("guideNotes",{})),
     guideNotePending:loadLocal("guideNotePending",{}),
@@ -263,6 +198,477 @@ function createState(){
 }
 function loadLocal(key,fallback){try{const v=localStorage.getItem(storeKey(key));return v===null?fallback:JSON.parse(v)}catch{return fallback}}
 function saveLocal(key,value){localStorage.setItem(storeKey(key),JSON.stringify(value))}
+
+// Linked itinerary variants are private configuration data. The public GitHub shell only contains
+// this generic engine; exact A/B itinerary payloads are imported locally after authentication so
+// private trip details never need to be committed to the public repository.
+function normalizeVariantSelections(raw){
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))return {};
+  return Object.fromEntries(Object.entries(raw).filter(([k,v])=>k&&typeof v==="string"));
+}
+function normalizeVariantSets(raw){
+  const list=Array.isArray(raw)?raw:[];
+  return list.filter(x=>x&&typeof x==="object"&&x.id).map(x=>({
+    id:String(x.id),
+    title:String(x.title||"行程配置"),
+    statusLabel:String(x.statusLabel||"行程方案"),
+    dayIndexes:(Array.isArray(x.dayIndexes)?x.dayIndexes:[]).map(Number).filter(Number.isInteger),
+    options:(Array.isArray(x.options)?x.options:[]).filter(o=>o&&o.id).map(o=>({
+      id:String(o.id), label:String(o.label||o.id), shortLabel:String(o.shortLabel||`方案 ${o.id}`),
+      detail:String(o.detail||""), days:(o.days&&typeof o.days==="object")?o.days:{}
+    })),
+    reference:(x.reference&&typeof x.reference==="object")?x.reference:{},
+    pendingTitle:String(x.pendingTitle||"行程方案尚未決定"),
+    pendingSubtitle:String(x.pendingSubtitle||"先選擇方案後，才顯示這一天的詳細行程。")
+  })).filter(x=>x.dayIndexes.length&&x.options.length);
+}
+function normalizePrivateDayPatches(raw){
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))return {};
+  const out={};
+  for(const [key,value] of Object.entries(raw)){
+    const idx=Number(key);
+    if(!Number.isInteger(idx)||idx<0||!value||typeof value!=="object"||Array.isArray(value))continue;
+    out[String(idx)]={...value};
+    if(Array.isArray(value.events))out[String(idx)].events=value.events.filter(x=>x&&typeof x==="object").map(x=>({...x}));
+    if(Array.isArray(value.decisionIds))out[String(idx)].decisionIds=value.decisionIds.map(String);
+  }
+  return out;
+}
+function normalizePrivateDecisions(raw){
+  const list=Array.isArray(raw)?raw:[];
+  return list.filter(x=>x&&typeof x==="object"&&x.id).map(x=>({
+    id:String(x.id), title:String(x.title||"行程選擇"), hint:String(x.hint||""),
+    checklist:(Array.isArray(x.checklist)?x.checklist:[]).map(String),
+    hideUntilSelected:!!x.hideUntilSelected,
+    options:(Array.isArray(x.options)?x.options:[]).filter(o=>o&&o.id).map(o=>({
+      id:String(o.id), icon:String(o.icon||"→"), label:String(o.label||o.id), detail:String(o.detail||"")
+    }))
+  })).filter(x=>x.options.length);
+}
+function mergePrivateDecisions(existing,incoming){
+  const map=new Map((existing||[]).map(x=>[x.id,x]));
+  for(const item of incoming||[])map.set(item.id,item);
+  return [...map.values()];
+}
+function privateDayPatchFor(dayIndex){
+  return state?.privateDayPatches?.[String(Number(dayIndex))]||null;
+}
+function decisionById(id){
+  return (state?.privateDecisions||[]).find(x=>x.id===id)||(TRIP?.decisions||[]).find(x=>x.id===id)||null;
+}
+
+function variantSetForDay(dayIndex){
+  return (state?.variantSets||[]).find(set=>set.dayIndexes.includes(Number(dayIndex)))||null;
+}
+function selectedVariantId(setOrId){
+  const id=typeof setOrId==="string"?setOrId:setOrId?.id;
+  return id?String(state?.variantSelections?.[id]||""):"";
+}
+function selectedVariantOption(set){
+  const id=selectedVariantId(set);
+  return set?.options?.find(o=>o.id===id)||null;
+}
+function effectiveDay(dayIndex){
+  const original=TRIP?.days?.[dayIndex];
+  if(!original)return original;
+  const patch=privateDayPatchFor(dayIndex);
+  const base=patch?{...original,...patch,events:Array.isArray(patch.events)?patch.events:(original.events||[]),decisionIds:Array.isArray(patch.decisionIds)?patch.decisionIds:(original.decisionIds||[])}:original;
+  const set=variantSetForDay(dayIndex);
+  if(!set)return base;
+  const option=selectedVariantOption(set);
+  if(!option){
+    return {...base,title:set.pendingTitle,subtitle:set.pendingSubtitle,events:[],decisionIds:[],alert:"",brief:[],rainPlan:""};
+  }
+  const override=option.days?.[String(dayIndex)]||option.days?.[dayIndex];
+  if(!override||typeof override!=="object")return base;
+  return {...base,...override,events:Array.isArray(override.events)?override.events:(base.events||[]),decisionIds:Array.isArray(override.decisionIds)?override.decisionIds:(base.decisionIds||[])};
+}
+function variantStatusForDay(dayIndex){
+  const set=variantSetForDay(dayIndex);
+  if(!set)return null;
+  const option=selectedVariantOption(set);
+  return {set,option,label:option?.shortLabel||"尚未決定",pending:!option};
+}
+function renderVariantConfigStatus(){
+  const el=$("#variantConfigStatus");if(!el||!state)return;
+  const linked=(state.variantSets||[]).length;
+  const patches=Object.keys(state.privateDayPatches||{}).length;
+  const decisions=(state.privateDecisions||[]).length;
+  const parts=[];
+  if(linked)parts.push(`${linked} 組互斥方案`);
+  if(patches)parts.push(`${patches} 個日程補丁`);
+  if(decisions)parts.push(`${decisions} 組行程選項`);
+  el.textContent=parts.length?`已載入 ${parts.join("＋")}；詳細內容只存在這個瀏覽器。`:"尚未匯入私人方案設定檔。";
+}
+function mergeVariantSets(existing,incoming){
+  const map=new Map((existing||[]).map(x=>[x.id,x]));
+  for(const item of incoming||[])map.set(item.id,item);
+  return [...map.values()];
+}
+async function importVariantConfigFile(file){
+  if(!file)return;
+  const text=await file.text();
+  const payload=JSON.parse(text);
+  if(payload?.type!=="kyushu-private-itinerary-variant-patch")throw new Error("不是有效的私人行程方案設定檔");
+  if(payload.tripId&&TRIP?.id&&String(payload.tripId)!==String(TRIP.id))throw new Error("這份設定檔不屬於目前旅程");
+  const incoming=normalizeVariantSets(payload.variantSets);
+  const incomingPatches=normalizePrivateDayPatches(payload.dayPatches);
+  const incomingDecisions=normalizePrivateDecisions(payload.decisions);
+  if(!incoming.length&&!Object.keys(incomingPatches).length&&!incomingDecisions.length)throw new Error("設定檔內沒有可用方案或行程選項");
+  state.variantSets=mergeVariantSets(state.variantSets,incoming);
+  state.privateDayPatches={...(state.privateDayPatches||{}),...incomingPatches};
+  state.privateDecisions=mergePrivateDecisions(state.privateDecisions,incomingDecisions);
+  saveLocal("variantSets",state.variantSets);
+  saveLocal("privateDayPatches",state.privateDayPatches);
+  saveLocal("privateDecisions",state.privateDecisions);
+  renderVariantConfigStatus();
+  renderSchedule();
+}
+function clearVariantConfig(){
+  const privateDecisionIds=(state.privateDecisions||[]).map(x=>x.id);
+  for(const id of privateDecisionIds){if(state.decisions)delete state.decisions[id];if(state.decisionDrafts)delete state.decisionDrafts[id]}
+  state.variantSets=[];state.variantSelections={};state.privateDayPatches={};state.privateDecisions=[];
+  saveLocal("variantSets",[]);saveLocal("variantSelections",{});saveLocal("privateDayPatches",{});saveLocal("privateDecisions",[]);saveLocal("decisions",state.decisions||{});
+  renderVariantConfigStatus();renderSchedule();
+}
+function chooseLinkedVariant(setId,optionId){
+  const set=(state.variantSets||[]).find(x=>x.id===setId);
+  if(!set||!set.options.some(o=>o.id===optionId))return;
+  state.variantSelections={...(state.variantSelections||{}),[setId]:optionId};
+  saveLocal("variantSelections",state.variantSelections);
+  renderSchedule();
+  toast(`${set.statusLabel}：方案 ${optionId}`);
+}
+function clearLinkedVariant(setId){
+  if(!state.variantSelections)return;
+  delete state.variantSelections[setId];
+  saveLocal("variantSelections",state.variantSelections);
+  renderSchedule();
+  toast("已改回尚未決定");
+}
+function renderLinkedVariantCards(dayIndex){
+  const set=variantSetForDay(dayIndex);if(!set)return "";
+  const selected=selectedVariantId(set);
+  const ref=set.reference||{};
+  const advantages=ref.advantages||{};
+  const advantageHtml=set.options.map(o=>{
+    const items=Array.isArray(advantages[o.id])?advantages[o.id]:[];
+    return items.length?`<div class="linked-variant-ref-block"><b>${esc(o.id)} 優勢</b><ul>${items.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:"";
+  }).join("");
+  const waitFor=Array.isArray(ref.waitFor)?ref.waitFor:[];
+  return `<section class="decision-card linked-variant-card">
+    <div class="decision-kicker">互斥行程方案</div>
+    <h3>${esc(set.statusLabel)}：${selected?`方案 ${esc(selected)}`:"尚未決定"}</h3>
+    <p>${esc(set.title)}</p>
+    <div class="linked-variant-options" role="radiogroup" aria-label="${esc(set.title)}">${set.options.map(o=>{
+      const active=selected===o.id;
+      return `<button type="button" class="decision-option linked-variant-option ${active?"selected":""}" role="radio" aria-checked="${active?"true":"false"}" data-linked-variant-set="${esc(set.id)}" data-linked-variant-option="${esc(o.id)}"><span class="decision-icon">${esc(o.id)}</span><span><b>${esc(o.label)}</b>${o.detail?`<small>${esc(o.detail)}</small>`:""}</span><em>${active?"已選":"選擇"}</em></button>`;
+    }).join("")}</div>
+    <div class="linked-variant-actions"><button type="button" class="decision-clear-btn" data-linked-variant-clear="${esc(set.id)}">先不決定</button></div>
+    <div class="linked-variant-reference"><div class="linked-variant-reference-title">決策參考</div>${advantageHtml}${waitFor.length?`<div class="linked-variant-ref-block wait"><b>等這些資訊確定後再選</b><ul>${waitFor.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:""}</div>
+  </section>`;
+}
+
+// Quick-import state normalizer. This must exist before createState() is executed.
+// v5.3.26 accidentally removed it while simplifying Opening Hours, leaving two live callers behind.
+function normalizeImportedPlaces(raw){
+  const arr=Array.isArray(raw)?raw:normalizeCloud(raw);
+  return arr.filter(x=>x&&typeof x==="object").map((x,i)=>({
+    id:String(x.id||`import-${i}-${Date.now().toString(36)}`),
+    dayIndex:Math.max(0,Math.min(99,Number(x.dayIndex||0))),
+    time:String(x.time||""),
+    title:String(x.title||x.name||"未命名景點"),
+    category:String(x.category||"景點"),
+    mapUrl:String(x.mapUrl||""),
+    query:String(x.query||x.title||x.name||""),
+    note:String(x.note||""),
+    importedAt:Number(x.importedAt||0),
+    source:String(x.source||"manual"),
+    placeId:String(x.placeId||"")
+  }));
+}
+
+// Simple opening-hours display.
+// No runtime API key, no manual setup, no background requests. These values are embedded in the
+// app from publicly listed opening hours and are available offline. If a venue changes its hours,
+// update this catalog in a future app release.
+const OPENING_HOURS_CATALOG=[
+  {match:/ポケモンセンター.*フクオカ|pok[eé]mon\s*center.*fukuoka/i,hours:"10:00–21:00"},
+  {match:/DACOMECCA/i,hours:"07:00–19:00",note:"不定休"},
+  {match:/dacō博多駅前|daco博多駅前|dac[oō]\s*博多駅前/i,hours:"08:00–20:00",note:"L.O. 19:30・不定休"},
+  {match:/すき焼き\s*山翔|山翔/i,hours:"11:00–15:00 / 17:00–22:00",note:"料理 L.O. 14:00 / 21:00"},
+  {match:/マリンワールド|Marine\s*World|海の中道.*水族館/i,hours:"09:30–17:30",note:"最終入館 16:30"},
+  {match:/福岡タワー|Fukuoka\s*Tower/i,hours:"09:30–22:00",note:"最終入館 21:30"},
+  {match:/にく屋\s*肉いち|NIKUICHI|肉いち/i,hours:"16:00–24:00",note:"Food L.O. 23:00"},
+  {match:/由布まぶし\s*心.*駅前|由布院駅前.*由布まぶし|由布まぶし\s*心/i,hours:"10:30–20:30",note:"L.O. 19:30・不定休"},
+  {match:/B[- ]?SPEAK|ビースピーク/i,hours:"10:00–17:00",note:"不定休"},
+  {match:/日産レンタカー.*湯布院|NISSAN.*湯布院|湯布院.*日産レンタカー/i,hours:"09:00–17:30"},
+  {match:/ASO\s*MILK\s*FACTORY|阿部牧場/i,hours:"09:30–18:00",note:"ジェラート・ドリンク L.O. 17:30"},
+  {match:/ごとう屋\s*阿蘇店/i,hours:"10:30–16:00",note:"L.O. 15:30・木曜、第3水曜休"},
+  {match:/ごとう屋\s*総本店/i,hours:"11:00–15:00頃",note:"L.O. 15:00・月曜休・売切次第終了"},
+  {match:/ごとう屋\s*門前町店/i,hours:"11:00–16:00",note:"L.O. 15:30・火曜、第3月曜休"},
+  {match:/道の駅\s*阿蘇/i,hours:"09:00–18:00",note:"年中無休・季節変動あり"},
+  {match:/阿蘇神社/i,hours:"06:00–18:00",note:"御札所 09:00–17:00"},
+  {match:/高千穂牛.*和|レストラン\s*和|高千穂.*なごみ/i,hours:"11:00–14:30 / 17:00–21:00",note:"L.O. 14:00 / 20:30・水曜休"},
+  {match:/たちや鳥/i,hours:"17:00–22:00",note:"料理 L.O. 21:00・木曜休（不定休あり）"},
+  {match:/勝烈亭.*アミュ|アミュ.*勝烈亭/i,hours:"11:00–22:00",note:"L.O. 21:00"},
+  {match:/勝烈亭.*新市街|新市街.*勝烈亭/i,hours:"11:00–21:30",note:"L.O. 21:00"},
+  {match:/勝烈亭/i,hours:"AMU店 11:00–22:00 / 新市街本店 11:00–21:30",note:"店舗で営業時間が異なります"},
+  {match:/AMU\s*PLAZA.*熊本|アミュプラザ.*くまもと|アミュプラザ.*熊本/i,hours:"10:00–20:00",note:"レストラン 11:00–22:00"},
+  {match:/ららぽーと福岡|LaLaport\s*Fukuoka/i,hours:"10:00–21:00",note:"レストラン・フードコート 11:00–22:00"}
+];
+function findOpeningHoursInfo(event){
+  if(!event)return null;
+  const explicit=event.openingHoursText||event.hoursText;
+  if(explicit)return {hours:String(explicit),note:String(event.openingHoursNote||"")};
+  const text=`${event.title||""} ${event.nav||""}`;
+  return OPENING_HOURS_CATALOG.find(x=>x.match.test(text))||null;
+}
+function openingEventHtml(event){
+  const info=findOpeningHoursInfo(event);if(!info)return "";
+  return `<div class="opening-hours-info"><span class="opening-hours-label">營業</span><strong>${esc(info.hours)}</strong>${info.note?`<span class="opening-hours-note">${esc(info.note)}</span>`:""}</div>`;
+}
+
+function normalizeFxState(raw){
+  const v=raw&&typeof raw==="object"?raw:{};
+  return {
+    mode:v.mode==="manual"?"manual":"auto",
+    autoRate:Number(v.autoRate)>0?Number(v.autoRate):null,
+    manualRate:Number(v.manualRate)>0?Number(v.manualRate):null,
+    fetchedAt:Number(v.fetchedAt||0),
+    sourceUpdatedAt:Number(v.sourceUpdatedAt||0),
+    nextUpdateAt:Number(v.nextUpdateAt||0)
+  };
+}
+function activeFxRate(){
+  if(!state?.fx)return null;
+  const manual=Number(state.fx.manualRate);
+  const auto=Number(state.fx.autoRate);
+  if(state.fx.mode==="manual"&&manual>0)return manual;
+  return auto>0?auto:null;
+}
+function formatFxRate(rate){
+  const n=Number(rate);
+  if(!(n>0))return "—";
+  return n.toFixed(4).replace(/0$/,"");
+}
+function formatFxTime(ts){
+  if(!Number(ts))return "尚未更新";
+  try{return new Intl.DateTimeFormat("zh-TW",{timeZone:"Asia/Taipei",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date(Number(ts)))}catch{return "已更新"}
+}
+function formatTwd(value){
+  const n=Number(value);
+  if(!Number.isFinite(n))return "—";
+  return Math.round(n).toLocaleString("zh-TW");
+}
+function updateFxCalculator(){
+  const input=$("#fxJpyInput"),output=$("#fxTwdOutput");
+  if(!input||!output)return;
+  const rate=activeFxRate();
+  const amount=Number(input.value);
+  output.textContent=(rate&&Number.isFinite(amount))?formatTwd(amount*rate):"—";
+}
+function renderFxCard(){
+  const fx=state?.fx;if(!fx)return;
+  const rate=activeFxRate();
+  const rateEl=$("#fxRateValue"),modeEl=$("#fxRateMode"),meta=$("#fxRateMeta");
+  if(rateEl)rateEl.textContent=formatFxRate(rate);
+  if(modeEl){
+    const manual=fx.mode==="manual"&&Number(fx.manualRate)>0;
+    modeEl.textContent=manual?"手動匯率":"自動匯率";
+    modeEl.dataset.mode=manual?"manual":"auto";
+  }
+  if(meta){
+    if(fx.mode==="manual"&&Number(fx.manualRate)>0){
+      meta.textContent=fx.autoRate?`手動使用中 · 自動匯率最後抓取 ${formatFxTime(fx.fetchedAt)}`:"手動使用中 · 尚未取得自動匯率";
+    }else if(fx.autoRate){
+      meta.textContent=`每日最多更新一次 · 匯率資料 ${formatFxTime(fx.sourceUpdatedAt||fx.fetchedAt)}`;
+    }else{
+      meta.textContent=navigator.onLine?"打開記帳頁後會自動取得匯率":"目前離線 · 可先設定手動匯率";
+    }
+  }
+  updateFxCalculator();
+}
+async function ensureFxRate({force=false,notify=false}={}){
+  if(!state?.fx)return null;
+  const hasCached=Number(state.fx.autoRate)>0;
+  if(!force&&state.fx.mode==="manual"){renderFxCard();return activeFxRate();}
+  const fresh=hasCached && Date.now()-Number(state.fx.fetchedAt||0)<FX_CACHE_TTL_MS;
+  if(!force&&fresh){renderFxCard();return state.fx.autoRate;}
+  if(!navigator.onLine){
+    renderFxCard();
+    if(notify)toast(hasCached?"目前離線，使用上次匯率":"目前離線，可改用手動匯率");
+    return hasCached?state.fx.autoRate:null;
+  }
+  const status=$("#fxRateMeta");if(status)status.textContent="正在更新匯率…";
+  try{
+    const res=await fetch(FX_API_URL,{cache:"no-store"});
+    if(!res.ok)throw new Error(`HTTP ${res.status}`);
+    const body=await res.json();
+    const rate=Number(body?.rates?.TWD);
+    if(body?.result!=="success"||!(rate>0))throw new Error("匯率資料格式不正確");
+    state.fx={...state.fx,
+      autoRate:rate,
+      fetchedAt:Date.now(),
+      sourceUpdatedAt:Number(body.time_last_update_unix||0)*1000,
+      nextUpdateAt:Number(body.time_next_update_unix||0)*1000
+    };
+    saveLocal("fxRate",state.fx);
+    renderFxCard();renderExpenses();
+    if(notify)toast(`匯率已更新：1 JPY = ${formatFxRate(rate)} TWD`);
+    return rate;
+  }catch(err){
+    console.warn("Exchange-rate refresh failed",err);
+    renderFxCard();
+    if(status)status.textContent=hasCached?`更新失敗 · 使用上次匯率 ${formatFxTime(state.fx.fetchedAt)}`:"無法取得匯率 · 可設定手動匯率";
+    if(notify)toast(hasCached?"匯率更新失敗，沿用本機資料":"無法取得匯率，請設定手動匯率");
+    return hasCached?state.fx.autoRate:null;
+  }
+}
+function openFxRateModal(){
+  const modal=$("#fxRateModal"),form=$("#fxRateForm");if(!modal||!form)return;
+  const fx=state.fx;
+  const auto=form.querySelector('input[name="fxMode"][value="auto"]');
+  const manual=form.querySelector('input[name="fxMode"][value="manual"]');
+  if(auto)auto.checked=fx.mode!=="manual";
+  if(manual)manual.checked=fx.mode==="manual";
+  const input=$("#fxManualRateInput");if(input)input.value=fx.manualRate?String(fx.manualRate):"";
+  const autoText=$("#fxAutoRatePreview");if(autoText)autoText.textContent=fx.autoRate?`目前自動匯率：1 JPY = ${formatFxRate(fx.autoRate)} TWD`:`尚未取得自動匯率`;
+  modal.showModal();
+}
+function saveFxRateSettings(e){
+  e.preventDefault();
+  const fd=new FormData(e.currentTarget),mode=fd.get("fxMode")==="manual"?"manual":"auto";
+  const manualRate=Number(fd.get("manualRate"));
+  if(mode==="manual"&&!(manualRate>0)){toast("請輸入有效的手動匯率");return;}
+  state.fx={...state.fx,mode,manualRate:manualRate>0?manualRate:state.fx.manualRate};
+  saveLocal("fxRate",state.fx);
+  renderFxCard();renderExpenses();
+  $("#fxRateModal")?.close();
+  toast(mode==="manual"?"已改用手動匯率":"已改用自動匯率");
+  if(mode==="auto"&&!state.fx.autoRate)ensureFxRate({force:true,notify:true});
+}
+
+function decodeMapComponent(v=""){
+  try{return decodeURIComponent(String(v).replace(/\+/g," ")).trim()}catch{return String(v).trim()}
+}
+function inferGoogleMapsTitle(rawUrl=""){
+  try{
+    const u=new URL(rawUrl);
+    const q=u.searchParams.get("query")||u.searchParams.get("q")||u.searchParams.get("destination");
+    if(q&&!/^place_id:/i.test(q))return decodeMapComponent(q);
+    const parts=u.pathname.split("/").filter(Boolean);
+    const pi=parts.findIndex(x=>x==="place");
+    if(pi>=0&&parts[pi+1])return decodeMapComponent(parts[pi+1]);
+    if((u.hostname.includes("google.")||u.hostname.includes("google.com"))&&parts.length){
+      const candidate=parts.find(x=>!["maps","dir","search"].includes(x));
+      if(candidate)return decodeMapComponent(candidate);
+    }
+  }catch{}
+  return "";
+}
+function parsePlaceImportLine(line,index=0){
+  const raw=String(line||"").trim();if(!raw)return null;
+  const urlMatch=raw.match(/https?:\/\/\S+/i);
+  const mapUrl=urlMatch?urlMatch[0].replace(/[),。；;]+$/g,""):"";
+  let label=mapUrl?raw.replace(mapUrl,"").replace(/^\s*[|｜–—-]\s*|\s*[|｜–—-]\s*$/g,"").trim():raw;
+  if(!label&&mapUrl)label=inferGoogleMapsTitle(mapUrl);
+  if(!label)label=`Google Maps 地點 ${index+1}`;
+  const google=/\bgoogle\.[^/]+\/maps\b|maps\.app\.goo\.gl|goo\.gl\/maps/i.test(mapUrl);
+  const source=mapUrl?(google?"google-maps":"url"):"text";
+  return {id:`draft-${index}-${Date.now().toString(36)}`,title:label,mapUrl:mapUrl||mapSearch(label),query:label,source,checked:true};
+}
+function parsePlaceImportText(text){
+  return String(text||"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean).map(parsePlaceImportLine).filter(Boolean);
+}
+function populatePlaceImportDaySelect(){
+  const sel=$("#placeImportDay");if(!sel||!TRIP?.days)return;
+  const current=String(Math.max(0,Math.min(TRIP.days.length-1,state?.dayIndex||0)));
+  sel.innerHTML=TRIP.days.map((d,i)=>`<option value="${i}">D${i+1} · ${esc(d.shortDate||d.date||"")} · ${esc(d.title||"")}</option>`).join("");
+  sel.value=current;
+}
+function renderPlaceImportPreview(){
+  const box=$("#placeImportPreview"),status=$("#placeImportStatus"),add=$("#placeImportAddBtn");if(!box)return;
+  const drafts=state.placeImportDrafts||[];
+  if(!drafts.length){box.innerHTML="";if(status)status.textContent="尚未解析";if(add)add.disabled=true;return;}
+  box.innerHTML=drafts.map((d,i)=>`<div class="place-import-preview-item" data-import-draft="${i}">
+    <label class="place-import-check"><input type="checkbox" data-import-check="${i}" ${d.checked!==false?"checked":""}><span></span></label>
+    <div class="place-import-preview-main">
+      <input class="place-import-title-input" data-import-title="${i}" value="${esc(d.title)}" aria-label="景點名稱">
+      <div class="place-import-preview-meta"><span>${d.source==="google-maps"?"Google Maps":d.source==="url"?"網址":"店名搜尋"}</span><a target="_blank" rel="noopener" href="${esc(d.mapUrl)}">開啟地圖 ↗</a></div>
+    </div>
+  </div>`).join("");
+  if(status){
+    const shortCount=drafts.filter(d=>/maps\.app\.goo\.gl|goo\.gl\/maps/i.test(d.mapUrl)&&/^Google Maps 地點/.test(d.title)).length;
+    status.textContent=shortCount?`已解析 ${drafts.length} 筆 · ${shortCount} 筆短網址無法離線取得店名，請直接改上方名稱`:`已解析 ${drafts.length} 筆 · 可直接修改名稱後加入`;
+  }
+  if(add)add.disabled=false;
+}
+function renderImportedPlaces(){
+  populatePlaceImportDaySelect();
+  const box=$("#importedPlacesList");if(!box)return;
+  const list=(state.importedPlaces||[]).slice().sort((a,b)=>(a.dayIndex-b.dayIndex)||String(a.time).localeCompare(String(b.time)));
+  box.innerHTML=list.length?list.map(p=>{
+    const info=findOpeningHoursInfo(p);
+    const hours=info?`<div class="opening-hours-info compact"><span class="opening-hours-label">營業</span><strong>${esc(info.hours)}</strong>${info.note?`<span class="opening-hours-note">${esc(info.note)}</span>`:""}</div>`:"";
+    return `<div class="list-item place-import-saved-item"><div class="list-main"><div class="place-import-saved-copy"><div class="list-title">${esc(p.title)}</div><div class="list-meta">D${p.dayIndex+1}${p.time?` · ${esc(p.time)}`:""} · ${esc(p.category||"景點")}</div>${hours}</div><div class="list-actions"><a class="mini-btn" target="_blank" rel="noopener" href="${esc(p.mapUrl||mapSearch(p.query||p.title))}">地圖</a><button class="mini-btn" data-delete-imported-place="${esc(p.id)}">刪</button></div></div></div>`;
+  }).join(""):`<div class="empty">還沒有快速匯入的景點。</div>`;
+}
+async function persistImportedPlaces({notify=false}={}){
+  saveLocal("importedPlaces",state.importedPlaces||[]);
+  state.importedPlacesPending=true;saveLocal("importedPlacesPending",true);
+  renderImportedPlaces();renderSchedule();
+  if(state.cloud&&navigator.onLine){
+    try{
+      await setCloud("importedPlaces",state.importedPlaces||[]);
+      state.importedPlacesPending=false;saveLocal("importedPlacesPending",false);
+      if(notify)toast("已加入行程並同步");
+    }catch(err){console.warn("Imported places sync failed",err);if(notify)toast("已存本機，雲端稍後再同步")}
+  }else if(notify)toast("已加入行程・離線保存在本機");
+}
+async function syncPendingImportedPlaces(){
+  if(!state?.importedPlacesPending||!state.cloud||!navigator.onLine)return false;
+  try{
+    await setCloud("importedPlaces",state.importedPlaces||[]);
+    state.importedPlacesPending=false;saveLocal("importedPlacesPending",false);
+    return true;
+  }catch(err){console.warn("Pending imported places sync failed",err);return false}
+}
+function parsePlaceImportDrafts(){
+  const text=$("#placeImportText")?.value||"";
+  state.placeImportDrafts=parsePlaceImportText(text);
+  renderPlaceImportPreview();
+  if(!state.placeImportDrafts.length)toast("請先貼上店名或 Google Maps 網址");
+}
+async function addPlaceImportDrafts(){
+  const drafts=state.placeImportDrafts||[];if(!drafts.length)return;
+  const dayIndex=Number($("#placeImportDay")?.value||state.dayIndex||0);
+  const time=$("#placeImportTime")?.value||"";
+  const category=$("#placeImportCategory")?.value||"景點";
+  const selected=[];
+  drafts.forEach((d,i)=>{
+    const checked=$(`[data-import-check="${i}"]`)?.checked!==false;
+    if(!checked)return;
+    const title=$(`[data-import-title="${i}"]`)?.value?.trim()||d.title;
+    if(!title)return;
+    selected.push({id:uid(),dayIndex,time,title,category,mapUrl:d.mapUrl||mapSearch(title),query:title,note:"快速匯入",source:d.source,importedAt:Date.now(),placeId:""});
+  });
+  if(!selected.length){toast("請至少勾選一個景點");return;}
+  state.importedPlaces=[...(state.importedPlaces||[]),...selected];
+  state.placeImportDrafts=[];
+  const ta=$("#placeImportText");if(ta)ta.value="";
+  renderPlaceImportPreview();
+  await persistImportedPlaces({notify:true});
+}
+async function deleteImportedPlace(id){
+  state.importedPlaces=(state.importedPlaces||[]).filter(x=>x.id!==id);
+  await persistImportedPlaces({notify:false});toast("已移除匯入景點");
+}
+function importedEventsForDay(dayIndex){
+  return (state.importedPlaces||[]).filter(x=>Number(x.dayIndex)===Number(dayIndex)).map(x=>({
+    ...x,_imported:true,nav:x.query||x.title,links:x.mapUrl?[{label:"原始 Google Maps",url:x.mapUrl}]:[],noNav:false
+  }));
+}
 function guideDeviceId(){
   try{
     let id=localStorage.getItem(GUIDE_DEVICE_ID_KEY);
@@ -290,19 +696,8 @@ function normalizeGuideNotesMap(raw){
   return out;
 }
 function uid(){return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`}
-const FAMILY_MEMBER_LABELS=["父","母","兄","弟"];
-const LEGACY_MEMBER_MAP={"長輩A":"父","長輩B":"母","35歲":"兄","31歲":"弟"};
-function normalizeMemberLabel(value){return LEGACY_MEMBER_MAP[value]||value}
-function normalizeFamilyCollections(){
-  if(!state)return;
-  state.shopping=(state.shopping||[]).map(x=>({...x,owner:normalizeMemberLabel(x.owner)}));
-  state.expenses=(state.expenses||[]).map(x=>({...x,payer:normalizeMemberLabel(x.payer),participants:(x.participants||[]).map(normalizeMemberLabel)}));
-  if(state.shoppingMember&&state.shoppingMember!=="全部")state.shoppingMember=normalizeMemberLabel(state.shoppingMember);
-  saveLocal("shopping",state.shopping);saveLocal("expenses",state.expenses);
-}
 function esc(v=""){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
 function mapSearch(q){return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`}
-function googleSearch(q){return `https://www.google.com/search?q=${encodeURIComponent(q)}`}
 function mapNav(q,mode="driving"){return mapSearch(q)}
 function japanToday(){
   const parts=new Intl.DateTimeFormat("en-CA",{timeZone:TRIP?.timezone||"Asia/Tokyo",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
@@ -315,279 +710,1512 @@ function initialDay(){
   return idx>=0?idx:0;
 }
 
-function toast(message){
+const VO=(text)=>({text});
+const BUDDY_DIALOG={
+  "purin":[
+    "一起慢慢走吧～",
+    "今天也想跟你一起出去玩♪",
+    "先看看四周，再決定下一站～",
+    "走累了就坐一下嘛。",
+    "我覺得這裡可以多待一會兒～",
+    "點心時間是不是快到了？",
+    "有舒服的地方就先休息一下♪",
+    "今天的步調剛剛好～",
+    "先拍一張，再慢慢看～",
+    "別急著走嘛，還可以晃一下♪",
+    "我想喝點東西了～",
+    "今天也有好多小發現耶。",
+    "這裡讓人想發呆一下～",
+    "要不要找個舒服的位置坐坐？",
+    "走慢一點也沒關係呀～",
+    "有喜歡的就停下來看看♪",
+    "今天的回憶要好好收著～",
+    "等等一起吃點好吃的吧。",
+    "再散步一下下嘛～",
+    "我開始有點睏了……",
+    "回去以前再晃一下？",
+    "不用把每一站都塞滿喔～",
+    "今天也很適合兩個人慢慢玩♪",
+    "看到好看的地方就停一下～",
+    "先喝一點水，再繼續吧。",
+    "我喜歡這種不趕時間的感覺～",
+    "照片拍好了嗎？我也想看♪",
+    "下一站也一起去吧～",
+    "今天有好好享受旅行嗎？",
+    "這裡的氣氛好舒服喔～",
+    "我想再待五分鐘♪",
+    "慢慢來，旅程還在繼續～"
+  ],
+  "usagi":[
+    VO("呀哈！",""),
+    VO("呀哈——！",""),
+    VO("嗚拉！",""),
+    VO("嗚拉拉！",""),
+    VO("噗嚕",""),
+    VO("噗嚕……",""),
+    VO("蛤？",""),
+    VO("蛤啊？",""),
+    VO("哼～？",""),
+    VO("呀哈呀哈！",""),
+    VO("嗚拉呀哈！",""),
+    VO("嗚拉拉拉——！",""),
+    VO("呀哈——呀哈！",""),
+    VO("嗚拉！嗚拉！",""),
+    VO("噗嚕！",""),
+    VO("哼？",""),
+    VO("呀哈！嗚拉！",""),
+    VO("嗚拉呀哈呀哈～",""),
+    VO("呀——哈！",""),
+    VO("嗚啦——！",""),
+    VO("蛤——？",""),
+    VO("噗嚕噗嚕",""),
+    VO("呀哈呀哈呀哈！",""),
+    VO("嗚拉拉呀哈！","")
+  ],
+  "duo":[
+    "一起去看看吧～　呀哈！",
+    "慢慢走也可以喔～　嗚拉！",
+    "今天也一起玩吧♪　呀哈——！",
+    "先休息一下嘛～　……蛤？",
+    "下一站也一起去～　嗚拉！",
+    "照片拍好了嗎？　呀哈！",
+    "點心時間到了吧～　噗嚕！",
+    "今天的步調很好耶～　嗚拉呀哈！",
+    "再晃一下下～　呀哈！",
+    "累了就休息嘛～　哼～？",
+    "一起把今天玩完吧♪　嗚拉！",
+    "這裡好舒服喔～　呀哈呀哈！",
+    "先看看再決定～　蛤？",
+    "今天也多了一個回憶～　嗚拉！",
+    "慢慢來就好～　呀哈——！",
+    "再拍一張嘛～　噗嚕！",
+    "兩個人一起走最好玩～　嗚拉呀哈！",
+    "今天也不要太趕喔～　呀哈！",
+    "一起回去休息吧～　嗚拉！",
+    "鴨寶幫出發～　呀哈！"
+  ],
+  "weather":{
+    "sunny":[
+      VO("呀哈！"),
+      VO("嗚拉！"),
+      VO("呀哈呀哈！"),
+      VO("噗嚕♪"),
+      VO("嗚拉呀哈！")
+    ],
+    "rain":[
+      VO("噗嚕……"),
+      VO("蛤？"),
+      VO("嗚拉！"),
+      VO("哼～？"),
+      VO("呀哈！")
+    ],
+    "cloudy":[
+      VO("蛤？"),
+      VO("哼～？"),
+      VO("噗嚕……"),
+      VO("嗚拉？"),
+      VO("呀哈？")
+    ],
+    "thunder":[
+      VO("蛤？！"),
+      VO("嗚拉！！"),
+      VO("噗嚕……"),
+      VO("哼～？"),
+      VO("嗚啦——！！")
+    ],
+    "snow":[
+      VO("呀哈！"),
+      VO("噗嚕！"),
+      VO("嗚拉！"),
+      VO("哼～？"),
+      VO("呀哈呀哈！")
+    ],
+    "teruteru":[
+      VO("呀哈——！"),
+      VO("嗚拉！"),
+      VO("噗嚕♪"),
+      VO("呀哈呀哈！"),
+      VO("嗚拉呀哈！")
+    ],
+    "unknown":[
+      VO("噗嚕……"),
+      VO("蛤？"),
+      VO("哼～？"),
+      VO("呀哈！"),
+      VO("嗚拉！")
+    ]
+  },
+  "food":{
+    "purin":[
+      "聞起來就很好吃耶～",
+      "先坐下來慢慢吃吧♪",
+      "我想先看看招牌是什麼～",
+      "這個拍完照就可以吃了嗎？",
+      "留一點肚子給甜點嘛～",
+      "吃飽再繼續走，剛剛好。",
+      "我覺得這餐可以慢慢吃～",
+      "有布丁的話我想看一下♪",
+      "旅行就是會一直想吃東西嘛～",
+      "先喝一口，再決定下一個要點什麼。",
+      "今天也要吃到開心～",
+      "這間氣氛感覺很舒服耶。",
+      "如果要排太久，我們再想想嘛～",
+      "吃完想找地方坐一下～",
+      "甜甜的東西會讓旅行更開心♪",
+      "先把想吃的都看一遍～",
+      "我好像又有點餓了……",
+      "這個份量兩個人分剛剛好嗎？",
+      "慢慢吃，不要急著趕下一站～",
+      "吃飽了就想發呆一下♪"
+    ],
+    "usagi":[
+      VO("呀哈！","先看是否要排隊、是否有最後點餐時間。"),
+      VO("嗚拉！","想吃的先決定，熱門品項售完就換第二順位。"),
+      VO("噗嚕","先看招牌和限定，再決定要不要加點。"),
+      VO("蛤？","排隊時間太長就比較備案，不必硬等。"),
+      VO("嗚拉拉！","入店前先確認是否只能現金或需要先買券。"),
+      VO("呀哈呀哈！","兩個人想吃不同的可以分著點，多試幾樣。"),
+      VO("哼～？","如果後面還有正餐，甜點先不要點太滿。"),
+      VO("嗚啦——！","吃完先補水，再開始下一段行程。"),
+      VO("噗嚕……","店家快打烊時，先確認最後點餐而不是只看關門時間。"),
+      VO("嗚拉呀哈！","看到限定或季節品項再決定要不要改原本選擇。"),
+      VO("呀——哈！","排隊前先看 Google Maps 最近評論有沒有臨時異動。"),
+      VO("蛤啊？","如果菜單看不懂，先找圖片或日文品名再點。")
+    ],
+    "duo":[
+      "慢慢吃吧～　呀哈！",
+      "甜點也想看～　嗚拉！",
+      "先坐一下嘛～　噗嚕！",
+      "這餐要吃得開心～　呀哈呀哈！",
+      "吃完再出發吧♪　嗚拉！",
+      "有好吃的就一起分～　呀哈！"
+    ],
+    "complete":[
+      "吃到啦～",
+      "美食收集完成♪",
+      "這間記住了～",
+      "今天又多一個好吃的回憶。",
+      "任務完成，開吃！",
+      "這餐可以放心收進回憶裡。",
+      "吃飽啦～",
+      "美食清單少一個。"
+    ]
+  },
+  "booking":{
+    "purin":[
+      "先把時間再看一次吧～",
+      "慢慢確認，不要按錯日期喔。",
+      "確認信有收好嗎？",
+      "帳號先登入，等等會比較輕鬆～",
+      "這個完成就可以放心一點了♪",
+      "先把需要的資料放在手邊～",
+      "日期和人數再看一眼嘛。",
+      "不要急，最後一步再確認一次。",
+      "如果還沒開放，就先設好提醒吧～",
+      "完成後記得截圖或留確認信。",
+      "這項辦完就可以休息一下～",
+      "先確認是日本時間還是台灣時間。",
+      "頁面先準備好就不用慌～",
+      "預約成功之後再把細節記進 App。"
+    ],
+    "usagi":[
+      VO("嗚拉！","先確認日期、時間、人數，再碰最後確認鍵。"),
+      VO("呀哈！","帳號和付款方式先準備好，別到最後一步才找。"),
+      VO("蛤？","開放時間還沒到就先停，不要一直重複送出。"),
+      VO("噗嚕","成功畫面、訂單編號或確認信至少留一份。"),
+      VO("哼～？","看到日本時間時，先換算成台灣時間再設提醒。"),
+      VO("嗚拉拉！","如果頁面有候補或事前申請，先分清楚和正式預約的差別。"),
+      VO("呀哈呀哈！","預約完成後，再回頭檢查日期有沒有跨日或看錯月份。"),
+      VO("嗚啦——！","需要登入的網站先把密碼和驗證方式準備好。"),
+      VO("噗嚕……","付款失敗時先確認訂單是否已成立，避免重複下單。"),
+      VO("嗚拉呀哈！","預約規則會變，出發前再看一次官方資訊。")
+    ],
+    "usagiUrgent":[
+      VO("呀哈——！！","時間到了。先確認頁面已登入，再刷新一次。"),
+      VO("嗚拉！！","不要連點送出；先看目前頁面是否已進到下一步。"),
+      VO("嗚拉拉拉——！","日期、人數、時間只看關鍵欄位，別被其他資訊拖住。"),
+      VO("蛤？！","如果顯示額滿，先看其他時段或官方候補機制。"),
+      VO("呀哈呀哈！","成功後先截圖，再慢慢整理確認信。"),
+      VO("嗚啦——！","付款頁不要返回上一頁，先等結果。"),
+      VO("噗嚕！","卡住時換網路前先確認訂單沒有成立。"),
+      VO("嗚拉呀哈！","剩最後一步也要看清楚日期，不要為了快按錯。")
+    ],
+    "duo":[
+      "慢慢確認～　嗚拉！",
+      "成功就可以放心啦～　呀哈！",
+      "日期再看一次喔～　蛤？",
+      "先準備好，再一起按～　嗚拉！"
+    ],
+    "reminder":[
+      "記得完成這項預約。",
+      "再確認一次日期與時間。",
+      "確認信記得保留。",
+      "需要搶票的頁面先準備好。",
+      "時區再核對一次。",
+      "官方規則出發前再確認。"
+    ],
+    "urgent":[
+      "預約時間接近了。",
+      "頁面與帳號先準備好。",
+      "最後確認日期、人數與付款方式。",
+      "完成後保留確認畫面。"
+    ],
+    "complete":[
+      "完成一項！",
+      "預約已完成。",
+      "這項可以打勾了。",
+      "確認資料收好。",
+      "成功，先放心一件事。",
+      "完成後記得同步到旅程工具。"
+    ],
+    "all":[
+      "預約任務都完成了！",
+      "待辦清空，可以安心一點了。",
+      "出發準備又完成一大段。",
+      "重要預約都收好了。"
+    ]
+  },
+  "shop":{
+    "purin":[
+      "先看看，不用急著決定～",
+      "這個顏色很好看耶♪",
+      "喜歡再試，不喜歡就去下一間～",
+      "逛累了就找咖啡坐一下嘛。",
+      "先把真的喜歡的放在心裡～",
+      "可以再比較一下，不用現在就買。",
+      "這件摸起來舒服嗎？",
+      "如果只是普通喜歡，就先放回去吧～",
+      "看到特別的再停下來就好♪",
+      "提袋變多以前先想一下～",
+      "這個很適合拍照耶。",
+      "兩個人一起看看哪個比較好～",
+      "逛店也不用每間都待很久喔。",
+      "先記價格，等等再決定～",
+      "尺寸合適比勉強買更重要嘛。",
+      "如果沒有喜歡的，我們就去喝東西♪",
+      "這個要不要先拍照記著？",
+      "今天的戰利品不要太重喔～"
+    ],
+    "usagi":[
+      VO("呀哈！","先掃特殊色、限定款和最後尺寸；普通款先不急。"),
+      VO("嗚拉！","沒有喜歡的就快速撤退，把時間留給下一間。"),
+      VO("蛤？","普通色先記價格，不要因為第一間看到就直接買。"),
+      VO("噗嚕","尺寸只剩最後一件時，再判斷是不是本來就想要的。"),
+      VO("嗚拉拉！","試穿前先抓兩三件最有機會的，別一次拿太多。"),
+      VO("呀哈呀哈！","看到特殊配色先拍型號和尺寸，方便後面比較。"),
+      VO("哼～？","價格差不多時，優先考慮真的會常穿的。"),
+      VO("嗚啦——！","五分鐘掃店原則：沒看到喜歡的就走。"),
+      VO("噗嚕……","退稅、庫存和尺寸可以直接問店員，不用自己一直找。"),
+      VO("嗚拉呀哈！","跨店比較時，先留商品照片或完整型號。"),
+      VO("呀——哈！","逛到後段開始累時，只看清單上還缺的品項。"),
+      VO("蛤啊？","如果只是因為『來都來了』想買，先放回去。")
+    ],
+    "duo":[
+      "先看看再決定～　嗚拉！",
+      "喜歡的才帶走♪　呀哈！",
+      "普通款可以再比比看～　哼～？",
+      "逛累了就休息嘛～　噗嚕！"
+    ],
+    "complete":[
+      "買到啦！",
+      "戰利品收下♪",
+      "購物清單少一項。",
+      "成功入手。",
+      "這個真的有喜歡再帶回家。",
+      "找到想要的了。",
+      "戰利品＋1。",
+      "完成一項購物任務。"
+    ]
+  },
+  "money":{
+    "purin":[
+      "先記一下，回去就不用想了～",
+      "這筆是誰付的呀？",
+      "旅行花費慢慢記就好。",
+      "收據先收著嘛。",
+      "記完就可以繼續玩了♪",
+      "共同支出要不要一起分？",
+      "先把金額留下來，分類晚點再整理。",
+      "今天花了多少，晚上再看就好～",
+      "有記下來就不怕忘記。",
+      "這筆看起來是兩個人的吧？",
+      "不要一直算啦，先把資料記好～",
+      "日幣金額先照原價輸入就好。",
+      "回飯店再一起看今天花費～",
+      "記帳完成就去休息一下♪"
+    ],
+    "usagi":[
+      VO("嗚拉！","先記付款人、金額和分攤對象，分類可以晚點補。"),
+      VO("呀哈！","共同支出不要只寫總額，記得勾兩個人。"),
+      VO("蛤？","現金找零後立刻記，比晚上回想準。"),
+      VO("噗嚕","信用卡先記日幣原價，實際台幣之後再對帳。"),
+      VO("哼～？","重複記帳前先看同一天有沒有同額紀錄。"),
+      VO("嗚拉拉！","收據可以先拍照，避免小票弄丟。"),
+      VO("呀哈呀哈！","一人先墊付的項目記清楚，最後結算才不會亂。"),
+      VO("噗嚕……","退款或取消的項目不要直接刪，留一筆負數比較好對。")
+    ],
+    "duo":[
+      "先記下來～　嗚拉！",
+      "等等再算也可以～　呀哈！",
+      "誰付的先記好喔～　蛤？",
+      "記完就繼續玩吧♪　嗚拉！"
+    ]
+  },
+  "note":{
+    "purin":[
+      "想到就先寫一點吧～",
+      "不用寫很完整，關鍵字也可以。",
+      "店員剛剛說的先記下來嘛。",
+      "這個回去可能會用到♪",
+      "旅行裡的小事情也值得記～",
+      "先寫下來，晚上再整理。",
+      "如果怕忘記就先放進這裡～",
+      "樓層或位置可以直接記最短版本。",
+      "臨時改行程也沒關係，記一下就好。",
+      "這段以後看到會想起來耶～",
+      "先把重點留住，不用寫作文啦。",
+      "回飯店再慢慢補完整。",
+      "今天的小發現也收進來♪",
+      "備忘寫好了就不用一直記在腦袋裡～"
+    ],
+    "usagi":[
+      VO("嗚拉！","先寫關鍵字：樓層、位置、時間或店員提醒。"),
+      VO("呀哈！","臨時資訊先記，晚上再整理成完整句子。"),
+      VO("蛤？","看到舊資訊時先標日期，避免之後當成最新規則。"),
+      VO("噗嚕","店名容易混淆就把日文原名一起存。"),
+      VO("哼～？","有截圖也補一句文字，之後搜尋會比較快。"),
+      VO("嗚拉拉！","如果是明天一定要做的事，別只放備忘，也加到待辦。"),
+      VO("呀哈呀哈！","地址、樓層、出口編號這種資訊最值得現場記。"),
+      VO("噗嚕……","備忘清空前先確認不是還沒同步到雲端。")
+    ],
+    "duo":[
+      "先記一下吧～　嗚拉！",
+      "關鍵字就可以喔～　呀哈！",
+      "回去再整理嘛～　噗嚕！",
+      "不要讓它從腦袋跑掉～　嗚拉！"
+    ]
+  },
+  "hotel":{
+    "purin":[
+      "回去躺一下吧～",
+      "今天走很多了耶。",
+      "先洗澡，再慢慢整理照片♪",
+      "回房間就可以放空了～",
+      "我想把鞋子脫掉了……",
+      "今天的戰利品先放好嘛。",
+      "手機記得充電喔～",
+      "明天的衣服要不要先放出來？",
+      "泡完澡一定會更想睡～",
+      "今天的照片晚點慢慢看。",
+      "回去喝點水再休息吧。",
+      "我覺得今天可以早一點睡～",
+      "明天的第一站不用現在想太多嘛。",
+      "行李先整理一點點就好。",
+      "今天也辛苦了～",
+      "回到房間就把腳抬高一下♪",
+      "我已經開始想睡覺了……",
+      "今天到這裡就很好了～"
+    ],
+    "usagi":[
+      VO("嗚拉！","回住宿先充手機、行動電源和相機。"),
+      VO("呀哈！","明早要用的票券、錢包和鑰匙先放同一處。"),
+      VO("噗嚕","洗澡前先把濕衣物或鞋子處理好。"),
+      VO("蛤？","明天如果要早起，鬧鐘現在就設。"),
+      VO("哼～？","行李不用全整理，先把明天會用到的拿出來。"),
+      VO("嗚拉拉！","需要下載的票券或地圖趁有 Wi‑Fi 先存離線。"),
+      VO("呀哈呀哈！","今晚有充電，明天就少一個風險。"),
+      VO("噗嚕……","太晚了就不要再臨時加景點。")
+    ],
+    "duo":[
+      "回去休息吧～　嗚拉！",
+      "今天辛苦啦～　呀哈！",
+      "先洗澡再說～　噗嚕！",
+      "明天再繼續玩♪　嗚拉！"
+    ],
+    "latePurin":[
+      "真的很晚了耶……",
+      "今天就到這裡吧～",
+      "快回去睡覺嘛。",
+      "照片明天再看也可以喔～",
+      "先充電，然後躺平♪",
+      "晚安～明天再一起出去玩。",
+      "不要再加行程了啦～",
+      "我已經睏到不想動了……"
+    ],
+    "lateUsagi":[
+      VO("噗嚕……","太晚了。先回住宿，不要再加新行程。"),
+      VO("蛤？","明早有安排的話，現在先設鬧鐘。"),
+      VO("嗚拉","手機和行動電源插上就去睡。"),
+      VO("哼～？","剩下的整理明天再做。"),
+      VO("噗嚕噗嚕","今天到這裡，先恢復體力。")
+    ]
+  },
+  "day":[
+    {
+      "purin":[
+        "第一天到啦～先把自己安頓好吧。",
+        "剛到的晚上不要太趕喔～",
+        "行李放好以後再慢慢開始♪",
+        "第一天有順利抵達就很棒了。",
+        "先吃點東西，讓旅行慢慢開場～",
+        "今天的任務就是舒服地進入旅行模式。"
+      ],
+      "usagi":[
+        VO("呀哈！","第一天先確認網路、手機電量、錢包與重要文件。"),
+        VO("嗚拉！","如果抵達延誤，直接刪掉最低優先度的備案。"),
+        VO("蛤？","先安頓行李，再決定晚上還要做多少。"),
+        VO("噗嚕","第一晚不要為了多跑一站壓縮睡眠。"),
+        VO("嗚拉呀哈！","晚餐太晚就選不用久等的方案。"),
+        VO("哼～？","睡前把明天最重要的一件事確認好。")
+      ],
+      "duo":[
+        "今天也一起走吧～　呀哈！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "第二天也照自己的步調走吧～",
+        "看到喜歡的就多待一下嘛。",
+        "中間記得找地方坐坐♪",
+        "不用一早就把體力用完喔。",
+        "今天也要留一點發呆時間～",
+        "晚上回去再慢慢整理照片。"
+      ],
+      "usagi":[
+        VO("呀哈！","早上先看今天有沒有固定時間，再安排其他彈性項目。"),
+        VO("嗚拉！","中段至少留一次坐下來休息的空檔。"),
+        VO("蛤？","看到需要比較的東西先記資訊，不急著當場決定。"),
+        VO("噗嚕","手機電量掉太快就提早補電。"),
+        VO("嗚拉呀哈！","如果進度落後，先砍最低優先度項目。"),
+        VO("哼～？","晚上有固定安排時，要提早設定離場時間。")
+      ],
+      "duo":[
+        "今天也一起走吧～　嗚拉！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "今天也先看看自己有多少體力～",
+        "下午以前記得休息一下嘛。",
+        "看到好看的光線就停一下♪",
+        "兩個人都要記得入鏡喔。",
+        "不用每一段都走得很快～",
+        "今天也慢慢收集小回憶。"
+      ],
+      "usagi":[
+        VO("呀哈！","上午和下午體力分配平均，不要前半天用光。"),
+        VO("嗚拉！","活動或交通有異動時，以當天官方資訊優先。"),
+        VO("蛤？","拍照前先確認電量和儲存空間。"),
+        VO("噗嚕","傍晚有安排時，下午就開始倒推時間。"),
+        VO("嗚拉呀哈！","累了就直接縮短備案，不要硬撐。"),
+        VO("哼～？","回住宿前先確認最後一段交通。")
+      ],
+      "duo":[
+        "今天也一起走吧～　噗嚕！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "今天就用舒服的速度走～",
+        "喜歡哪裡就多待一下嘛。",
+        "甜點和休息都可以算行程♪",
+        "走累了就坐著看看四周。",
+        "不用追求跑很多地方喔～",
+        "慢慢走才看得到小東西嘛。"
+      ],
+      "usagi":[
+        VO("呀哈！","今天的優先順序是舒服，不是完成數量。"),
+        VO("嗚拉！","排隊時間太長就比較備案。"),
+        VO("蛤？","能休息就真的休息，不要把空白又塞滿。"),
+        VO("噗嚕","固定時間要守，其他彈性項目都可以讓位。"),
+        VO("嗚拉呀哈！","看到想買的先判斷攜帶和保存方式。"),
+        VO("哼～？","前段進度慢時，後段直接減量。")
+      ],
+      "duo":[
+        "今天也一起走吧～　呀哈！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "今天也把步調放穩吧～",
+        "中間記得喝水和伸伸腿。",
+        "安全、舒服最重要喔。",
+        "看到喜歡的景色再停一下～",
+        "有精神再多玩，累了就休息。",
+        "今天也不要把空檔全部塞滿。"
+      ],
+      "usagi":[
+        VO("呀哈！","今天先把安全和體力放在行程數量前面。"),
+        VO("嗚拉！","移動前確認電量、網路和下一個休息點。"),
+        VO("蛤？","每隔一段時間下來活動一下。"),
+        VO("噗嚕","天氣或能見度不好就縮短戶外停留。"),
+        VO("嗚拉呀哈！","傍晚前確認下一個落腳點和交通方向。"),
+        VO("哼～？","晚上活動依體力決定，不需要硬完成。")
+      ],
+      "duo":[
+        "今天也一起走吧～　嗚拉！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "今天一路都不要太趕～",
+        "吃飽一點再繼續吧。",
+        "下午留一段真的空白也很好。",
+        "看到舒服的地方就多坐一下。",
+        "今天不用證明自己完成了多少～",
+        "慢慢到下一段就好。"
+      ],
+      "usagi":[
+        VO("呀哈！","上午先看體力，再決定今天要不要加備案。"),
+        VO("嗚拉！","吃飯、補給和移動都要保留緩衝。"),
+        VO("蛤？","下午的空白不要臨時全部塞滿。"),
+        VO("噗嚕","跨區移動前確認手機、錢包和重要物品。"),
+        VO("嗚拉呀哈！","抵達後先休息，再決定要不要出去。"),
+        VO("哼～？","有固定晚間安排時，提早確認交通。")
+      ],
+      "duo":[
+        "今天也一起走吧～　噗嚕！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "今天比較有任務感，也要記得休息～",
+        "重要的事情完成後就慢慢來。",
+        "中午一定要好好吃一餐。",
+        "走很多的日子更要記得坐一下。",
+        "拍照和散步都不用搶快。",
+        "晚上就讓自己好好恢復～"
+      ],
+      "usagi":[
+        VO("呀哈！","早上的固定事項最優先，其他都可以讓位。"),
+        VO("嗚拉！","報到類行程把找入口和排隊一起算進時間。"),
+        VO("蛤？","上午完成重點後，中午先好好吃飯。"),
+        VO("噗嚕","下午如果延誤，優先保留住宿和已預約事項。"),
+        VO("嗚拉呀哈！","今天步行量高就提早補水。"),
+        VO("哼～？","出發前再查一次現場營運狀態。")
+      ],
+      "duo":[
+        "今天也一起走吧～　呀哈！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "今天有變動也沒關係嘛～",
+        "照現場狀況決定就好。",
+        "移動多的日子更要留緩衝。",
+        "下午慢慢把節奏收回來～",
+        "有備案就不用擔心臨時改變。",
+        "今天只要順順走完就很好了。"
+      ],
+      "usagi":[
+        VO("呀哈！","先看當天狀態再選方案，不預設一定走主案。"),
+        VO("嗚拉！","移動任務要留時間給找入口、找月台或停車。"),
+        VO("蛤？","天氣普通時，備案往往比硬撐更有效率。"),
+        VO("噗嚕","今天只補真正缺少的東西，不重新展開整份清單。"),
+        VO("嗚拉呀哈！","跨城或長距離交通先確認班次。"),
+        VO("哼～？","今天的成功標準是順利完成下一段交接。")
+      ],
+      "duo":[
+        "今天也一起走吧～　嗚拉！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "旅程後段更要留體力喔～",
+        "想完成的事情慢慢一個個來。",
+        "下午以前記得坐下來休息。",
+        "東西變多了要注意行李重量喔。",
+        "拍到喜歡的照片就很值得了～",
+        "晚上如果還有事，中間一定要休息。"
+      ],
+      "usagi":[
+        VO("呀哈！","上午只處理還沒完成的清單，不重新逛一輪。"),
+        VO("嗚拉！","下午要留電量、儲存空間和體力。"),
+        VO("蛤？","是否多留一段時間，要用後續移動倒推。"),
+        VO("噗嚕","大件物品先想怎麼放進行李。"),
+        VO("嗚拉呀哈！","取行李或轉乘前先看交通時間。"),
+        VO("哼～？","晚上有移動時，不要拖到最後一班才出發。")
+      ],
+      "duo":[
+        "今天也一起走吧～　噗嚕！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    },
+    {
+      "purin":[
+        "最後一天就慢慢來吧～",
+        "不要因為要回家就突然趕好多事。",
+        "最後一餐也要好好吃♪",
+        "行李和證件比多跑一站重要。",
+        "最後再拍幾張旅行照片吧。",
+        "回家以前，再好好看看這趟旅行～"
+      ],
+      "usagi":[
+        VO("呀哈！","最後一天先把退房、寄物、取行李和去機場時間鎖好。"),
+        VO("嗚拉！","觀光全部放在離境時間之前，不要反過來壓縮。"),
+        VO("蛤？","國際線保留足夠提早到場時間。"),
+        VO("噗嚕","最後採買以能快速完成的為主。"),
+        VO("嗚拉呀哈！","離開住宿前再做一次證件、錢包、手機、行李確認。"),
+        VO("哼～？","交通臨時異動時，直接犧牲最後一個彈性項目。")
+      ],
+      "duo":[
+        "今天也一起走吧～　呀哈！",
+        "照自己的步調就好～　嗚拉！",
+        "累了就休息嘛～　呀哈！",
+        "今天也一起把回憶收好♪　嗚拉呀哈！"
+      ]
+    }
+  ],
+  "egg":[
+    "找到隱藏彩蛋～",
+    "旅伴集合！",
+    "一起出發吧～　呀哈！",
+    "被你發現了。",
+    "散步時間～",
+    "咻————！",
+    "還沒睡嗎……？",
+    "呀哈！還可以玩！",
+    "真的該睡覺了啦～",
+    "今天也完成好多事。",
+    "不想這麼快結束～",
+    "旅行模式 ON！",
+    "鴨寶幫集合！",
+    "又被你按到了～",
+    "今天也一起玩到底。",
+    "先拍一張再走～",
+    "噗嚕！",
+    "一起慢慢玩吧♪",
+    "嗚拉呀哈！",
+    "下一個彩蛋在哪裡呢～"
+  ],
+  "time":{
+    "morning":{
+      "purin":[
+        "早安～先讓自己慢慢醒來。",
+        "早餐吃飽再出發吧♪",
+        "今天也一起出去玩～",
+        "先喝點水，再看看第一站。",
+        "早上的步調不要太急嘛。",
+        "手機有充飽嗎？",
+        "今天的第一張照片要拍什麼？",
+        "如果還睏就多坐一下～"
+      ],
+      "usagi":[
+        VO("呀哈！","早上先確認手機、錢包、票券和行動電源。"),
+        VO("嗚拉！","第一站有固定時間的話，先倒推離開住宿時間。"),
+        VO("噗嚕","早餐不要吃到壓縮後面固定行程。"),
+        VO("蛤？","今天如果要早起，先確認沒有睡過頭。"),
+        VO("嗚拉呀哈！","出門前看一次天氣和交通異動。"),
+        VO("呀哈呀哈！","鞋子、外套和雨具依今天行程一次帶好。")
+      ],
+      "duo":[
+        "早安～　呀哈！",
+        "吃飽再出發吧～　嗚拉！",
+        "今天也一起玩♪　呀哈！",
+        "東西帶齊了嗎～　蛤？"
+      ]
+    },
+    "afternoon":{
+      "purin":[
+        "下午先坐一下嘛～",
+        "要不要喝杯咖啡？",
+        "走到一半休息一下很重要喔。",
+        "下午的光線開始變漂亮了～",
+        "先看看還有多少體力。",
+        "如果累了就少一站嘛。",
+        "甜點時間差不多到了吧♪",
+        "慢慢走，晚上還有時間。"
+      ],
+      "usagi":[
+        VO("嗚拉！","下午先看體力，再決定備案要不要加。"),
+        VO("呀哈！","傍晚有拍照或固定安排時，現在就開始倒推。"),
+        VO("蛤？","手機電量低於一半就先補電。"),
+        VO("噗嚕","咖啡休息可以順便整理下一段交通。"),
+        VO("嗚拉拉！","不要把下午所有空檔都塞成新景點。"),
+        VO("哼～？","如果已經延誤，就直接砍最低優先度行程。")
+      ],
+      "duo":[
+        "下午也慢慢走～　嗚拉！",
+        "先喝點東西嘛～　呀哈！",
+        "還有體力嗎～　蛤？",
+        "傍晚前先休息一下♪　嗚拉！"
+      ]
+    },
+    "evening":{
+      "purin":[
+        "今天玩得開心嗎～",
+        "晚餐時間快到了耶。",
+        "夜晚也可以慢慢拍♪",
+        "差不多開始收尾吧～",
+        "今天的照片一定很多。",
+        "吃飽就不要再走太遠嘛。",
+        "回去以前再散步一下？",
+        "今晚想早點回房間～"
+      ],
+      "usagi":[
+        VO("呀哈！","晚上先確認最後一段交通和住宿方向。"),
+        VO("嗚拉！","有預約晚餐時，不要在前一站拖到最後一刻。"),
+        VO("噗嚕","夜間拍照前先看手機與相機剩餘電量。"),
+        VO("蛤？","最後一班車或末班交通有風險時，優先提早移動。"),
+        VO("哼～？","今天已經超時就不要再加臨時行程。"),
+        VO("嗚拉呀哈！","回住宿前把明早一定要做的事確認一次。")
+      ],
+      "duo":[
+        "晚上也慢慢玩～　嗚拉！",
+        "晚餐要吃飽喔～　呀哈！",
+        "差不多收尾吧～　噗嚕！",
+        "回去以前再拍一張♪　嗚拉！"
+      ]
+    },
+    "late":{
+      "purin":[
+        "真的該睡了啦～",
+        "剩下的明天再想嘛。",
+        "手機插上就躺平吧。",
+        "今天已經玩很多了～",
+        "晚安，明天再一起出去玩♪",
+        "照片不用今晚全部整理。",
+        "先喝水，再去睡覺～",
+        "我已經睏了……"
+      ],
+      "usagi":[
+        VO("噗嚕……","現在優先睡眠，不再新增行程。"),
+        VO("蛤？","鬧鐘和充電確認完就休息。"),
+        VO("嗚拉","明早固定事項先看一眼，其餘明天處理。"),
+        VO("哼～？","照片和記帳可以明天補，不要熬夜。"),
+        VO("噗嚕噗嚕","手機、行動電源、相機都插上。"),
+        VO("嗚拉","門鎖、房卡、錢包放好就睡。")
+      ],
+      "duo":[
+        "晚安～　噗嚕……",
+        "明天再繼續玩♪　嗚拉！",
+        "真的要睡囉～　蛤？",
+        "充電插好就躺平～　噗嚕。"
+      ]
+    }
+  }
+};
+const USAGI_VOICE_LINES=[
+  "蛤？",
+  "嗚拉！",
+  "呀哈！",
+  "嗚拉呀哈呀哈嗚拉～",
+  "哼～？",
+  "噗嚕",
+  "呀哈——！",
+  "嗚拉拉！",
+  "噗嚕……",
+  "呀哈呀哈！",
+  "嗚拉呀哈！",
+  "蛤啊？"
+];
+const usagiVoiceImageState=new WeakMap();
+
+function dialogueText(msg){
+  if(msg&&typeof msg==="object")return String(msg.text||"");
+  return String(msg??"");
+}
+function dialogueHint(msg){
+  if(msg&&typeof msg==="object")return String(msg.hint||"");
+  return "";
+}
+function isUsagiVoiceLine(msg){
+  const text=dialogueText(msg);
+  return USAGI_VOICE_LINES.includes(text)||/^(?:呀哈|呀——哈|嗚拉|嗚啦|噗嚕|蛤|哼)/.test(text);
+}
+function usagiVoiceArtFor(msg){
+  const text=dialogueText(msg);
+  if(/蛤|哼/.test(text))return "./usagi_think.png?v=430";
+  if(/噗嚕/.test(text))return "./usagi_sticker.png?v=430";
+  if(/嗚拉.*呀哈|呀哈.*嗚拉|嗚啦.*呀哈/.test(text))return "./usagi_dash.png?v=430";
+  if(/呀哈|呀——哈/.test(text))return "./usagi_success.png?v=430";
+  if(/嗚拉|嗚啦/.test(text))return "./usagi_excited.png?v=430";
+  return "";
+}
+function flashUsagiVoiceArt(el,msg,context=""){
+  if(!el||!isUsagiVoiceLine(msg)||context==="weather")return;
+  const img=el.matches?.("img")?el:el.querySelector?.("img");
+  if(!img)return;
+  const next=usagiVoiceArtFor(msg);
+  if(!next)return;
+
+  const prev=usagiVoiceImageState.get(img);
+  if(prev?.timer)clearTimeout(prev.timer);
+  const original=prev?.original||img.getAttribute("src");
+  usagiVoiceImageState.set(img,{original,timer:null});
+
+  img.classList.add("usagi-voice-face");
+  img.src=next;
+  const timer=setTimeout(()=>{
+    const state=usagiVoiceImageState.get(img);
+    if(state?.original)img.src=state.original;
+    img.classList.remove("usagi-voice-face");
+    usagiVoiceImageState.delete(img);
+  },1450);
+  usagiVoiceImageState.set(img,{original,timer});
+}
+
+const HERO_EGG_POOL=[
+  {type:"classic",text:"我們是鴨寶幫！",image:"./duck_gang.png?v=5311",tone:"duo"},
+  {type:"classic",text:"我們是海豹幫！",image:"./seal_gang.png?v=5311",tone:"duo"},
+  {
+    type:"scene",id:"sendoff",image:"./egg-sendoff-v539.png?v=539",tone:"duo",
+    captions:["要玩得開心喔～","記得拍很多照片回來！","家裡交給我們～","鴨寶幫九州玩得開心！","海豹幫看家 (･∞･ﾐэ )Э"],
+    characters:[
+      {id:"quagsire",label:"沼王",lines:["路上小心～","哇～"],hotspot:{left:4,top:28,width:21,height:39}},
+      {id:"rowlet",label:"木木梟",lines:["記得帶伴手禮……！","咕！咕！咕——？（歪頭）"],hotspot:{left:1,top:58,width:23,height:29}},
+      {id:"ditto",label:"百變怪",lines:["我們會在家等你們～","（ • _ • ）"],hotspot:{left:70,top:45,width:19,height:26}}
+    ]
+  },
+  {
+    type:"scene",id:"cry",image:"./egg-cry-v539.png?v=539",tone:"duo",
+    captions:["真的不能一起去嗎……","要記得我們喔……","……伴手禮"],
+    characters:[
+      {id:"quagsire",label:"沼王",lines:["我幫你們看家。","……"],hotspot:{left:4,top:23,width:23,height:33}},
+      {id:"rowlet",label:"木木梟",lines:["嗚……我也想去……","真的……不能塞進行李箱嗎？"],hotspot:{left:18,top:38,width:22,height:28}},
+      {id:"ditto",label:"百變怪",lines:["那我變小一點也不行嗎……","我可以變成行李耶……"],hotspot:{left:4,top:49,width:19,height:22}}
+    ]
+  },
+  {
+    type:"scene",id:"home-sleep",image:"./egg-home-sleep-v539.png?v=539",tone:"hotel",
+    captions:["留守組今日任務：睡覺。","今天也很安靜～","等你們回來再叫我……","今天也很安靜～","看家中……Zzz"],
+    characters:[
+      {id:"quagsire",label:"沼王",lines:["一切正常。","看家中～"],hotspot:{left:17,top:31,width:25,height:32}},
+      {id:"rowlet",label:"木木梟",lines:["Zzz……","我沒有睡……Zzz……","等你們回來再叫我……"],hotspot:{left:28,top:53,width:30,height:28}},
+      {id:"ditto",label:"百變怪",lines:["今天變成沙發","看家好累……","先躺一下"],hotspot:{left:57,top:54,width:19,height:20}}
+    ]
+  }
+];
+
+const SECRET_LIFE_SCENES=[
+  {id:"hotpot-party",image:"./secret-life-hotpot-party.webp?v=5319",alt:"趁主人不在，呆呆獸、可達鴨、火腿豬、暴暴龍、木木梟、Olaf、海豹與百變怪一起圍著火鍋開派對"},
+  {id:"want-to-travel",image:"./secret-life-want-to-travel.webp?v=5319",alt:"大家偷偷準備行李，也想一起去旅行"},
+  {id:"seal-gang-mission",image:"./secret-life-seal-gang-mission.webp?v=5319",alt:"可達鴨、呆呆獸和木木梟組成討伐隊，前往海豹與百變怪的抱枕基地"},
+  {id:"midnight-snack",image:"./secret-life-midnight-snack.webp?v=5319",alt:"深夜大家偷偷拿零食吃"},
+  {id:"sofa-battle",image:"./secret-life-sofa-battle.webp?v=5319",alt:"大家在客廳搶沙發最舒服的位置"},
+  {id:"watchduty-sleep",image:"./secret-life-watchduty-sleep.webp?v=5319",alt:"木木梟負責看家卻第一個睡著"},
+  {id:"house-mess",image:"./secret-life-house-mess.webp?v=5319",alt:"暴暴龍玩得太開心把客廳弄得有點亂"},
+  {id:"hide-and-seek",image:"./secret-life-hide-and-seek.webp?v=5319",alt:"大家玩躲貓貓，但每個人都躲得很明顯"},
+  {id:"pillow-fight",image:"./secret-life-pillow-fight.webp?v=5319",alt:"大家本來準備睡覺，最後玩起枕頭大戰"},
+  {id:"ditto-usagi",image:"./secret-life-ditto-usagi.webp?v=5319",alt:"百變怪假裝成烏薩奇回來了"},
+  {id:"block-building",image:"./secret-life-block-building.webp?v=5319",alt:"大家堆積木，百變怪變成妙蛙種子用藤蔓幫忙"},
+  {id:"olaf-bed",image:"./secret-life-olaf-bed.webp?v=5319",alt:"Olaf 占掉大部分床位，其他角色不知道要睡哪裡"}
+];
+let secretLifeIndex=0;
+let secretLifePreloadPromise=null;
+let secretLifeSwipeIgnoreClick=false;
+
+function preloadSecretLifeAssets(concurrency=2){
+  if(secretLifePreloadPromise)return secretLifePreloadPromise;
+  const queue=SECRET_LIFE_SCENES.map(scene=>scene.image);
+  let cursor=0;
+  const worker=()=>new Promise(resolve=>{
+    const next=()=>{
+      if(cursor>=queue.length){resolve();return}
+      const src=queue[cursor++];
+      const image=new Image();
+      image.onload=image.onerror=next;
+      image.src=src;
+    };
+    next();
+  });
+  secretLifePreloadPromise=Promise.all(
+    Array.from({length:Math.min(Math.max(1,concurrency),queue.length)},worker)
+  ).catch(()=>{});
+  return secretLifePreloadPromise;
+}
+function renderSecretLifeScene(index=secretLifeIndex,animate=true){
+  const img=$("#secretLifeImg"),counter=$("#secretLifeCounter");
+  if(!img||!SECRET_LIFE_SCENES.length)return;
+  secretLifeIndex=(index+SECRET_LIFE_SCENES.length)%SECRET_LIFE_SCENES.length;
+  const scene=SECRET_LIFE_SCENES[secretLifeIndex];
+  if(animate){
+    img.classList.remove("swap");
+    void img.offsetWidth;
+  }
+  img.src=scene.image;
+  img.alt=scene.alt||"主人不在家的秘密生活";
+  if(animate)img.classList.add("swap");
+  if(counter)counter.textContent=`${secretLifeIndex+1} / ${SECRET_LIFE_SCENES.length}`;
+}
+function openSecretLifeAlbum(){
+  if(!isBuddyTheme()||!SECRET_LIFE_SCENES.length)return;
+  preloadSecretLifeAssets();
+  const album=$("#secretLifeAlbum");if(!album)return;
+  renderSecretLifeScene(secretLifeIndex,false);
+  album.setAttribute("aria-hidden","false");
+  album.classList.remove("show");void album.offsetWidth;album.classList.add("show");
+}
+function closeSecretLifeAlbum(){
+  const album=$("#secretLifeAlbum");if(!album)return;
+  album.classList.remove("show");
+  album.setAttribute("aria-hidden","true");
+}
+function moveSecretLife(step=1){
+  renderSecretLifeScene(secretLifeIndex+step,true);
+}
+
+const PAGE_SWITCH_DASH_EGG_CHANCE=0.12;
+const PAGE_SWITCH_DASH_EGG_COOLDOWN=4*60*1000;
+
+const dialogueDecks=new WeakMap();
+function pickLine(list,fallback=""){
+  if(!Array.isArray(list)||!list.length)return fallback;
+  let deck=dialogueDecks.get(list);
+  if(!deck||!deck.length){
+    deck=Array.from({length:list.length},(_,i)=>i);
+    for(let i=deck.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [deck[i],deck[j]]=[deck[j],deck[i]];
+    }
+    dialogueDecks.set(list,deck);
+  }
+  return list[deck.pop()];
+}
+function pickDifferentText(list,current=""){
+  if(!Array.isArray(list)||!list.length)return current;
+  const unique=[...new Set(list.map(x=>String(x??"")).filter(Boolean))];
+  const choices=unique.filter(x=>x!==String(current??""));
+  if(!choices.length)return String(current??unique[0]??"");
+  return choices[Math.floor(Math.random()*choices.length)];
+}
+function cycleHeroEggCaption(scene,label){
+  if(!scene||!label)return;
+  const pool=scene.type==="scene"?scene.captions:[scene.text];
+  const next=pickDifferentText(pool,label.textContent);
+  if(!next||next===label.textContent)return;
+  label.textContent=next;
+  label.classList.remove("caption-swap");
+  void label.offsetWidth;
+  label.classList.add("caption-swap");
+}
+
+function japanHour(){
+  try{
+    return Number(new Intl.DateTimeFormat("en-US",{timeZone:TRIP?.timezone||"Asia/Tokyo",hour:"2-digit",hourCycle:"h23"}).format(new Date()));
+  }catch{return new Date().getHours()}
+}
+function timeDialogue(kind="duo"){
+  const h=japanHour();
+  const slot=h<11?BUDDY_DIALOG.time.morning:h<17?BUDDY_DIALOG.time.afternoon:h<22?BUDDY_DIALOG.time.evening:BUDDY_DIALOG.time.late;
+  return slot?.[kind]||slot?.duo||BUDDY_DIALOG.duo;
+}
+function buddyToneForContext(context){
+  return ({weather:"weather",food:"food",booking:"booking",shop:"shop",money:"money",note:"note",hotel:"hotel",day:"day",duo:"duo"})[context]||"";
+}
+function toast(msg,tone=""){
   const t=$("#toast"); if(!t)return;
-  t.textContent=String(message||"");
-  t.classList.remove("show");
-  void t.offsetWidth;
-  t.classList.add("show");
-  clearTimeout(toast._timer);
-  toast._timer=setTimeout(()=>t.classList.remove("show"),1800);
+  t.textContent=dialogueText(msg);t.dataset.tone=tone||"";
+  t.classList.remove("show");void t.offsetWidth;t.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t=setTimeout(()=>{t.classList.remove("show");setTimeout(()=>{t.dataset.tone=""},220)},1900);
 }
 
-function offlinePackMeta(){
-  try{return JSON.parse(localStorage.getItem(OFFLINE_PACK_META_KEY)||"null")}catch{return null}
-}
-function saveOfflinePackMeta(value){
-  try{value?localStorage.setItem(OFFLINE_PACK_META_KEY,JSON.stringify(value)):localStorage.removeItem(OFFLINE_PACK_META_KEY)}catch{}
-}
-function formatOfflinePackTime(ts){
-  if(!ts)return "";
-  try{return new Intl.DateTimeFormat("zh-TW",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}).format(new Date(ts))}catch{return ""}
-}
-function setOfflinePackProgress(done,total){
-  const bar=$("#offlinePackProgressBar"),label=$("#offlinePackProgressText");
-  const pct=total?Math.round(done/total*100):0;
-  if(bar)bar.style.width=`${pct}%`;
-  if(label)label.textContent=offlinePackBusy?`${done} / ${total}`:"";
-}
-async function offlinePackCachedCount(){
-  if(!("caches" in window))return 0;
-  const cache=await caches.open(OFFLINE_PACK_CACHE);
-  let count=0;
-  for(const asset of OFFLINE_PACK_ASSETS){
-    if(await cache.match(asset))count++;
+function showBuddySpeech(el,msg,tone="duo"){
+  const bubble=$("#buddySpeechBubble");
+  if(!bubble||!el){toast(msg,tone);return;}
+  const rect=el.getBoundingClientRect();
+  const vw=Math.max(document.documentElement.clientWidth||0,window.innerWidth||0);
+  const vh=Math.max(document.documentElement.clientHeight||0,window.innerHeight||0);
+  const main=dialogueText(msg);
+
+  bubble.innerHTML=`<span class="buddy-speech-main">${esc(main)}</span>`;
+  bubble.setAttribute("aria-label",main);
+  bubble.classList.remove("has-hint","show","below","side-left","side-right","single-line","line-long","line-xlong");
+  bubble.dataset.tone=tone||"duo";
+  const isEventBuddy=!!el.classList?.contains('event-buddy');
+  if(isEventBuddy){
+    bubble.classList.add('single-line');
+    if(main.length>24)bubble.classList.add('line-xlong');
+    else if(main.length>17)bubble.classList.add('line-long');
   }
-  return count;
-}
-async function refreshOfflinePackStatus(){
-  const status=$("#offlinePackStatus"),download=$("#offlinePackDownloadBtn"),remove=$("#offlinePackRemoveBtn");
-  if(!status||!download)return;
-  if(!("caches" in window)){
-    status.textContent="這個瀏覽器不支援離線旅行包。";
-    download.disabled=true;if(remove)remove.hidden=true;return;
-  }
-  const count=await offlinePackCachedCount();
-  const total=OFFLINE_PACK_ASSETS.length;
-  const meta=offlinePackMeta();
-  if(offlinePackBusy)return;
-  setOfflinePackProgress(count,total);
-  if(count===total){
-    const when=formatOfflinePackTime(meta?.updatedAt);
-    status.textContent=`已下載 ${total} 項 · 約 ${OFFLINE_PACK_APPROX_MB} MB${when?` · ${when} 更新`:""}`;
-    download.textContent="更新離線包";
-    if(remove)remove.hidden=false;
-  }else if(count>0){
-    status.textContent=`部分下載 ${count} / ${total} · 點一下可補齊`;
-    download.textContent="繼續下載";
-    if(remove)remove.hidden=false;
+  bubble.style.left='-9999px';
+  bubble.style.top='-9999px';
+  bubble.style.visibility='hidden';
+  bubble.style.opacity='0';
+  bubble.classList.add('show');
+  const bw=bubble.offsetWidth||190;
+  const bh=bubble.offsetHeight||58;
+
+  if(isEventBuddy){
+    const gap=12;
+    const spaceLeft=Math.max(0,rect.left-14);
+    const spaceRight=Math.max(0,vw-rect.right-14);
+    const preferLeft=rect.left>=vw*0.52;
+    let side='left';
+    if(preferLeft&&spaceLeft>=bw)side='left';
+    else if(spaceRight>=bw)side='right';
+    else if(spaceLeft>=spaceRight)side='left';
+    else side='right';
+
+    const anchorY=Math.max(bh/2+10,Math.min(vh-bh/2-10,rect.top+rect.height/2));
+    const anchorX=side==='left' ? Math.max(bw+10,rect.left-gap) : Math.min(vw-bw-10,rect.right+gap);
+    bubble.style.left=`${Math.round(anchorX)}px`;
+    bubble.style.top=`${Math.round(anchorY)}px`;
+    bubble.classList.add(side==='left'?'side-left':'side-right');
   }else{
-    status.textContent=`尚未下載 · 約 ${OFFLINE_PACK_APPROX_MB} MB`;
-    download.textContent="下載完整離線包";
-    if(remove)remove.hidden=true;
-  }
-}
-async function cacheOfflineAsset(cache,asset){
-  const req=new Request(new URL(asset,location.href),{cache:"reload",credentials:"same-origin"});
-  const res=await fetch(req);
-  if(!res.ok)throw new Error(`${res.status} ${new URL(asset,location.href).pathname.split("/").pop()}`);
-  await cache.put(req,res.clone());
-}
-async function downloadOfflinePack(){
-  if(offlinePackBusy||!("caches" in window))return;
-  offlinePackBusy=true;
-  const download=$("#offlinePackDownloadBtn"),remove=$("#offlinePackRemoveBtn"),status=$("#offlinePackStatus");
-  if(download){download.disabled=true;download.textContent="下載中…"}if(remove)remove.disabled=true;
-  if(status)status.textContent="正在下載旅行圖片與備案素材…";
-  setOfflinePackProgress(0,OFFLINE_PACK_ASSETS.length);
-  // Keep the latest authorized itinerary JSON on-device as part of the offline experience.
-  if(TRIP)cacheAuthorizedTrip(TRIP,currentAuthUser||{email:""});
-  const cache=await caches.open(OFFLINE_PACK_CACHE);
-  let done=0;const failures=[];let cursor=0;
-  const worker=async()=>{
-    while(cursor<OFFLINE_PACK_ASSETS.length){
-      const index=cursor++;
-      const asset=OFFLINE_PACK_ASSETS[index];
-      try{await cacheOfflineAsset(cache,asset)}catch(err){failures.push({asset,error:String(err?.message||err)})}
-      done++;setOfflinePackProgress(done,OFFLINE_PACK_ASSETS.length);
-      if(status)status.textContent=`正在下載 ${done} / ${OFFLINE_PACK_ASSETS.length}${failures.length?` · ${failures.length} 項待重試`:""}`;
-    }
-  };
-  try{
-    await Promise.all(Array.from({length:4},worker));
-    const wanted=new Set(OFFLINE_PACK_ASSETS.map(a=>new URL(a,location.href).href));
-    for(const req of await cache.keys())if(!wanted.has(req.url))await cache.delete(req);
-    const count=await offlinePackCachedCount();
-    if(count===OFFLINE_PACK_ASSETS.length){
-      saveOfflinePackMeta({version:APP_VERSION,updatedAt:Date.now(),count});
-      try{await navigator.storage?.persist?.()}catch{}
-      toast("離線旅行包下載完成");
+    const safeHalf=Math.min(124,Math.max(88,(vw-24)/2));
+    const center=rect.left+rect.width/2;
+    const x=Math.max(12+safeHalf,Math.min(vw-12-safeHalf,center));
+    const below=rect.top<132;
+    bubble.style.left=`${Math.round(x)}px`;
+    if(below){
+      bubble.style.top=`${Math.round(Math.max(12,Math.min(vh-bh-12,rect.bottom+9)))}px`;
+      bubble.classList.add('below');
     }else{
-      saveOfflinePackMeta({version:APP_VERSION,updatedAt:Date.now(),count,partial:true});
-      toast(`離線包尚有 ${OFFLINE_PACK_ASSETS.length-count} 項未完成`);
+      bubble.style.top=`${Math.round(Math.max(bh+12,Math.min(vh-12,rect.top-8)))}px`;
     }
-  }finally{
-    offlinePackBusy=false;
-    if(download)download.disabled=false;if(remove)remove.disabled=false;
-    await refreshOfflinePackStatus();
+  }
+
+  bubble.style.visibility='';
+  bubble.style.opacity='';
+  bubble.classList.remove('show');
+  void bubble.offsetWidth;
+  bubble.classList.add('show');
+  clearTimeout(showBuddySpeech._t);
+  showBuddySpeech._t=setTimeout(()=>{
+    bubble.classList.remove('show','below','side-left','side-right','single-line','line-long','line-xlong');
+    setTimeout(()=>{
+      bubble.dataset.tone='';
+      bubble.textContent='';
+      bubble.removeAttribute('aria-label');
+    },180);
+  },3000);
+}
+
+function buddyMoodFor(kind,msg=""){
+  const text=dialogueText(msg);
+  if(kind==="usagi"&&/(蛤|哼|噗嚕)/.test(text))return "question";
+  if(kind==="usagi"&&/(嗚拉|嗚啦|呀哈|！！|!)/.test(text))return "chaos";
+  if(kind==="purin")return "soft";
+  return "pop";
+}
+function animateBuddyMood(el,kind,msg){
+  if(!el)return;
+  const mood=buddyMoodFor(kind,msg);
+  ["buddy-react-soft","buddy-react-chaos","buddy-react-question","buddy-react-pop"].forEach(c=>el.classList.remove(c));
+  void el.offsetWidth;
+  el.classList.add(`buddy-react-${mood}`);
+  setTimeout(()=>el.classList.remove(`buddy-react-${mood}`),620);
+}
+
+function isBuddyTheme(){return document.documentElement.dataset.theme==="buddy"}
+function buddySparkBurst(x=50,y=45,tone="duo"){
+  if(!isBuddyTheme()) return;
+  const layer=$("#buddySparkLayer"); if(!layer)return;
+  const glyphs={
+    weather:["•","✦","•","·","✦","•","·"],
+    food:["♡","✦","♡","♥","✦","♡","♥"],
+    booking:["✦","!","★","✦","!","★","✦"],
+    shop:["✦","★","✧","✦","★","✧","✦"],
+    money:["¥","✦","¥","✧","¥","✦","✧"],
+    note:["✎","♡","✦","✎","♡","✧","✦"],
+    hotel:["♡","✦","☾","♡","✧","☾","♡"],
+    day:["✦","✧","★","♡","✦","★","✧"],
+    duo:["✦","✧","★","✦","♡","✧","★"]
+  };
+  const parts=glyphs[tone]||glyphs.duo;
+  layer.dataset.tone=tone;
+  layer.innerHTML=parts.map((p,i)=>`<i style="--i:${i};--x:${x+(i-3)*7}%;--y:${y+(i%2?3:-3)}%">${p}</i>`).join("");
+  layer.classList.remove("play"); void layer.offsetWidth; layer.classList.add("play");
+  setTimeout(()=>{layer.classList.remove("play");layer.innerHTML="";layer.dataset.tone=""},1100);
+}
+function buddyCelebrate(text="完成！",image="./buddy_success.png?v=430",tone="duo"){
+  if(!isBuddyTheme())return;
+  const wrap=$("#buddyCelebration"),img=$("#buddyCelebrateImg"),label=$("#buddyCelebrateText"); if(!wrap)return;
+  // A user-opened home easter egg is modal and persistent. Other buddy celebrations
+  // must never replace its image or text while it is open.
+  if(wrap.dataset.heroEgg==="1"&&wrap.classList.contains("show"))return;
+  img.src=image; label.textContent=dialogueText(text); wrap.dataset.tone=tone; wrap.classList.remove("show"); void wrap.offsetWidth; wrap.classList.add("show"); buddySparkBurst(50,42,tone);
+  clearTimeout(buddyCelebrate._t); buddyCelebrate._t=setTimeout(()=>{wrap.classList.remove("show");wrap.dataset.tone=""},1450);
+}
+function clearHeroEggInteractive(){
+  const hotspots=$("#buddyEggHotspots"),speech=$("#buddyEggSpeech");
+  if(hotspots)hotspots.innerHTML="";
+  if(speech){
+    speech.textContent="";
+    speech.classList.remove("show","below","is-long","is-xlong");
+    speech.style.left="";speech.style.top="";
   }
 }
-async function removeOfflinePack(){
-  if(offlinePackBusy||!("caches" in window))return;
-  offlinePackBusy=true;
-  const status=$("#offlinePackStatus"),download=$("#offlinePackDownloadBtn"),remove=$("#offlinePackRemoveBtn");
-  if(download)download.disabled=true;if(remove)remove.disabled=true;
-  if(status)status.textContent="正在移除離線圖片…";
-  try{
-    await caches.delete(OFFLINE_PACK_CACHE);
-    saveOfflinePackMeta(null);
-    toast("已移除離線旅行包");
-  }finally{
-    offlinePackBusy=false;if(download)download.disabled=false;if(remove)remove.disabled=false;
-    await refreshOfflinePackStatus();
+function closeHeroEgg(){
+  closeSecretLifeAlbum();
+  const wrap=$("#buddyCelebration"); if(!wrap)return;
+  clearTimeout(buddyCelebrate._t);
+  wrap.classList.remove("show","hero-egg","hero-egg-scene");
+  wrap.dataset.heroEgg="";wrap.dataset.scene="";wrap.dataset.tone="";
+  clearHeroEggInteractive();
+  const img=$("#buddyCelebrateImg"),stage=$("#buddyEggStage");
+  if(img)img.onclick=null;
+  if(stage)stage.onclick=null;
+}
+function showHeroEggSpeech(scene,charId,button){
+  const speech=$("#buddyEggSpeech"),stage=$("#buddyEggStage");
+  if(!speech||!stage||!button)return;
+  const character=scene.characters?.find(c=>c.id===charId);if(!character)return;
+  const line=String(pickLine(character.lines)||"");
+  speech.textContent=line;
+  speech.classList.remove("show","below","is-long","is-xlong");
+  speech.classList.toggle("is-long",line.length>11);
+  speech.classList.toggle("is-xlong",line.length>18);
+  speech.style.left="6px";speech.style.top="6px";
+
+  // Measure the rendered bubble, then clamp it completely inside the 4:3 scene.
+  // Prefer above the tapped character; if there is not enough room, place it below.
+  speech.style.visibility="hidden";
+  speech.style.opacity="0";
+  speech.classList.add("show");
+  const br=button.getBoundingClientRect(),sr=stage.getBoundingClientRect();
+  const sw=speech.offsetWidth,sh=speech.offsetHeight;
+  if(!sr.width||!sr.height||!sw||!sh){speech.style.visibility="";speech.style.opacity="";return}
+  const gap=8,pad=7;
+  const cx=br.left+br.width/2-sr.left;
+  let left=cx-sw/2;
+  left=Math.max(pad,Math.min(sr.width-sw-pad,left));
+  let top=br.top-sr.top-sh-gap;
+  let below=false;
+  if(top<pad){top=br.bottom-sr.top+gap;below=true}
+  top=Math.max(pad,Math.min(sr.height-sh-pad,top));
+  speech.style.left=`${Math.round(left)}px`;
+  speech.style.top=`${Math.round(top)}px`;
+  speech.classList.toggle("below",below);
+  speech.style.visibility="";
+  speech.style.opacity="";
+  speech.classList.remove("show");void speech.offsetWidth;speech.classList.add("show");
+}
+function showHeroEgg(scene){
+  if(!isBuddyTheme()||!scene)return;
+  const wrap=$("#buddyCelebration"),img=$("#buddyCelebrateImg"),label=$("#buddyCelebrateText"),hotspots=$("#buddyEggHotspots"),stage=$("#buddyEggStage");
+  if(!wrap||!img||!label)return;
+  // Once opened, keep exactly the same easter-egg scene until the backdrop closes it.
+  if(wrap.dataset.heroEgg==="1"&&wrap.classList.contains("show"))return;
+  clearTimeout(buddyCelebrate._t);
+  clearHeroEggInteractive();
+  wrap.dataset.heroEgg="1";wrap.dataset.scene=scene.id||"classic";wrap.dataset.tone=scene.tone||"duo";
+  wrap.classList.add("hero-egg");
+  wrap.classList.toggle("hero-egg-scene",scene.type==="scene");
+  img.src=scene.image;
+  label.textContent=scene.type==="scene"?pickLine(scene.captions):dialogueText(scene.text);
+  // Tapping the easter-egg artwork changes only its bottom caption. If there is
+  // only one unique caption, or the candidate would be identical, keep it unchanged.
+  if(img)img.onclick=e=>{e.stopPropagation();cycleHeroEggCaption(scene,label)};
+  if(stage)stage.onclick=e=>{
+    // Empty scene area counts as tapping the artwork; character hotspots stop propagation.
+    if(e.target===stage)cycleHeroEggCaption(scene,label);
+  };
+  if(scene.type==="scene"&&hotspots){
+    hotspots.innerHTML=(scene.characters||[]).map(c=>{
+      const h=c.hotspot||{};
+      return `<button type="button" class="buddy-egg-hotspot" data-egg-character="${esc(c.id)}" aria-label="${esc(c.label)}" style="left:${Number(h.left)||0}%;top:${Number(h.top)||0}%;width:${Number(h.width)||10}%;height:${Number(h.height)||10}%"></button>`;
+    }).join("");
+    hotspots.querySelectorAll("[data-egg-character]").forEach(btn=>btn.addEventListener("click",e=>{
+      e.stopPropagation();showHeroEggSpeech(scene,btn.dataset.eggCharacter,btn);
+    }));
+  }
+  wrap.classList.remove("show");void wrap.offsetWidth;wrap.classList.add("show");
+  buddySparkBurst(50,42,scene.tone||"duo");
+}
+
+function inferBuddyContext(el){
+  if(!el)return "";
+  if(el.dataset?.buddyContext)return el.dataset.buddyContext;
+  if(el.closest?.("#daySceneCard"))return "day";
+  if(el.closest?.("#weatherCard"))return "weather";
+  if(el.closest?.("#foodView,#foodNearbyModal"))return "food";
+  if(el.closest?.("#bookingPanel,.decision-card"))return "booking";
+  if(el.closest?.("#shoppingPanel"))return "shop";
+  if(el.closest?.("#expensePanel"))return "money";
+  if(el.closest?.("#notePanel"))return "note";
+  if(el.closest?.("#hotelReturnCard"))return "hotel";
+  return "";
+}
+function weatherDialogue(mode){
+  const current=mode||$("#weatherBuddySlot")?.dataset.weatherMode||"sunny";
+  return BUDDY_DIALOG.weather?.[current]||BUDDY_DIALOG.weather.sunny;
+}
+function hideGlobalBuddySpeech(){
+  const bubble=$("#buddySpeechBubble");
+  if(!bubble)return;
+  clearTimeout(showBuddySpeech._t);
+  bubble.classList.remove("show","below");
+}
+function showWeatherBuddySpeech(mode){
+  const bubble=$("#weatherBuddySpeech");
+  if(!bubble)return;
+  const msg=pickLine(weatherDialogue(mode));
+  const main=dialogueText(msg);
+  clearTimeout(showWeatherBuddySpeech._t);
+  bubble.textContent=main;
+  bubble.setAttribute("aria-label",main);
+  bubble.classList.remove("show");
+  void bubble.offsetWidth;
+  bubble.classList.add("show");
+  showWeatherBuddySpeech._t=setTimeout(()=>{
+    bubble.classList.remove("show");
+    setTimeout(()=>{
+      if(!bubble.classList.contains("show")){
+        bubble.textContent="";
+        bubble.removeAttribute("aria-label");
+      }
+    },180);
+  },1900);
+}
+function bookingHasUrgent(){
+  if(!TRIP?.bookingTasks?.length)return false;
+  const now=Date.now();
+  return TRIP.bookingTasks.some(t=>{
+    if(taskDone(t)||!t.deadline)return false;
+    const diff=new Date(t.deadline).getTime()-now;
+    return diff>0&&diff<=24*3600000;
+  });
+}
+function buddyDialogueFor(kind,context){
+  if(context==="day"){
+    const day=BUDDY_DIALOG.day[state?.dayIndex]||{};
+    return pickLine(day?.[kind]||day?.duo||BUDDY_DIALOG.duo);
+  }
+  if(context==="weather")return pickLine(weatherDialogue());
+  if(context==="food"){
+    return pickLine(BUDDY_DIALOG.food?.[kind]||BUDDY_DIALOG.food.duo||BUDDY_DIALOG.food.purin);
+  }
+  if(context==="booking"){
+    if(kind==="usagi")return pickLine(bookingHasUrgent()?BUDDY_DIALOG.booking.usagiUrgent:BUDDY_DIALOG.booking.usagi);
+    if(kind==="purin")return pickLine(BUDDY_DIALOG.booking.purin);
+    return pickLine(BUDDY_DIALOG.booking.duo);
+  }
+  if(context==="shop"){
+    return pickLine(BUDDY_DIALOG.shop?.[kind]||BUDDY_DIALOG.shop.duo||BUDDY_DIALOG.shop.purin);
+  }
+  if(context==="money"){
+    return pickLine(BUDDY_DIALOG.money?.[kind]||BUDDY_DIALOG.money.duo);
+  }
+  if(context==="note"){
+    return pickLine(BUDDY_DIALOG.note?.[kind]||BUDDY_DIALOG.note.duo);
+  }
+  if(context==="hotel"){
+    if(japanHour()>=21){
+      if(kind==="usagi")return pickLine(BUDDY_DIALOG.hotel.lateUsagi);
+      if(kind==="purin")return pickLine(BUDDY_DIALOG.hotel.latePurin);
+      return pickLine(BUDDY_DIALOG.hotel.duo);
+    }
+    return pickLine(BUDDY_DIALOG.hotel?.[kind]||BUDDY_DIALOG.hotel.duo);
+  }
+  if(kind==="duo")return pickLine(BUDDY_DIALOG.duo);
+  // Generic taps occasionally react to Japan-local time, but keep each character's own voice.
+  if(Math.random()<0.28)return pickLine(timeDialogue(kind));
+  return pickLine(kind==="purin"?BUDDY_DIALOG.purin:BUDDY_DIALOG.usagi);
+}
+function buddyReact(kind,el){
+  if(!isBuddyTheme())return;
+  const context=inferBuddyContext(el);
+  const baseTone=buddyToneForContext(context)||"duo";
+  const now=Date.now();
+  buddyReact.last=buddyReact.last||{kind:"",time:0,context:""};
+  const prev=buddyReact.last;
+
+  if(kind==="duo"){
+    const msg=buddyDialogueFor("duo",context);
+    animateBuddyMood(el,"duo",msg);
+    showBuddySpeech(el,msg,baseTone);
+    buddySparkBurst(50,44,baseTone);
+    buddyReact.last={kind:"",time:0,context:""};
+    return;
+  }
+
+  if(prev.kind && prev.kind!==kind && now-prev.time<1800){
+    const msg=pickLine(BUDDY_DIALOG.duo);
+    animateBuddyMood(el,"duo",msg);
+    showBuddySpeech(el,msg,"duo");
+    buddySparkBurst(50,44,"duo");
+    buddyReact.last={kind:"",time:0,context:""};
+    return;
+  }
+
+  const msg=buddyDialogueFor(kind,context);
+  const tone=kind==="usagi"&&!context?"voice":baseTone;
+
+  animateBuddyMood(el,kind,msg);
+  if(kind==="usagi")flashUsagiVoiceArt(el,msg,context);
+  showBuddySpeech(el,msg,tone);
+  if(context||kind==="usagi")buddySparkBurst(50,44,tone);
+  buddyReact.last={kind,time:now,context};
+
+  // Timeline companions unlock one explicit duo easter egg after enough taps in a day.
+  if(el?.classList?.contains("event-buddy")){
+    const key=`buddyTrail:${state.dayIndex}:${localDateKey()}`;
+    buddyReact.trail=buddyReact.trail||{};
+    const count=(buddyReact.trail[key]||0)+1;
+    buddyReact.trail[key]=count;
+    if(count===5){
+      setTimeout(()=>{
+        buddyCelebrate("我們是鴨寶幫！","./buddy_celebrate.png?v=430","duo");
+      },520);
+    }
   }
 }
 
-function dailySceneAsset(index,lang=getSceneLanguage()){
-  const day=String(index+1).padStart(2,"0");
-  return lang==='ja' ? `./day-scene-v52-${day}.webp?v=550` : `./day-scene-zh-v17-${day}.webp?v=170`;
+function buddyPeek(kind="purin"){
+  if(!isBuddyTheme())return;
+  const layer=$("#buddyPeekLayer"); if(!layer)return;
+  const now=Date.now(), cooldown=6000;
+  buddyPeek._last=buddyPeek._last||{};
+  if(now-(buddyPeek._last[kind]||0)<cooldown)return;
+  buddyPeek._last[kind]=now;
+  clearTimeout(buddyPeek._timer);
+  const src=kind==="purin"?"./purin_peek_edge.png?v=430":"./usagi_peek.png?v=430";
+  layer.innerHTML=`<img class="peek-${kind}" src="${src}" alt="">`;
+  layer.className=`buddy-peek-layer buddy-only-art ${kind}`;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>layer.classList.add("show")));
+  buddyPeek._timer=setTimeout(()=>{layer.classList.remove("show");setTimeout(()=>{layer.className="buddy-peek-layer buddy-only-art";layer.innerHTML=""},480)},2400);
 }
-function dailySceneFullAsset(index,lang=getSceneLanguage()){
-  const day=String(index+1).padStart(2,"0");
-  return lang==='ja' ? dailySceneAsset(index,'ja') : `./day-scene-full-zh-${day}.png?v=11110`;
+function dailySceneAsset(index){
+  return `./day-scene-v52-${String(index+1).padStart(2,"0")}.webp?v=520`;
 }
 function renderDailyScene(){
   const img=$("#daySceneImage"), bar=$("#daySceneProgressBar");
   if(!img)return;
-  const src=dailySceneAsset(state.dayIndex,getSceneLanguage());
+  const src=dailySceneAsset(state.dayIndex);
   if(img.getAttribute("src")!==src) img.src=src;
-  img.alt=`D${state.dayIndex+1} 九州家族紅葉旅${getSceneLanguage()==="ja"?"日文":"中文"}主題圖`;
+  img.alt=`D${state.dayIndex+1} 布丁狗與烏薩奇旅行主題插畫`;
   if(bar) bar.style.width=`${((state.dayIndex+1)/TRIP.days.length)*100}%`;
 }
-let dayLightboxIndex=0;
-let dayImageZoom=1, dayImagePanX=0, dayImagePanY=0;
-let dayLandscapeActive=false,dayLandscapeNativeFullscreen=false;
-const DAY_IMAGE_ZOOM_MIN=1, DAY_IMAGE_ZOOM_MAX=4;
-function clamp(n,min,max){return Math.max(min,Math.min(max,n))}
-function applyDayImageZoom(){
-  const stage=$("#dayImageLightbox .day-image-lightbox-stage"),img=$("#dayLightboxImage"),label=$("#dayZoomLabel");
-  if(!stage||!img)return;
-  if(dayImageZoom<=1.001){dayImageZoom=1;dayImagePanX=0;dayImagePanY=0}
-  const rect=stage.getBoundingClientRect();
-  const maxX=Math.max(0,rect.width*(dayImageZoom-1)/2);
-  const maxY=Math.max(0,rect.height*(dayImageZoom-1)/2);
-  dayImagePanX=clamp(dayImagePanX,-maxX,maxX);dayImagePanY=clamp(dayImagePanY,-maxY,maxY);
-  img.style.transform=`translate3d(${dayImagePanX}px,${dayImagePanY}px,0) scale(${dayImageZoom})`;
-  stage.classList.toggle("is-zoomed",dayImageZoom>1.001);
-  if(label)label.textContent=`${Math.round(dayImageZoom*100)}%`;
-}
-function setDayImageZoom(next){dayImageZoom=clamp(Number(next)||1,DAY_IMAGE_ZOOM_MIN,DAY_IMAGE_ZOOM_MAX);applyDayImageZoom()}
-function resetDayLightboxScroll(){const stage=$("#dayImageLightbox .day-image-lightbox-stage");if(stage){stage.scrollTop=0;stage.scrollLeft=0}}
-function resetDayImageZoom(){dayImageZoom=1;dayImagePanX=0;dayImagePanY=0;applyDayImageZoom();if(dayLandscapeActive)resetDayLightboxScroll()}
-function renderDayLightbox(){
-  const wrap=$("#dayImageLightbox"),img=$("#dayLightboxImage");if(!wrap||!img||!TRIP?.days?.length)return;
-  dayLightboxIndex=Math.max(0,Math.min(TRIP.days.length-1,dayLightboxIndex));
-  const d=TRIP.days[dayLightboxIndex];
-  const lang=getSceneLanguage();
-  const fallback=dailySceneAsset(dayLightboxIndex,lang);
-  img.dataset.fallback="0";
-  img.onerror=()=>{if(img.dataset.fallback!=="1"){img.dataset.fallback="1";img.src=fallback;}};
-  img.src=dailySceneFullAsset(dayLightboxIndex,lang);
-  img.alt=`D${dayLightboxIndex+1} ${d.title||"旅程主題圖"}（${lang==='ja'?'日文':'中文'}高清版）`;
-  $("#dayLightboxTitle").textContent=`D${dayLightboxIndex+1}｜${d.title||"旅程"}`;
-  $$("[data-day-lang]").forEach(btn=>btn.classList.toggle("active",btn.dataset.dayLang===lang));
-  $("#dayLightboxCounter").textContent=`${dayLightboxIndex+1} / ${TRIP.days.length}`;
-}
-function openDayLightbox(index=state.dayIndex){
-  const wrap=$("#dayImageLightbox");if(!wrap)return;
-  dayLightboxIndex=index;resetDayImageZoom();renderDayLightbox();wrap.classList.add("show");wrap.setAttribute("aria-hidden","false");document.body.classList.add("modal-open");
-  updateDayLandscapeButton();
-}
-function isDayLandscapeViewport(){return window.matchMedia?.("(orientation: landscape)")?.matches||window.innerWidth>window.innerHeight}
-function updateDayLandscapeButton(){
-  const btn=$("#dayLandscapeBtn"),label=$("#dayLandscapeLabel");if(!btn)return;
-  btn.classList.toggle("active",dayLandscapeActive);
-  btn.setAttribute("aria-pressed",dayLandscapeActive?"true":"false");
-  btn.setAttribute("aria-label",dayLandscapeActive?"退出橫向全螢幕":"橫向全螢幕");
-  btn.title=dayLandscapeActive?"退出橫向全螢幕":"橫向全螢幕";
-  if(label)label.textContent=dayLandscapeActive?"退出":"橫向";
-}
-function syncDayLandscapeFallback(){
-  const wrap=$("#dayImageLightbox");if(!wrap||!dayLandscapeActive)return;
-  // Orientation lock is not available on every iOS/browser build. When the viewport
-  // stays portrait, rotate only this viewer so it still becomes a usable landscape canvas.
-  wrap.classList.toggle("force-landscape-fallback",!isDayLandscapeViewport());
-  applyDayImageZoom();
-}
-async function enterDayLandscape(){
-  const wrap=$("#dayImageLightbox"),card=wrap?.querySelector(".day-image-lightbox-card");if(!wrap||!card)return;
-  dayLandscapeActive=true;dayLandscapeNativeFullscreen=false;resetDayImageZoom();
-  wrap.classList.add("landscape-view");document.body.classList.add("day-landscape-open");updateDayLandscapeButton();
-  // v1.11.4: do NOT invoke the browser Fullscreen API. Android/Chrome shows a
-  // system-owned "how to exit fullscreen" banner which the web app cannot hide.
-  // The lightbox itself already covers the PWA viewport; orientation lock is best-effort.
-  try{if(screen.orientation?.lock)await screen.orientation.lock("landscape")}catch{}
-  window.setTimeout(()=>{syncDayLandscapeFallback();resetDayLightboxScroll()},120);
-}
-async function exitDayLandscape({exitFullscreen=true}={}){
-  const wrap=$("#dayImageLightbox");
-  dayLandscapeActive=false;
-  if(wrap)wrap.classList.remove("landscape-view","force-landscape-fallback");
-  document.body.classList.remove("day-landscape-open");
-  try{screen.orientation?.unlock?.()}catch{}
-  if(exitFullscreen&&(document.fullscreenElement||document.webkitFullscreenElement)){
-    try{if(document.exitFullscreen)await document.exitFullscreen();else if(document.webkitExitFullscreen)document.webkitExitFullscreen()}catch{}
-  }
-  dayLandscapeNativeFullscreen=false;resetDayImageZoom();updateDayLandscapeButton();
-}
-function toggleDayLandscape(){return dayLandscapeActive?exitDayLandscape():enterDayLandscape()}
-function closeDayLightbox(){const wrap=$("#dayImageLightbox");if(!wrap)return;if(dayLandscapeActive)exitDayLandscape();const changed=state&&state.dayIndex!==dayLightboxIndex;if(changed){state.dayIndex=dayLightboxIndex;state.decisionDrafts={};renderDays();renderSchedule()}wrap.classList.remove("show");wrap.setAttribute("aria-hidden","true");document.body.classList.remove("modal-open")}
-function moveDayLightbox(step){if(dayLandscapeActive)return;resetDayImageZoom();dayLightboxIndex=(dayLightboxIndex+step+TRIP.days.length)%TRIP.days.length;renderDayLightbox()}
 
 
-const SCENE_LANG_STORAGE_KEY=`${APP_NAMESPACE}:scene-lang`;
-function getSceneLanguage(){
-  try{return localStorage.getItem(SCENE_LANG_STORAGE_KEY)==='ja'?'ja':'zh'}catch{return 'zh'}
-}
-function applySceneLanguageUI(){
-  const lang=getSceneLanguage();
-  document.documentElement.dataset.sceneLang=lang;
-  $$('[data-day-lang]').forEach(btn=>btn.classList.toggle('active',btn.dataset.dayLang===lang));
-}
-function setSceneLanguage(lang){
-  const next=lang==='ja'?'ja':'zh';
-  try{localStorage.setItem(SCENE_LANG_STORAGE_KEY,next)}catch{}
-  applySceneLanguageUI();
-  renderDailyScene();
-  if(document.querySelector('#dayImageLightbox.show'))renderDayLightbox();
-}
-
-const WEATHER_PREVIEW_STORAGE_KEY=`${APP_NAMESPACE}:weather-preview-mode`;
-const WEATHER_PREVIEW_VARIANTS=[
-  {mode:'sunny',icon:'☀️',desc:'晴天預覽',art:'sunny',label:'晴天'},
-  {mode:'cloudy',icon:'☁️',desc:'陰天預覽',art:'cloudy',label:'陰天'},
-  {mode:'rain',icon:'🌧️',desc:'雨天預覽',art:'rain',label:'雨天'},
-  {mode:'storm',icon:'⛈️',desc:'雷雨預覽',art:'storm',label:'雷雨'},
-  {mode:'snow',icon:'🌨️',desc:'雪天預覽',art:'snow',label:'雪天'}
+const WEATHER_BUDDY_STORAGE_KEY="kyushu-private:weather-buddy-mode";
+const WEATHER_BUDDY_VARIANTS=[
+  {mode:"sunny",src:"./weather-sunny-usagi-v536.webp?v=536",alt:"晴天烏薩奇",label:"晴天"},
+  {mode:"teruteru",src:"./weather-teruteru-usagi-v536.webp?v=536",alt:"晴天娃娃烏薩奇",label:"晴天娃娃"},
+  {mode:"cloudy",src:"./weather-cloudy-usagi-v536.webp?v=536",alt:"陰天烏薩奇",label:"陰天"},
+  {mode:"rain",src:"./weather-rain-usagi-v47.webp?v=470",alt:"穿雨衣的烏薩奇",label:"雨天"},
+  {mode:"thunder",src:"./weather-thunder-usagi-v536.webp?v=536",alt:"雷雨烏薩奇",label:"雷雨"},
+  {mode:"snow",src:"./weather-snow-usagi-v536.webp?v=536",alt:"雪天烏薩奇",label:"雪天"}
 ];
-function getWeatherPreviewMode(){
-  try{
-    const saved=localStorage.getItem(WEATHER_PREVIEW_STORAGE_KEY);
-    return WEATHER_PREVIEW_VARIANTS.some(v=>v.mode===saved)?saved:'sunny';
-  }catch{return 'sunny'}
+let weatherBuddyIndex=0;
+try{
+  const saved=localStorage.getItem(WEATHER_BUDDY_STORAGE_KEY);
+  const idx=WEATHER_BUDDY_VARIANTS.findIndex(v=>v.mode===saved);
+  if(idx>=0)weatherBuddyIndex=idx;
+}catch{}
+function updateWeatherBuddy(mode=WEATHER_BUDDY_VARIANTS[weatherBuddyIndex].mode){
+  const el=$("#weatherBuddySlot"), card=$("#weatherCard"); if(!el)return;
+  let idx=WEATHER_BUDDY_VARIANTS.findIndex(v=>v.mode===mode);
+  if(idx<0)idx=0;
+  weatherBuddyIndex=idx;
+  const spec=WEATHER_BUDDY_VARIANTS[idx];
+  el.dataset.weatherMode=spec.mode;
+  el.className=`weather-buddy-slot buddy-only-art is-${spec.mode}`;
+  card?.classList.add("has-weather-buddy");
+  el.hidden=false;
+  el.innerHTML=`<button type="button" class="weather-buddy-button weather-usagi-${spec.mode}" data-weather-switch="1" aria-label="切換天氣烏薩奇造型，目前：${spec.label}"><img src="${spec.src}" alt="${spec.alt}"></button>`;
 }
-function weatherPreviewMeta(mode=getWeatherPreviewMode()){
-  return WEATHER_PREVIEW_VARIANTS.find(v=>v.mode===mode)||WEATHER_PREVIEW_VARIANTS[0];
+function cycleWeatherBuddy(){
+  weatherBuddyIndex=(weatherBuddyIndex+1)%WEATHER_BUDDY_VARIANTS.length;
+  const spec=WEATHER_BUDDY_VARIANTS[weatherBuddyIndex];
+  try{localStorage.setItem(WEATHER_BUDDY_STORAGE_KEY,spec.mode)}catch{}
+  updateWeatherBuddy(spec.mode);
+  return spec.mode;
 }
-function cycleWeatherPreviewMode(){
-  const current=getWeatherPreviewMode();
-  const idx=WEATHER_PREVIEW_VARIANTS.findIndex(v=>v.mode===current);
-  const next=WEATHER_PREVIEW_VARIANTS[(idx+1)%WEATHER_PREVIEW_VARIANTS.length];
-  try{localStorage.setItem(WEATHER_PREVIEW_STORAGE_KEY,next.mode)}catch{}
-  return next;
+function handleWeatherBuddyTap(){
+  clearTimeout(handleWeatherBuddyTap._speechDelay);
+  const bubble=$("#weatherBuddySpeech");
+  if(bubble){clearTimeout(showWeatherBuddySpeech._t);bubble.classList.remove("show")}
+  hideGlobalBuddySpeech();
+  const mode=cycleWeatherBuddy();
+  const button=$("#weatherBuddySlot [data-weather-switch]");
+  if(button){
+    button.classList.remove("weather-buddy-pop");
+    void button.offsetWidth;
+    button.classList.add("weather-buddy-pop");
+    setTimeout(()=>button.classList.remove("weather-buddy-pop"),360);
+  }
+  handleWeatherBuddyTap._speechDelay=setTimeout(()=>showWeatherBuddySpeech(mode),150);
 }
-function setWeatherModeHint(text='',preview=false){
-  const el=$('#weatherModeHint'); if(!el)return;
-  el.textContent=text;
-  el.hidden=!text;
-  el.classList.toggle('preview',!!preview);
+function ensureWeatherBuddy(){updateWeatherBuddy(WEATHER_BUDDY_VARIANTS[weatherBuddyIndex].mode);}
+
+function localDateKey(){ return japanToday(); }
+function maybePurinWalkEgg(){
+  if(!isBuddyTheme())return;
+  const key=`buddyWalk:${localDateKey()}`;
+  try{if(localStorage.getItem(key))return;localStorage.setItem(key,"1")}catch{}
+  const el=$("#purinWalkEgg"); if(!el)return;
+  const delay=4500+Math.floor(Math.random()*3500);
+  setTimeout(()=>{
+    if(!isBuddyTheme())return;
+    el.classList.remove("play"); void el.offsetWidth; el.classList.add("play");
+    toast(BUDDY_DIALOG.egg[4],"duo");
+    setTimeout(()=>el.classList.remove("play"),10500);
+  },delay);
 }
-function handleWeatherPreviewTap(){
-  const card=$('#weatherCard');
-  if(!card||card.dataset.preview!=='1')return;
-  const next=cycleWeatherPreviewMode();
-  if(TRIP?.days?.[state?.dayIndex??0]) renderWeather(TRIP.days[state.dayIndex]);
-  toast(`預覽天氣：${next.label}`,'day');
+function maybeUrgentBookingEgg(){
+  if(!isBuddyTheme()||!TRIP?.bookingTasks?.length)return;
+  const now=Date.now();
+  const urgent=TRIP.bookingTasks.find(t=>{
+    if(taskDone(t)||!t.deadline)return false;
+    const diff=new Date(t.deadline).getTime()-now;
+    return diff>0&&diff<=24*3600000;
+  });
+  if(!urgent)return;
+  const key=`buddyUrgent:${urgent.id}:${localDateKey()}`;
+  try{if(localStorage.getItem(key))return;localStorage.setItem(key,"1")}catch{}
+  const el=$("#usagiUrgentEgg"); if(!el)return;
+  setTimeout(()=>{
+    if(!isBuddyTheme())return;
+    el.classList.remove("play"); void el.offsetWidth; el.classList.add("play");
+    toast(pickLine(BUDDY_DIALOG.booking.urgent),"booking");
+    setTimeout(()=>el.classList.remove("play"),2100);
+  },1800);
+}
+
+function maybePageSwitchDashEgg(source="view"){
+  if(!isBuddyTheme())return;
+  const el=$("#usagiUrgentEgg"); if(!el||el.classList.contains("play"))return;
+  const key="buddyDashEgg:lastAt";
+  const now=Date.now();
+  let last=0;
+  try{last=Number(localStorage.getItem(key)||0)}catch{}
+  if(now-last<PAGE_SWITCH_DASH_EGG_COOLDOWN)return;
+  const chance=source==="view"?PAGE_SWITCH_DASH_EGG_CHANCE:Math.max(.06,PAGE_SWITCH_DASH_EGG_CHANCE*.72);
+  if(Math.random()>chance)return;
+  try{localStorage.setItem(key,String(now))}catch{}
+  const textEl=el.querySelector(".usagi-urgent-egg-text");
+  if(textEl)textEl.textContent="嗚拉呀哈呀哈嗚拉～";
+  el.classList.remove("play");
+  void el.offsetWidth;
+  el.classList.add("play");
+  setTimeout(()=>el.classList.remove("play"),3800);
+}
+
+function maybeTripStartEgg(){
+  if(!isBuddyTheme()||japanToday()!==OFFICIAL_TRIP_START)return;
+  const key=`buddyTripStart:${OFFICIAL_TRIP_START}`;
+  try{if(localStorage.getItem(key))return;localStorage.setItem(key,"1")}catch{}
+  setTimeout(()=>buddyCelebrate(BUDDY_DIALOG.egg[11],"./buddy_celebrate.png?v=430","day"),900);
 }
 function normalizeCloud(val){
   if(!val)return[];
@@ -600,286 +2228,6 @@ function weatherMode(event){
   return "driving";
 }
 
-function intensityText(value){
-  if(typeof value==="number"){
-    const n=Math.max(0,Math.min(5,Math.round(value)));
-    return `${"★".repeat(n)}${"☆".repeat(5-n)}`;
-  }
-  return value?String(value):"";
-}
-function japanClockMinutes(){
-  const parts=new Intl.DateTimeFormat("en-GB",{
-    timeZone:TRIP?.timezone||"Asia/Tokyo",
-    hour:"2-digit",minute:"2-digit",hourCycle:"h23"
-  }).formatToParts(new Date());
-  const o=Object.fromEntries(parts.filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
-  return Number(o.hour)*60+Number(o.minute);
-}
-function eventTimeMinutes(value){
-  const m=String(value||"").match(/^(\d{1,2}):(\d{2})/);
-  if(!m)return null;
-  return Number(m[1])*60+Number(m[2]);
-}
-function formatCountdown(mins){
-  if(mins<=0)return "現在";
-  if(mins<60)return `${mins} 分後`;
-  const h=Math.floor(mins/60),m=mins%60;
-  return m?`${h} 小時 ${m} 分後`:`${h} 小時後`;
-}
-function renderNowNext(day){
-  const box=$("#nowNextCard"); if(!box)return;
-  if(!day||day.date!==japanToday()){
-    box.hidden=true;box.innerHTML="";return;
-  }
-  const events=(day.events||[]).filter(eventVisible)
-    .map(e=>({...e,_mins:eventTimeMinutes(e.time)}))
-    .filter(e=>Number.isFinite(e._mins))
-    .sort((a,b)=>a._mins-b._mins);
-  if(!events.length){box.hidden=true;box.innerHTML="";return}
-  const now=japanClockMinutes();
-  const next=events.find(e=>e._mins>=now);
-  box.hidden=false;
-  if(!next){
-    box.innerHTML=`<div class="now-next-kicker">TODAY</div><div class="now-next-finished"><b>今天主要行程完成</b><span>接下來就照家人的體力慢慢收尾。</span></div>`;
-    return;
-  }
-  const mins=Math.max(0,next._mins-now);
-  box.innerHTML=`<div class="now-next-head"><div><span class="eyebrow">NEXT UP</span><b>下一站</b></div><em>${esc(formatCountdown(mins))}</em></div>
-    <div class="now-next-main"><strong>${esc(next.time)}</strong><div><b>${esc(next.title)}</b>${next.travel?`<small>${esc(next.transport||"→")} ${esc(next.travel)}</small>`:""}</div></div>`;
-}
-function renderFamilyMeta(day){
-  const box=$("#familyMetaCard"); if(!box)return;
-  const m=day.familyMeta||{};
-  const rows=[
-    m.drive?{icon:"🚗",label:"今日駕駛",value:m.drive}:null,
-    m.intensity?{icon:"👟",label:"行程強度",value:intensityText(m.intensity)}:null,
-    m.shopping?{icon:"🛒",label:"今日採買",value:m.shopping}:null,
-    m.dinner?{icon:"🍳",label:"今晚",value:m.dinner}:null,
-    m.elderNote?{icon:"👨‍👩‍👦",label:"家族提醒",value:m.elderNote,wide:true}:null
-  ].filter(Boolean);
-  box.hidden=!rows.length;
-  box.innerHTML=rows.length?`<div class="family-meta-head"><span class="eyebrow">FAMILY DAY</span><b>今天怎麼走</b></div><div class="family-meta-grid">${rows.map(r=>`<div class="family-meta-item ${r.wide?"wide":""}"><span>${r.icon}</span><div><small>${esc(r.label)}</small><b>${esc(r.value)}</b></div></div>`).join("")}</div>`:"";
-}
-function renderDrivingCard(day){
-  const box=$("#drivingCard");if(!box)return;
-  const drive=String(day?.familyMeta?.drive||"").trim();
-  const legs=(day?.events||[]).filter(e=>eventVisible(e)&&["🚗","🚐"].includes(e.transport));
-  const useful=drive&&drive!=="0"&&legs.length;
-  box.hidden=!useful;if(!useful){box.innerHTML="";return}
-  const mode=legs.some(e=>e.transport==="🚐")?"包車 / 乘車":"自駕";
-  const route=[];for(const e of legs){if(!route.includes(e.title))route.push(e.title)}
-  const now=day.date===japanToday()?japanClockMinutes():-1;
-  const next=legs.find(e=>{const m=eventTimeMinutes(e.time);return now<0||!Number.isFinite(m)||m>=now})||legs[0];
-  box.innerHTML=`<div class="driving-head"><div><span class="eyebrow">DRIVE</span><b>${esc(mode)}安排</b></div><em>${esc(drive)}</em></div><div class="driving-route">${route.slice(0,6).map((x,i)=>`<span>${i?"→ ":""}${esc(x)}</span>`).join("")}</div>${next?`<a class="driving-nav" target="_blank" rel="noopener" href="${mapSearch(next.nav||next.title)}">下一個駕車點：${esc(next.title)}　↗</a>`:""}`;
-}
-const AUTUMN_STATUS_ORDER=["unknown","coloring","peak","past","skip"];
-const AUTUMN_STATUS_META={
-  unknown:{label:"未確認",icon:"?",image:"./autumn-status-unknown.webp?v=160",verdict:"待確認"},
-  coloring:{label:"色づき始め",icon:"🍂",image:"./autumn-status-coloring.webp?v=160",verdict:"持續追蹤"},
-  peak:{label:"見頃",icon:"🍁",image:"./autumn-status-peak.webp?v=160",verdict:"優先保留"},
-  past:{label:"見頃過ぎ",icon:"🍂",image:"./autumn-status-past.webp?v=160",verdict:"可降級"},
-  skip:{label:"不追",icon:"—",image:"./autumn-status-skip.webp?v=160",verdict:"不追蹤"}
-};
-const AUTUMN_PRIORITY={
-  "akizuki-autumn":"S","kamado-autumn":"S","kumamoto-ginkgo":"S",
-  "takachiho-autumn":"A","hitome-hakkei":"A","keisekien":"A","taibaru-ginkgo":"A",
-  "yufuin-autumn":"B+","chojabaru":"B+","maizuru-ginkgo":"B"
-};
-const AUTUMN_SOURCE_META={
-  "taibaru-ginkgo":{
-    official:"https://www.crossroadfukuoka.jp/spot/11584",
-    officialLabel:"福岡縣觀光官方・太原銀杏",
-    baseline:"D2 A/B 第一判斷核心。7成黃以上直接走A；5～6成黃但晴天且官方／近期照片已漂亮可考慮；大量綠色就切B。2026實際觀覽期間與色況以官方最新公告為準。"
-  },
-  "maizuru-ginkgo":{
-    official:"https://www.midorimachi.jp/maiduru/",
-    officialLabel:"舞鶴公園官方",
-    baseline:"只在D2市區Chill B方案使用。7成黃以上正常去、黃綠各半短停、明顯偏綠直接跳過。"
-  },
-  "yufuin-autumn":{
-    official:"https://yufuin.gr.jp/",
-    officialLabel:"YUFUINFO 官方",
-    baseline:"D3–D4 不押滿紅；以Villa、晨霧、由布岳與深秋街景為主，不需要為紅葉硬追。"
-  },
-  "hitome-hakkei":{
-    official:"https://nakatsuyaba.com/",
-    officialLabel:"中津耶馬溪官方",
-    baseline:"D5 A/B 第一判斷核心；一目八景達見頃才值得早出發，仍以當季官方更新為準。"
-  },
-  "keisekien":{
-    official:"https://nakatsuyaba.com/",
-    officialLabel:"中津耶馬溪官方",
-    baseline:"D5 第二判斷；只有官方即時狀況也漂亮才加入，否則直接跳過。"
-  },
-  "chojabaru":{
-    official:"https://www.town.kokonoe.oita.jp/docs/2025032700023/",
-    officialLabel:"九重町官方",
-    baseline:"長者原以金色草原、芒草與九重連山為主，不只看楓紅。"
-  },
-  "takachiho-autumn":{
-    official:"https://www.takachiho-kanko.info/",
-    officialLabel:"高千穗觀光協會",
-    baseline:"官方 FAQ 的一般紅葉期為 11 月中旬～下旬；D6 正落在主要觀測窗口。"
-  },
-  "kumamoto-ginkgo":{
-    official:"https://www.pref.kumamoto.jp/soshiki/10/215705.html",
-    officialLabel:"熊本縣官方",
-    baseline:"D7 S級重點；還車處理完成後四人一起看，並確認當年黃葉程度與點燈公告。"
-  },
-  "akizuki-autumn":{
-    official:"https://www.city.asakura.lg.jp/site/kanko/2930.html",
-    officialLabel:"朝倉市紅葉情報",
-    baseline:"官方一般見頃為 11 月下旬～12 月上旬；2025 年 11/28 記錄為見頃。"
-  },
-  "kamado-autumn":{
-    official:"https://kamadojinja.or.jp/information/",
-    officialLabel:"竈門神社官方",
-    baseline:"官方說明例年 11 月中旬開始色づき，下旬～12 月初進入主要見頃。"
-  }
-};
-const OFFICIAL_STATUS_BY_DAY={
-  1:[
-    {id:"taibaru-ginkgo-live",icon:"🟡",title:"太原銀杏森林",label:"福岡縣觀光官方・觀覽／色況資訊",url:"https://www.crossroadfukuoka.jp/spot/11584",hint:"D2 A/B第一判斷：先看2026觀覽公告與近期色況；漂亮才包車走太原→大濠。",decisionId:"d2-ginkgo-route"},
-    {id:"maizuru-ginkgo-live",icon:"🟡",title:"舞鶴公園 銀杏",label:"旬の情報・園內公告",url:"https://www.midorimachi.jp/maiduru/",hint:"只有D2市區Chill B方案才看；7成黃以上正常去、黃綠各半短停、偏綠直接跳過。",decisionId:"d2-maizuru-ginkgo"}
-  ],
-  2:[
-    {id:"jr-kyushu-status",icon:"🚆",title:"JR 九州運行情報",label:"由布院之森・久大本線",url:"https://www.jrkyushu.co.jp/trains/info/",hint:"D3 出發前先確認延誤、停駛與臨時公告。"},
-    {id:"yufuin-no-mori",icon:"🌲",title:"由布院之森",label:"官方時刻・運行日",url:"https://www.jrkyushu.co.jp/english/train/yufuin_no_mori.html",hint:"確認11/23由布院之森3號是否有運行；3號無班次／未搶到就回1號。"}
-  ],
-  3:[
-    {id:"beppu-ropeway",icon:"🚡",title:"別府纜車・鶴見岳",label:"本日運行・天氣・視界",url:"https://www.beppu-ropeway.co.jp/en/",hint:"D4 是否上鶴見岳，先看官方本日運行與視界；天候不佳就直接不上山。",decisionId:"d4-beppu-weather",phone:"0977-22-2278"},
-    {id:"african-safari",icon:"🦒",title:"九州自然動物公園 Safari",label:"官方營業與公告",url:"https://africansafari.co.jp/",hint:"自駕 Safari Zone 前確認當日營業、臨時公告與園區資訊。",phone:"0978-48-2331"},
-    {id:"umi-jigoku",icon:"♨️",title:"別府 海地獄",label:"官方營業資訊",url:"https://www.umijigoku.co.jp/",hint:"查看海地獄官方營業與臨時活動資訊。",phone:"0977-66-0121"}
-  ],
-  4:[
-    {id:"yabakei-autumn-live",icon:"🍁",title:"一目八景・溪石園",label:"中津耶馬溪紅葉實況",url:"https://nakatsuyaba.com/",hint:"11/24 晚先看一目八景是否見頃；溪石園作第二判斷，再決定 D5 A／B。",decisionId:"d5-autumn-route"},
-    {id:"kokonoe-bridge",icon:"🌉",title:"九重夢大吊橋",label:"營業・惡天候限制",url:"https://www.yumeooturihashi.com/info.html",hint:"只在 D5 Chill 路線使用；強風或惡天候時官方可能限制入場。"}
-  ],
-  5:[
-    {id:"takachiho-amaterasu",icon:"🚃",title:"高千穗天照鐵道",label:"當日運行資訊",url:"https://amaterasu-railway.jp/",hint:"官方最新運行資訊；雨、強風或設備狀況可能造成停駛。",phone:"0982-72-3216"},
-    {id:"takachiho-gorge",icon:"🏞️",title:"高千穗峽・遊步道",label:"通行・交通最新公告",url:"https://www.takachiho-kanko.info/news/",hint:"出發前確認遊步道、道路、接駁與地震／天候相關公告。",phone:"0982-73-1213"}
-  ],
-  6:[
-    {id:"aso-crater",icon:"🌋",title:"阿蘇中岳火口",label:"即時火口規制",url:"https://www.aso-volcano.jp/",hint:"D7 是否進火口只看官方即時規制；若關閉直接走博物館備案。",decisionId:"d7-crater"},
-    {id:"kumamoto-castle",icon:"🏯",title:"熊本城",label:"開園・最新公告",url:"https://castle.kumamoto-guide.jp/news/",hint:"確認開園、設施限制與當日最新公告。",phone:"096-223-5011"},
-    {id:"kumamoto-ginkgo-live",icon:"🟡",title:"熊本縣廳銀杏大道",label:"官方紅葉・點燈資訊",url:"https://www.pref.kumamoto.jp/soshiki/10/215705.html",hint:"D7 四人一起看；出發前確認黃葉程度與2026是否有點燈。"}
-  ],
-  7:[
-    {id:"akizuki-autumn-live",icon:"🍁",title:"秋月紅葉",label:"朝倉市紅葉情報",url:"https://www.city.asakura.lg.jp/site/kanko/2930.html",hint:"D8 S級主場；確認秋月當週色況後決定停留節奏。"},
-    {id:"dazaifu",icon:"⛩️",title:"太宰府天滿宮",label:"參拜時間・重要公告",url:"https://www.dazaifutenmangu.or.jp/",hint:"D8 抵達前確認參拜時間、工程與臨時公告。"},
-    {id:"kamado",icon:"🍁",title:"竈門神社",label:"紅葉・夜間點燈公告",url:"https://kamadojinja.or.jp/information/",hint:"D8 S級重點；確認當年色づき、點燈期間與最新公告。",phone:"092-922-4106"}
-  ],
-  8:[
-    {id:"fukuoka-airport",icon:"✈️",title:"福岡機場 國際線",label:"當日出發航班",url:"https://www.fukuoka-airport.jp/pcfs/en/flight/index.php?type=ID",hint:"D9 出發前確認航班時間、登機門與即時狀態。"}
-  ]
-};let autumnWatchScope="day";
-let autumnSortMode=(()=>{try{return localStorage.getItem("kyushu-nov-2026:autumn-sort")||"priority"}catch{return "priority"}})();
-let activeAutumnId="";
-let autumnDraftStatus="unknown";
-function autumnSpotById(id){return (TRIP.autumnSpots||[]).find(x=>x.id===id)}
-function autumnDaysForSpot(id){
-  const out=[];
-  for(let i=0;i<(TRIP.days||[]).length;i++)if((TRIP.days[i]?.autumnIds||[]).includes(id))out.push(i+1);
-  return out;
-}
-function autumnStatusRecord(id){
-  const raw=state.autumnStatus?.[id];
-  if(typeof raw==="string")return {status:raw,updatedAt:0,note:""};
-  if(raw&&typeof raw==="object")return {status:raw.status||"unknown",updatedAt:Number(raw.updatedAt||0),note:String(raw.note||"")};
-  return {status:"unknown",updatedAt:0,note:""};
-}
-function autumnStatusFor(id){return autumnStatusRecord(id).status}
-function autumnUpdatedText(ts){
-  if(!ts)return "尚未確認";
-  try{return new Intl.DateTimeFormat("zh-TW",{timeZone:TRIP?.timezone||"Asia/Tokyo",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date(ts))}catch{return "已更新"}
-}
-function autumnPriorityRank(id){return ({S:0,A:1,"B+":2,B:3}[AUTUMN_PRIORITY[id]]??9)}
-function autumnStatusRank(id){return ({peak:0,coloring:1,unknown:2,past:3,skip:4}[autumnStatusFor(id)]??9)}
-function autumnSortSpots(spots){
-  const arr=[...spots];
-  if(autumnSortMode==="date")return arr.sort((a,b)=>(autumnDaysForSpot(a.id)[0]||99)-(autumnDaysForSpot(b.id)[0]||99)||autumnPriorityRank(a.id)-autumnPriorityRank(b.id));
-  if(autumnSortMode==="status")return arr.sort((a,b)=>autumnStatusRank(a.id)-autumnStatusRank(b.id)||autumnPriorityRank(a.id)-autumnPriorityRank(b.id));
-  if(autumnSortMode==="stale")return arr.sort((a,b)=>(autumnStatusRecord(a.id).updatedAt||0)-(autumnStatusRecord(b.id).updatedAt||0)||autumnPriorityRank(a.id)-autumnPriorityRank(b.id));
-  return arr.sort((a,b)=>autumnPriorityRank(a.id)-autumnPriorityRank(b.id)||(autumnDaysForSpot(a.id)[0]||99)-(autumnDaysForSpot(b.id)[0]||99));
-}
-function autumnSortLabel(){return ({priority:"優先級",date:"旅程日期",status:"目前狀態",stale:"最久未確認"}[autumnSortMode]||"優先級")}
-function autumnSpotVerdict(id){
-  const status=autumnStatusFor(id),meta=AUTUMN_STATUS_META[status]||AUTUMN_STATUS_META.unknown;
-  if(status==="unknown"&&["S","A"].includes(AUTUMN_PRIORITY[id]))return "優先查情報";
-  return meta.verdict;
-}
-function autumnSourceLinks(spot,{compact=false}={}){
-  const src=AUTUMN_SOURCE_META[spot.id]||{};
-  const links=[];
-  if(src.official)links.push(`<a target="_blank" rel="noopener" href="${esc(src.official)}">官方情報 ↗</a>`);
-  links.push(`<a target="_blank" rel="noopener" href="${googleSearch(`${spot.label} 紅葉 2026`) }">近期情報 ↗</a>`);
-  if(!compact)links.push(`<a target="_blank" rel="noopener" href="${mapSearch(spot.label)}">地圖 / 照片 ↗</a>`);
-  return links.join("");
-}
-function autumnSummary(spots){
-  const counts={peak:0,coloring:0,unknown:0,past:0,skip:0};
-  spots.forEach(s=>{const st=autumnStatusFor(s.id);counts[st]=(counts[st]||0)+1});
-  const bits=[];
-  if(counts.peak)bits.push(`見頃 ${counts.peak}`);
-  if(counts.coloring)bits.push(`色づき ${counts.coloring}`);
-  if(counts.unknown)bits.push(`未確認 ${counts.unknown}`);
-  if(!bits.length)bits.push(`${spots.length} 個景點已整理`);
-  return bits.join("・");
-}
-function renderAutumnWatch(day){
-  const box=$("#autumnWatch"); if(!box)return;
-  const dayIds=day.autumnIds||[];
-  let spots=(autumnWatchScope==="all"?(TRIP.autumnSpots||[]):dayIds.map(autumnSpotById)).filter(Boolean);
-  if(autumnWatchScope==="all")spots=autumnSortSpots(spots);
-  const canOpenAll=(TRIP.autumnSpots||[]).length>0;
-  box.hidden=!spots.length&&!canOpenAll;
-  if(!spots.length&&!canOpenAll){box.innerHTML="";return}
-  const allUnknown=spots.length&&spots.every(s=>autumnStatusFor(s.id)==="unknown");
-  const scopeText=autumnWatchScope==="all"?"全旅程":"今天";
-  box.innerHTML=`<div class="autumn-watch-head"><div><span class="eyebrow">AUTUMN WATCH</span><b>紅葉・銀杏觀測</b><small>${esc(scopeText)}・${esc(autumnSummary(spots))}${autumnWatchScope==="all"?`・依${esc(autumnSortLabel())}`:""}</small></div><div class="autumn-scope-toggle"><button type="button" class="${autumnWatchScope==="day"?"active":""}" data-autumn-scope="day">今天</button><button type="button" class="${autumnWatchScope==="all"?"active":""}" data-autumn-scope="all">全旅程</button></div></div>${autumnWatchScope==="all"?`<div class="autumn-sort-row"><span>總覽排序</span><div class="autumn-sort-control"><button type="button" class="${autumnSortMode==="priority"?"active":""}" data-autumn-sort="priority">優先級</button><button type="button" class="${autumnSortMode==="date"?"active":""}" data-autumn-sort="date">日期</button><button type="button" class="${autumnSortMode==="status"?"active":""}" data-autumn-sort="status">狀態</button><button type="button" class="${autumnSortMode==="stale"?"active":""}" data-autumn-sort="stale">待更新</button></div></div>`:""}${allUnknown&&autumnWatchScope==="day"?`<div class="autumn-first-use-art"><img src="./nov_empty_autumnwatch.webp?v=160" alt="尚未設定紅葉狀態"></div>`:""}${spots.length?`<div class="autumn-watch-list">${spots.map(s=>{
-    const rec=autumnStatusRecord(s.id),status=rec.status,meta=AUTUMN_STATUS_META[status]||AUTUMN_STATUS_META.unknown;
-    const priority=AUTUMN_PRIORITY[s.id]||"—",days=autumnDaysForSpot(s.id).map(n=>`D${n}`).join("・");
-    return `<div class="autumn-watch-item"><button type="button" class="autumn-watch-row status-${esc(status)}" data-autumn-open="${esc(s.id)}"><span class="autumn-state-thumb"><img src="${esc(meta.image)}" alt="${esc(meta.label)}"></span><span class="autumn-copy"><span class="autumn-title-line"><b>${esc(s.label)}</b><i class="priority-${esc(priority.replace('+','p'))}">${esc(priority)}</i>${days?`<i class="autumn-day-badge">${esc(days)}</i>`:""}</span>${s.note?`<small>${esc(s.note)}</small>`:""}${rec.note?`<small class="autumn-personal-note">備註：${esc(rec.note)}</small>`:""}<small class="autumn-updated">最後確認：${esc(autumnUpdatedText(rec.updatedAt))}・${esc(autumnSpotVerdict(s.id))}</small></span><em>${meta.icon} ${esc(meta.label)}</em></button><div class="autumn-source-row">${autumnSourceLinks(s,{compact:true})}<button type="button" data-autumn-open="${esc(s.id)}">更新狀態</button></div></div>`;
-  }).join("")}</div>`:`<div class="autumn-no-day"><b>今天沒有紅葉觀測點</b><button type="button" data-autumn-scope="all">查看全旅程紅葉雷達</button></div>`}`;
-}
-function openAutumnEditor(id){
-  const spot=autumnSpotById(id),modal=$("#autumnModal");if(!spot||!modal)return;
-  activeAutumnId=id;
-  const rec=autumnStatusRecord(id);autumnDraftStatus=rec.status;
-  const src=AUTUMN_SOURCE_META[id]||{};
-  $("#autumnModalTitle").textContent=spot.label;
-  $("#autumnModalMeta").textContent=`${AUTUMN_PRIORITY[id]||"—"} 級・${autumnDaysForSpot(id).map(n=>`D${n}`).join(" / ")||"旅程觀測"}`;
-  $("#autumnModalNote").value=rec.note||"";
-  $("#autumnModalUpdated").textContent=`最後確認：${autumnUpdatedText(rec.updatedAt)}`;
-  $("#autumnModalBaseline").textContent=src.baseline||spot.note||"以現場與當季官方情報為準。";
-  $("#autumnModalSources").innerHTML=`${src.official?`<a target="_blank" rel="noopener" href="${esc(src.official)}">↗ ${esc(src.officialLabel||"官方情報")}</a>`:""}<a target="_blank" rel="noopener" href="${googleSearch(`${spot.label} 紅葉 2026`)}">↗ 搜尋 2026 最新情報</a><a target="_blank" rel="noopener" href="${mapSearch(spot.label)}">↗ Google Maps / 最近照片</a>`;
-  $$("#autumnModal [data-autumn-status-choice]").forEach(btn=>btn.classList.toggle("active",btn.dataset.autumnStatusChoice===autumnDraftStatus));
-  modal.showModal();
-}
-function closeAutumnEditor(){const modal=$("#autumnModal");if(modal?.open)modal.close();activeAutumnId=""}
-async function saveAutumnEditor(){
-  if(!activeAutumnId)return;
-  const note=String($("#autumnModalNote")?.value||"").trim();
-  const record={status:autumnDraftStatus||"unknown",note,updatedAt:Date.now()};
-  state.autumnStatus={...(state.autumnStatus||{}),[activeAutumnId]:record};
-  saveLocal("autumnStatus",state.autumnStatus);
-  renderAutumnWatch(TRIP.days[state.dayIndex]);
-  if(state.cloud){try{await updateCloud("autumnStatus",activeAutumnId,record)}catch{toast("已存本機，雲端稍後同步")}}
-  closeAutumnEditor();toast("紅葉狀態已更新");
-}
-function renderOfficialStatus(day){
-  const box=$("#officialStatusArea");if(!box)return;
-  const items=OFFICIAL_STATUS_BY_DAY[state.dayIndex]||[];
-  box.hidden=!items.length;if(!items.length){box.innerHTML="";return}
-  box.innerHTML=`<div class="official-status-head"><div><span class="eyebrow">OFFICIAL LIVE</span><b>官方即時狀態</b></div><small>需網路・以官方頁面為準</small></div><div class="official-status-list">${items.map(x=>{
-    const selected=x.decisionId?selectedDecision(x.decisionId):"";
-    const decision=x.decisionId?TRIP.decisions.find(d=>d.id===x.decisionId):null;
-    const selectedLabel=decision?.options?.find(o=>o.id===selected)?.label||selected;
-    const decisionText=selected?`目前行程已選：${selectedLabel}`:"尚未做行程選擇";
-    return `<article class="official-status-item"><span class="official-status-icon">${esc(x.icon)}</span><div class="official-status-copy"><b>${esc(x.title)}</b><span>${esc(x.label)}</span><small>${esc(x.hint)}</small>${x.decisionId?`<em>${esc(decisionText)}</em>`:""}</div><div class="official-status-actions"><a rel="noopener" href="${esc(x.url)}">查看官方 ↗</a>${x.phone?`<a class="secondary" href="tel:${esc(x.phone)}">☎ 電話確認</a>`:""}</div></article>`;
-  }).join("")}</div>`;
-}
-
 function renderDayBrief(day){
   const box=$("#dayBrief");
   if(!box) return;
@@ -888,7 +2236,7 @@ function renderDayBrief(day){
   const rainHtml=day.rainPlan?`<div class="rain-plan"><b>☔ 雨天備案</b><span>${esc(day.rainPlan)}</span></div>`:"";
   const hasContent=!!(day.alert||items||day.rainPlan);
   box.innerHTML=hasContent
-    ? `<div class="day-brief-head-v44"><div class="brief-title">今日提醒</div></div>${alertHtml}${items?`<ul>${items}</ul>`:""}${rainHtml}`
+    ? `<div class="day-brief-head-v44"><div class="brief-title">今日提醒</div><img class="brief-tip-art buddy-only-art" src="./ui-purin-tip.webp?v=440" alt=""></div>${alertHtml}${items?`<ul>${items}</ul>`:""}${rainHtml}`
     : "";
   box.classList.toggle("empty-brief",!hasContent);
 }
@@ -908,8 +2256,8 @@ function selectedDecision(id){
 }
 function draftDecision(id){return state.decisionDrafts?.[id]||""}
 function renderDecisionArea(){
-  const d=TRIP.days[state.dayIndex];
-  const area=$("#decisionArea");if(area)area.innerHTML=renderDecisionCards(d);
+  const d=effectiveDay(state.dayIndex);
+  const area=$("#decisionArea");if(area)area.innerHTML=renderLinkedVariantCards(state.dayIndex)+renderDecisionCards(d);
 }
 function stageDecision(id,option){
   state.decisionDrafts=state.decisionDrafts||{};
@@ -924,7 +2272,7 @@ async function chooseDecision(id, option){
   saveLocal("decisions",state.decisions);
   if(state.cloud){try{await setCloud("decisions",state.decisions)}catch{}}
   renderSchedule();
-  toast("行程選擇已更新");
+  buddyCelebrate("決定好啦！","./usagi_success.png?v=430");
 }
 async function confirmDecision(id){
   const draft=draftDecision(id);if(!draft){toast("先點一個選項，再按確認");return}
@@ -938,45 +2286,27 @@ async function clearDecision(id){
   renderSchedule();
   if(had)toast("已清除選擇，可以晚點再決定");
 }
-const DECISION_ART={
-  "d4-beppu-weather":{
-    ropeway:"./nov_decision_d4_ropeway.webp?v=160",
-    chill:"./nov_decision_d4_chill.webp?v=160"
-  },
-  "d5-autumn-route":{
-    autumn:"./nov_decision_d5_autumn.webp?v=160",
-    chill:"./nov_decision_d5_chill.webp?v=160"
-  },
-  "d7-crater":{
-    open:"./nov_decision_d7_crater_open.webp?v=160",
-    closed:"./nov_decision_d7_museum.webp?v=160"
-  }
-};
-function decisionArt(decisionId,optionId){return DECISION_ART[decisionId]?.[optionId]||""}
-function decisionVisible(d){
-  if(!d?.parentDecisionId)return true;
-  return selectedDecision(d.parentDecisionId)===d.parentOptionId;
-}
 function renderDecisionCards(day){
   const ids=day.decisionIds||[];
   if(!ids.length)return "";
   return `<div class="decision-stack">${ids.map(id=>{
-    const d=TRIP.decisions.find(x=>x.id===id); if(!d||!decisionVisible(d))return "";
+    const d=decisionById(id); if(!d)return "";
     const selected=selectedDecision(id), draft=draftDecision(id);
     const selectedLabel=d.options.find(o=>o.id===selected)?.label||"";
     const draftLabel=d.options.find(o=>o.id===draft)?.label||"";
     const checklist=(d.checklist||[]).length?`<div class="decision-checks">${d.checklist.map(x=>`<div>□ ${esc(x)}</div>`).join("")}</div>`:"";
     return `<section class="decision-card">
+      <img class="decision-usagi-art buddy-only-art buddy-reactable" data-buddy-react="usagi" data-buddy-context="booking" src="./usagi_think.png?v=430" alt="烏薩奇">
       <div class="decision-kicker">行程選擇</div>
       <h3>${esc(d.title)}</h3>
       <p>${esc(d.hint||"")}</p>
       ${checklist}
       <div class="decision-options">${d.options.map(o=>{
         const isDraft=draft===o.id,isConfirmed=selected===o.id&&!draft;
-        const art=decisionArt(d.id,o.id);
-        return `<button class="decision-option ${art?"has-art":""} ${isDraft?"draft":isConfirmed?"selected":""}" data-decision-id="${esc(d.id)}" data-decision-option="${esc(o.id)}">
-          ${art?`<span class="decision-option-art"><img src="${esc(art)}" alt="${esc(o.label)}" loading="lazy"></span>`:""}
-          <span class="decision-option-copy"><span class="decision-icon">${esc(o.icon||"→")}</span><span class="decision-option-text"><b>${esc(o.label)}</b><small>${esc(o.detail||"")}</small></span><em>${isDraft?"暫選":isConfirmed?"已確認":"選擇"}</em></span>
+        return `<button class="decision-option ${isDraft?"draft":isConfirmed?"selected":""}" data-decision-id="${esc(d.id)}" data-decision-option="${esc(o.id)}">
+          <span class="decision-icon">${esc(o.icon||"→")}</span>
+          <span><b>${esc(o.label)}</b><small>${esc(o.detail||"")}</small></span>
+          <em>${isDraft?"暫選":isConfirmed?"已確認":"選擇"}</em>
         </button>`}).join("")}
       </div>
       <div class="decision-confirm-row">
@@ -988,10 +2318,11 @@ function renderDecisionCards(day){
   }).join("")}</div>`;
 }
 function eventVisible(e){
-  if(e.parentDecisionId&&selectedDecision(e.parentDecisionId)!==e.parentOptionId)return false;
   if(!e.decisionId)return true;
   const selected=selectedDecision(e.decisionId);
-  return selected ? selected===e.optionId : false;
+  const decision=decisionById(e.decisionId);
+  if(!selected)return !decision?.hideUntilSelected;
+  return selected===e.optionId;
 }
 
 function renderDays(){
@@ -1001,6 +2332,58 @@ function renderDays(){
     </button>`).join("");
   const active=$("#dayStrip .active"); if(active) active.scrollIntoView({behavior:"smooth",inline:"center",block:"nearest"});
 }
+function buddyRole(e){
+  const text=`${e.category||""} ${e.title||""} ${e.status||""}`;
+  if(/早餐|午餐|晚餐|咖啡|甜點|住宿|Chill|休息|泡湯|Buffet|飯店|Check-in|放空|星空/.test(text)) return "purin";
+  if(/搶|預約|決策|時間控制|購物|補貨|交通決策|排隊|租車|還車|航班|固定|必守/.test(text)) return "usagi";
+  return "";
+}
+
+function buddyDecorForEvent(e){
+  const text=`${e.category||""} ${e.title||""} ${e.status||""}`;
+  if(/早餐|午餐|晚餐|咖啡|甜點|住宿|休息|飯店|泡湯|Buffet|放空/.test(text)) return "";
+  if(/水族館|海豹|海豚|海洋館/.test(text)) return "🐬";
+  if(/夕陽|日落|海邊|海岸|海景/.test(text)) return "☁️";
+  if(/搶票|預約|固定|強制|決策|還車|租車|購物|補貨/.test(text)) return "";
+  return "";
+}
+function renderBuddyDashboard(day, visibleEvents){
+  const dash=$("#buddyDashboard");
+  if(!dash) return;
+  $("#buddyTodayDate").textContent=day.shortDate;
+  const todayItems=visibleEvents.slice(0,4).map(e=>`
+    <div class="buddy-mini-item">
+      <span class="t">${esc(e.time)}</span>
+      <div class="c"><b>${esc(e.title)}</b>${buddyDecorForEvent(e)?`<em>${buddyDecorForEvent(e)}</em>`:""}</div>
+    </div>`).join("");
+  $("#buddyTodayList").innerHTML=todayItems || `<div class="buddy-empty">今天先輕鬆走。</div>`;
+
+  const mustKeep=visibleEvents.filter(e=>/(已訂|✅|預約|固定|強制|必守|新幹線|租車|還車|划船|晚餐|午餐)/.test(`${e.status||""} ${e.title||""} ${e.category||""}`));
+  const focusItems=(mustKeep.length?mustKeep.slice(0,3):(day.brief||[]).slice(0,3).map(text=>({title:text, time:"提醒", category:"摘要"})));
+  $("#buddyFocusList").innerHTML=focusItems.map(item=>`
+    <div class="buddy-focus-item">
+      <span>${esc(item.time||item.category||"提醒")}</span>
+      <b>${esc(item.title||item)}</b>
+    </div>`).join("") || `<div class="buddy-empty">今天沒有特別的硬性任務。</div>`;
+
+  const notes=[...(day.brief||[])];
+  if(day.rainPlan) notes.push(`☔ 雨天備案：${day.rainPlan}`);
+  $("#buddyReminderList").innerHTML=(notes.slice(0,3).map(x=>`<div class="buddy-reminder-item">${esc(x)}</div>`).join("")) || `<div class="buddy-empty">今天沒有額外提醒。</div>`;
+}
+
+function syncBuddyWeather(){
+  const mini=$("#buddyWeatherMini"); if(!mini) return;
+  const loc=$("#weatherLocation")?.textContent || "天氣";
+  const temp=$("#weatherTemp")?.textContent || "—";
+  const desc=$("#weatherDesc")?.textContent || "—";
+  const icon=$("#weatherIcon")?.textContent || "☁️";
+  const rain=$("#rainBox")?.textContent || "";
+  mini.innerHTML=`<div class="buddy-weather-top"><span class="icon">${icon}</span><div><b>${loc}</b><span>${temp}</span></div></div><div class="buddy-weather-desc">${desc}</div>${rain?`<div class="buddy-weather-rain">${esc(rain)}</div>`:""}`;
+  const m=temp.match(/(\d+)[°]?/);
+  $("#buddyTopWeather").textContent=`${loc.split(" · ")[0]} ${m?m[1]+"°":"—"}`;
+}
+
+
 function mapDirections(q){return mapSearch(q)}
 function hotelForDay(index){
   const explicit=TRIP.days?.[index]?.hotel;
@@ -1027,11 +2410,41 @@ function renderHotelReturnCard(){
   const label=lastDay?"返台前據點":"今晚住這裡";
   const help=lastDay?"取行李或需要回住宿時，從這裡直接導航。":"一天走完要回飯店時，不用再往上找地址。";
   box.hidden=false;
-  const pdfKey=hotelPdfKey(hotel);
-  box.innerHTML=`<div class="hotel-return-copy"><span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><div class="hotel-return-actions"><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ Google Maps 查看飯店</a>${pdfAttachmentControls(pdfKey,cleanHotelTitle(hotel.title))}</div><small class="local-pdf-hint">PDF 附件保存在這台裝置，可離線開啟，不會上傳到公開 GitHub。</small></div>`;
+  box.innerHTML=`<div class="hotel-return-copy"><span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ Google Maps 查看飯店</a></div><div class="hotel-return-art buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="hotel"><img src="./hotel-return-duo.webp?v=460" alt="布丁狗與烏薩奇回飯店休息"></div>`;
 }
 
 
+const EVENT_BUDDY_ASSETS={
+  purin:["./mini-purin-hero.webp","./mini-purin-clap.webp","./mini-purin-surprise.webp","./mini-purin-lie.webp"],
+  usagi:["./mini-usagi-excited.webp","./mini-usagi-point.webp","./mini-usagi-success.webp","./mini-usagi-sticker.webp"]
+};
+function eventBuddySpec(e,index){
+  const text=`${e.category||""} ${e.title||""} ${e.status||""} ${e.note||""}`;
+  let kind=index%2===0?"purin":"usagi";
+  let context="day";
+
+  if(/早餐|午餐|晚餐|咖啡|甜點|餐廳|Buffet|赤牛|牛排|燒鳥|すき焼き|美食|吃/.test(text)){
+    kind="purin";context="food";
+  }else if(/購物|補貨|商場|百貨|服飾|鞋|店|逛/.test(text)){
+    kind="usagi";context="shop";
+  }else if(/住宿|飯店|Hotel|Check-in|入住|泡湯|大浴場|休息|放空|星空/.test(text)){
+    kind="purin";context="hotel";
+  }else if(/預約|搶|新幹線|特急|列車|租車|還車|航班|機場|划船|報到|固定|必守|交通/.test(text)){
+    kind="usagi";context="booking";
+  }
+
+  const pool=EVENT_BUDDY_ASSETS[kind];
+  const img=pool[(state.dayIndex+index)%pool.length];
+  return {kind,context,img};
+}
+function eventBuddyHtml(e,index){
+  const b=eventBuddySpec(e,index);
+  const who=b.kind==="purin"?"布丁狗":"烏薩奇";
+  return `<button type="button" class="event-buddy buddy-only-art buddy-reactable" data-buddy-react="${b.kind}" data-buddy-context="${b.context}" aria-label="和${who}聊聊"><img src="${b.img}" alt="${who}"></button>`;
+}
+
+
+const GUIDE_COACH_KEY="kyushu-guide-coach-v53";
 let activeGuideContext=null;
 
 function guideHash(text=""){
@@ -1071,6 +2484,17 @@ function privateGuideForEvent(e){
 function privateGuideForDay(){
   return guideEntries().find(g=>g.type==="day"&&Number(g.day)===state.dayIndex+1)||null;
 }
+function guideMascot(kind="duo"){
+  if(kind==="purin")return {src:"./purin_tip.png?v=430",alt:"布丁狗"};
+  if(kind==="usagi")return {src:"./usagi_point.png?v=430",alt:"烏薩奇"};
+  return {src:"./buddy_hero.png?v=430",alt:"布丁狗與烏薩奇"};
+}
+function eventGuideMascot(e){
+  const text=`${e?.category||""} ${e?.title||""}`;
+  if(/餐|咖啡|甜點|吃|飯店|住宿|休息|泡湯/i.test(text))return "purin";
+  if(/購物|商場|百貨|服飾|鞋|店|預約|交通|票|車|機場/i.test(text))return "usagi";
+  return "duo";
+}
 function normalizeGuideSections(sections=[]){
   return (Array.isArray(sections)?sections:[]).map(s=>({
     label:String(s?.label||"小提醒"),
@@ -1101,7 +2525,8 @@ function buildEventGuide(e){
     key:stableKey,
     legacyKey:stableKey===legacyKey?"":legacyKey,
     title:saved?.title||e?.title||"行程攻略",
-    meta:`D${state.dayIndex+1} · ${e?.time||TRIP.days[state.dayIndex]?.shortDate||""}`,
+    meta:`D${state.dayIndex+1} · ${e?.time||effectiveDay(state.dayIndex)?.shortDate||""}`,
+    mascot:saved?.mascot||eventGuideMascot(e),
     sections:unique.length?unique:[{label:"這一站",items:["目前沒有額外攻略；你可以先把自己的備忘存進下方。"]}],
     map:saved?.map||e?.nav||e?.title||"",
     searches:Array.isArray(saved?.searches)?saved.searches:[],
@@ -1110,8 +2535,8 @@ function buildEventGuide(e){
   };
 }
 function buildDayGuide(){
-  const d=TRIP.days[state.dayIndex];
-  const saved=privateGuideForDay();
+  const d=effectiveDay(state.dayIndex);
+  const saved=variantSetForDay(state.dayIndex)?null:privateGuideForDay();
   const sections=[...normalizeGuideSections(saved?.sections)];
   if(d?.alert)sections.push({label:"今天先注意",items:[d.alert]});
   if(Array.isArray(d?.brief)&&d.brief.length)sections.push({label:"今日提醒",items:d.brief});
@@ -1122,7 +2547,7 @@ function buildDayGuide(){
   return {
     kind:"day",key:stableKey,legacyKey:stableKey===legacyKey?"":legacyKey,
     title:saved?.title||`D${state.dayIndex+1} ${d?.title||"今日攻略"}`,
-    meta:`${d?.shortDate||""} · 今日總攻略`,
+    meta:`${d?.shortDate||""} · 今日總攻略`, mascot:saved?.mascot||"duo",
     sections,map:saved?.map||"",searches:Array.isArray(saved?.searches)?saved.searches:[],
     links:Array.isArray(saved?.links)?saved.links:[]
   };
@@ -1158,6 +2583,7 @@ function markGuideNoteLocal(key,text){
   persistGuideNotesLocal();
   return record;
 }
+function pendingGuideNoteCount(){return Object.keys(state?.guideNotePending||{}).length}
 function activeGuideMatches(key){return !!activeGuideContext&&activeGuideContext.key===key}
 async function syncGuideNoteByKey(key,{showStatus=true}={}){
   if(!key||!state?.guideNotes?.[key])return false;
@@ -1244,6 +2670,8 @@ function openGuide(data){
   const modal=$("#guideModal"); if(!modal||!data)return;
   activeGuideContext=data;
   migrateLegacyGuideNote(data);
+  const art=guideMascot(data.mascot);
+  const mascot=$("#guideMascot"); mascot.src=art.src;mascot.alt=art.alt;
   $("#guideTitle").textContent=data.title;
   $("#guideMeta").textContent=data.meta||"";
   $("#guideSections").innerHTML=renderGuideSections(data.sections||[]);
@@ -1258,6 +2686,8 @@ function openGuide(data){
   for(const l of data.links||[])if(l?.url)acts.push(`<a class="guide-action" target="_blank" rel="noopener" href="${esc(l.url)}">${esc(l.label||"開啟連結")} ↗</a>`);
   $("#guideActions").innerHTML=acts.join("");
   modal.showModal();
+  try{localStorage.setItem(GUIDE_COACH_KEY,"1")}catch{}
+  hideGuideCoach();
 }
 async function closeGuide(){
   await flushGuideNoteEditor({sync:true});
@@ -1270,6 +2700,13 @@ async function saveGuideNote(){
   setGuideSaveStatus(state.cloud?"同步中…":"已存本機・等待網路同步",state.cloud?"saving":"pending");
   await syncGuideNoteByKey(activeGuideContext.key);
 }
+function hideGuideCoach(){const c=$("#guideCoach");if(c)c.hidden=true}
+function maybeShowGuideCoach(){
+  let used=false;try{used=localStorage.getItem(GUIDE_COACH_KEY)==="1"}catch{}
+  const c=$("#guideCoach");if(!c||used){if(c)c.hidden=true;return}
+  c.hidden=false;clearTimeout(maybeShowGuideCoach._t);maybeShowGuideCoach._t=setTimeout(()=>{if(c)c.hidden=true},6500);
+}
+
 function bindSafeHold(el,handler,{ms=750,move=10,allowInteractiveRoot=false}={}){
   if(!el||el.dataset.safeHoldBound==="1")return;
   el.dataset.safeHoldBound="1";el.classList.add("guide-hold-target");
@@ -1311,179 +2748,73 @@ function bindSafeHold(el,handler,{ms=750,move=10,allowInteractiveRoot=false}={})
 function bindGuideTargets(visibleEvents=[]){
   $$("#timeline .event-card").forEach((card,i)=>bindSafeHold(card,()=>openGuide(buildEventGuide(visibleEvents[i]))));
   const dayScene=$("#daySceneCard");if(dayScene)bindSafeHold(dayScene,()=>openGuide(buildDayGuide()),{allowInteractiveRoot:true});
+  maybeShowGuideCoach();
 }
 
 function renderSchedule(){
-  const d=TRIP.days[state.dayIndex];
+  const d=effectiveDay(state.dayIndex);
   $("#dayNumber").textContent=`D${state.dayIndex+1}`;
   $("#dayTitle").textContent=d.title;
   $("#daySubtitle").textContent=d.subtitle;
-  const meta=$("#dayTitleMeta");
-  if(meta) meta.innerHTML=`<span class="day-meta-pill">D${state.dayIndex+1}</span><span class="day-meta-text">${d.shortDate}</span><span class="day-meta-text">今日主圖</span>`;
+  const variantStatus=variantStatusForDay(state.dayIndex);
+  const variantBadge=$("#dayVariantBadge");
+  if(variantBadge){
+    variantBadge.hidden=!variantStatus;
+    variantBadge.textContent=variantStatus?.label||"";
+    variantBadge.classList.toggle("pending",!!variantStatus?.pending);
+  }
   renderDayBrief(d);
-  renderNowNext(d);
-  renderFamilyMeta(d);
-  renderDrivingCard(d);
-  renderOfficialStatus(d);
-  renderAutumnWatch(d);
   renderDailyScene();
-  $("#decisionArea").innerHTML=renderDecisionCards(d);
-  const visibleEvents=d.events.filter(eventVisible);
-  $("#timeline").innerHTML=visibleEvents.map((e,i)=>`
-    <article class="event">
+  renderDecisionArea();
+  const baseEvents=(d.events||[]).map((event,eventIndex)=>({...event,_dayIndex:state.dayIndex,_eventIndex:eventIndex})).filter(eventVisible);
+  const visibleEvents=[...baseEvents,...importedEventsForDay(state.dayIndex)];
+  const timelineHtml=visibleEvents.map((e,i)=>`
+    <article class="event ${e._imported?"event-imported ":""}${buddyRole(e)?`buddy-${buddyRole(e)}`:""}">
       <span class="event-dot"></span>
       ${i>0 && e.travel?`<div class="travel">${esc(e.transport||"→")} ${esc(e.travel)}</div>`:""}
       <div class="event-card" data-guide-enabled="1">
-        <div class="event-top"><h3 class="event-title">${esc(e.title)}</h3><span class="tag">${esc(e.category||"行程")}</span></div>
+        <div class="event-top"><h3 class="event-title">${esc(e.title)}</h3><span class="tag">${esc(e.category||"行程")}</span>${e._imported?`<span class="imported-badge">快速匯入</span>`:""}</div>
         <div class="event-time">${esc(e.time)}</div>
+        ${openingEventHtml(e)}
         ${renderEventExtras(e)}
         ${e.note?`<div class="event-note">${esc(e.note)}</div>`:""}
-        ${e.noNav?"":`<div class="event-footer"><a class="nav-link" target="_blank" rel="noopener" href="${mapNav(e.nav||e.title,weatherMode(e))}">↗ Google Maps 查看</a></div>`}
+        <div class="event-footer ${e.noNav?"buddy-only-footer":""}">
+          ${e.noNav?"":`<a class="nav-link" target="_blank" rel="noopener" href="${esc(e.mapUrl||mapNav(e.nav||e.title,weatherMode(e)))}">↗ Google Maps 查看</a>`}
+          ${eventBuddyHtml(e,i)}
+        </div>
       </div>
     </article>`).join("");
+  const linkedSet=variantSetForDay(state.dayIndex);
+  $("#timeline").innerHTML=timelineHtml || (linkedSet&&!selectedVariantId(linkedSet)?`<div class="variant-pending-state"><b>這一天的詳細行程尚未套用</b><span>請先在上方選 A 或 B；D3 與 D9 會整組一起切換，不會出現重複水族館或重複 Gundam 的組合。</span></div>`:"");
   renderHotelReturnCard();
   renderWeather(d);
   requestAnimationFrame(()=>bindGuideTargets(visibleEvents));
 }
-const WEATHER_CACHE_KEY=`${APP_NAMESPACE}:weather-cache`;
-const WEATHER_CACHE_TTL=30*60*1000;
-const WA_WEATHER_ART={
-  sunny:"./nov_weather_sunny.webp?v=160",
-  cloudy:"./nov_weather_cloudy.webp?v=160",
-  rain:"./nov_weather_rainy.webp?v=160",
-  storm:"./nov_weather_storm.webp?v=160",
-  snow:"./nov_weather_snow.webp?v=160"
-};
-function renderWeatherVisual(icon,artKey,alt=""){
-  const el=$("#weatherIcon"); if(!el)return;
-  const isWa=document.documentElement.dataset.theme==="wa";
-  if(isWa&&artKey&&WA_WEATHER_ART[artKey]){
-    el.classList.add("has-wa-weather-art");
-    el.innerHTML=`<img class="wa-weather-art" src="${WA_WEATHER_ART[artKey]}" alt="${esc(alt||"天氣插畫")}">`;
-  }else{
-    el.classList.remove("has-wa-weather-art");
-    el.textContent=icon||"☁️";
-  }
-}
-
-function weatherCodeMeta(code){
-  const c=Number(code);
-  if(c===0)return {icon:"☀️",desc:"晴",art:"sunny"};
-  if([1,2].includes(c))return {icon:"🌤️",desc:c===1?"大致晴朗":"局部多雲",art:"sunny"};
-  if(c===3)return {icon:"☁️",desc:"多雲",art:"cloudy"};
-  if([45,48].includes(c))return {icon:"🌫️",desc:"霧",art:"cloudy"};
-  if([51,53,55,56,57].includes(c))return {icon:"🌦️",desc:"毛毛雨",art:"rain"};
-  if([61,63,65,66,67,80,81,82].includes(c))return {icon:"🌧️",desc:"有雨",art:"rain"};
-  if([71,73,75,77,85,86].includes(c))return {icon:"🌨️",desc:"有雪",art:"snow"};
-  if([95,96,99].includes(c))return {icon:"⛈️",desc:"雷雨",art:"storm"};
-  return {icon:"☁️",desc:"天氣變化",art:"cloudy"};
-}
-function isoDayDiff(a,b){
-  const ms=Date.parse(`${b}T00:00:00Z`)-Date.parse(`${a}T00:00:00Z`);
-  return Math.round(ms/86400000);
-}
-function readWeatherCache(key){
-  try{const all=JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY)||"{}");return all[key]||null}catch{return null}
-}
-function writeWeatherCache(key,data){
-  try{
-    const all=JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY)||"{}");
-    all[key]={fetchedAt:Date.now(),data};
-    const entries=Object.entries(all).sort((a,b)=>(b[1]?.fetchedAt||0)-(a[1]?.fetchedAt||0)).slice(0,20);
-    localStorage.setItem(WEATHER_CACHE_KEY,JSON.stringify(Object.fromEntries(entries)));
-  }catch{}
-}
-function rainGroupsForDate(hourly,date,threshold=30){
-  const times=hourly?.time||[], probs=hourly?.precipitation_probability||[];
-  const hits=[];
-  for(let i=0;i<times.length;i++)if(String(times[i]).startsWith(date)&&Number(probs[i]||0)>=threshold)hits.push({time:String(times[i]).slice(11,16),prob:Number(probs[i]||0),idx:i});
-  const groups=[];
-  for(const h of hits){
-    const prev=groups.at(-1);
-    if(prev&&h.idx===prev.lastIdx+1){prev.end=h.time;prev.lastIdx=h.idx;prev.maxProb=Math.max(prev.maxProb,h.prob)}
-    else groups.push({start:h.time,end:h.time,lastIdx:h.idx,maxProb:h.prob});
-  }
-  return groups.map(g=>{
-    const [hh,mm]=g.end.split(":").map(Number); const endH=(hh+1)%24;
-    return {start:g.start,end:`${String(endH).padStart(2,"0")}:${String(mm).padStart(2,"0")}`,maxProb:g.maxProb};
-  });
-}
-async function getWeather(day){
-  const loc=day.weather;
-  if(!loc||!Number.isFinite(Number(loc.lat))||!Number.isFinite(Number(loc.lon)))return {state:"not-ready",message:"此日尚未設定天氣座標"};
-  const today=japanToday(), diff=isoDayDiff(today,day.date);
-  if(diff<0)return {state:"not-ready",message:"此旅行日期已結束"};
-  if(diff>15)return {state:"not-ready",message:"尚未進入 16 日預報範圍"};
-  const key=`${Number(loc.lat).toFixed(3)},${Number(loc.lon).toFixed(3)}:${day.date}`;
-  const cached=readWeatherCache(key);
-  if(cached&&Date.now()-Number(cached.fetchedAt||0)<WEATHER_CACHE_TTL)return cached.data;
-  const url=new URL("https://api.open-meteo.com/v1/forecast");
-  url.searchParams.set("latitude",loc.lat);
-  url.searchParams.set("longitude",loc.lon);
-  url.searchParams.set("current","temperature_2m,weather_code");
-  url.searchParams.set("hourly","precipitation_probability,weather_code");
-  url.searchParams.set("daily","weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max");
-  url.searchParams.set("timezone",TRIP?.timezone||"Asia/Tokyo");
-  url.searchParams.set("forecast_days","16");
-  try{
-    const res=await fetch(url.toString(),{cache:"no-store"});
-    if(!res.ok)throw new Error(`Weather ${res.status}`);
-    const raw=await res.json();
-    const i=(raw.daily?.time||[]).indexOf(day.date);
-    if(i<0)return {state:"not-ready",message:"尚未取得這一天的正式預報"};
-    const meta=weatherCodeMeta(raw.daily.weather_code?.[i]);
-    const data={
-      state:"forecast", icon:meta.icon, desc:meta.desc, art:meta.art,
-      current:diff===0&&Number.isFinite(Number(raw.current?.temperature_2m))?Math.round(Number(raw.current.temperature_2m)):null,
-      high:Math.round(Number(raw.daily.temperature_2m_max?.[i])),
-      low:Math.round(Number(raw.daily.temperature_2m_min?.[i])),
-      rainMax:Math.round(Number(raw.daily.precipitation_probability_max?.[i]||0)),
-      rainGroups:rainGroupsForDate(raw.hourly,day.date),
-      location:loc.label||day.location||"天氣"
-    };
-    writeWeatherCache(key,data);return data;
-  }catch(err){
-    if(cached?.data)return {...cached.data,stale:true};
-    throw err;
-  }
-}
-
 async function renderWeather(d){
   const card=$("#weatherCard");card.classList.add("skeleton");card.classList.remove("weather-no-forecast");
-  card.dataset.preview='0';
-  $("#weatherLocation").textContent=(d.weather?.label||d.location)+" · "+d.shortDate;
+  $("#weatherLocation").textContent=d.location+" · "+d.shortDate;
   $("#weatherTemp").textContent="載入中";
   $("#weatherDesc").textContent="正在取得旅行日期預報";
-  renderWeatherVisual("☁️","cloudy","旅行天氣預報等待中");$("#rainBox").innerHTML=""; setWeatherModeHint('');
+  $("#weatherIcon").textContent="☁️";$("#rainBox").innerHTML=""; ensureWeatherBuddy();
   if(typeof getWeather!=="function"){
-    const preview=weatherPreviewMeta();
     card.classList.add("weather-no-forecast");
-    card.dataset.preview='1';
     $("#weatherTemp").textContent="—";
-    $("#weatherDesc").textContent="預覽模式 · 尚未進入正式預報";
-    renderWeatherVisual(preview.icon,preview.art,`${preview.label}預覽插畫`);
+    $("#weatherDesc").textContent="尚未進入預報範圍";
     $("#rainBox").textContent="接近旅行日期後再顯示正式天氣資料。";
-    setWeatherModeHint(`非實際預報 · 目前 ${preview.label} · 點卡片切換`,true);
     card.classList.remove("skeleton");
     return;
   }
   try{
     const w=await getWeather(d);
     if(w.state!=="forecast"){
-      const preview=weatherPreviewMeta();
       card.classList.add("weather-no-forecast");
-      card.dataset.preview='1';
       $("#weatherTemp").textContent="—";
       $("#weatherDesc").textContent=w.message;
-      renderWeatherVisual(preview.icon,preview.art,`${preview.label}預覽插畫`);
-        $("#rainBox").innerHTML="進入 16 日預報範圍後，圖片會依實際天氣自動切換晴／陰／雨／雷／雪。";
-      setWeatherModeHint(`非實際預報 · 目前 ${preview.label} · 點卡片切換`,true);
+      $("#rainBox").innerHTML="進入預報範圍後，這裡會顯示高低溫、降雨機率與預計下雨時段。";
     }else{
-      card.dataset.preview='0';
-      renderWeatherVisual(w.icon,w.art,`${w.desc}天氣插畫`);
+      $("#weatherIcon").textContent=w.icon;
       $("#weatherTemp").textContent=w.current!==null?`${w.current}° · ${w.high}° / ${w.low}°`:`${w.high}° / ${w.low}°`;
-      $("#weatherDesc").textContent=`${w.desc} · 全日最高降雨機率 ${w.rainMax}%${w.stale?" · 離線快取":""}`;
-      setWeatherModeHint('已進入正式預報期 · 依實際天氣自動顯示');
+      $("#weatherDesc").textContent=`${w.desc} · 全日最高降雨機率 ${w.rainMax}%`;
       if(w.rainGroups.length){
         $("#rainBox").innerHTML=w.rainGroups.slice(0,2).map(g=>`<div class="rain-alert">🌧️ 預計 ${g.start}–${g.end} 有雨 · 最高 ${g.maxProb}%</div>`).join("");
       }else {
@@ -1491,19 +2822,14 @@ async function renderWeather(d){
       }
     }
   }catch(e){
-    const preview=weatherPreviewMeta();
-    card.classList.add("weather-no-forecast");
-    card.dataset.preview='1';
     $("#weatherTemp").textContent="—";$("#weatherDesc").textContent="天氣暫時無法更新";
-    renderWeatherVisual(preview.icon,preview.art,`${preview.label}預覽插畫`);
     $("#rainBox").textContent="保留上次行程資料；網路恢復後重新切換日期即可再抓。";
-    setWeatherModeHint(`非實際預報 · 先用 ${preview.label}預覽 · 點卡片切換`,true);
   }finally{card.classList.remove("skeleton")}
 }
 
 function renderFood(){
   $("#plannedFood").innerHTML=TRIP.plannedFood.map(i=>`
-    <article class="planned-food-card food-plan-card-v46">
+    <article class="planned-food-card buddy-food-card food-plan-card-v46">
       <div class="food-plan-meta-row">
         <span class="food-day-chip">${esc(i.day)}</span>
         <span class="food-time-chip">${esc(i.time)}</span>
@@ -1524,6 +2850,132 @@ function renderFood(){
       </div></div>
     </div>`).join(""):`<div class="empty">還沒有額外想吃清單，右上角 ＋ 可以新增。</div>`;
 }
+function openBookingAttachmentDb(){
+  return new Promise((resolve,reject)=>{
+    if(!("indexedDB" in window)){reject(new Error("此瀏覽器不支援離線附件儲存"));return}
+    const req=indexedDB.open(BOOKING_ATTACHMENT_DB_NAME,1);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      const store=db.objectStoreNames.contains(BOOKING_ATTACHMENT_STORE)
+        ? req.transaction.objectStore(BOOKING_ATTACHMENT_STORE)
+        : db.createObjectStore(BOOKING_ATTACHMENT_STORE,{keyPath:"id"});
+      if(!store.indexNames.contains("taskId"))store.createIndex("taskId","taskId",{unique:false});
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error||new Error("無法開啟離線附件資料庫"));
+  });
+}
+function bookingAttachmentRequest(req){
+  return new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error("附件資料庫操作失敗"))});
+}
+async function listBookingAttachments(taskId){
+  const db=await openBookingAttachmentDb();
+  try{
+    const tx=db.transaction(BOOKING_ATTACHMENT_STORE,"readonly");
+    const list=await bookingAttachmentRequest(tx.objectStore(BOOKING_ATTACHMENT_STORE).index("taskId").getAll(String(taskId)));
+    return (list||[]).sort((a,b)=>Number(b.addedAt||0)-Number(a.addedAt||0));
+  }finally{db.close()}
+}
+async function getBookingAttachment(id){
+  const db=await openBookingAttachmentDb();
+  try{return await bookingAttachmentRequest(db.transaction(BOOKING_ATTACHMENT_STORE,"readonly").objectStore(BOOKING_ATTACHMENT_STORE).get(String(id)))}finally{db.close()}
+}
+function bookingAttachmentExt(name=""){return String(name).toLowerCase().split(".").pop()||""}
+function bookingAttachmentAllowed(file){
+  const type=String(file?.type||"").toLowerCase(),ext=bookingAttachmentExt(file?.name||"");
+  return type==="application/pdf"||type.startsWith("image/")||["pdf","jpg","jpeg","png","webp","heic","heif"].includes(ext);
+}
+function bookingAttachmentId(taskId){
+  const uuid=globalThis.crypto?.randomUUID?.()||`${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
+  return `${taskId}:${uuid}`;
+}
+async function saveBookingAttachment(taskId,file){
+  if(!file||!bookingAttachmentAllowed(file))throw new Error(`${file?.name||"檔案"}：只支援 PDF 或圖片`);
+  if(Number(file.size||0)>BOOKING_ATTACHMENT_MAX_BYTES)throw new Error(`${file.name}：單檔不可超過 25 MB`);
+  const record={id:bookingAttachmentId(taskId),taskId:String(taskId),name:String(file.name||"附件"),type:String(file.type||""),size:Number(file.size||0),addedAt:Date.now(),blob:file};
+  const db=await openBookingAttachmentDb();
+  try{await bookingAttachmentRequest(db.transaction(BOOKING_ATTACHMENT_STORE,"readwrite").objectStore(BOOKING_ATTACHMENT_STORE).put(record))}finally{db.close()}
+  try{await navigator.storage?.persist?.()}catch{}
+  return record;
+}
+async function deleteBookingAttachment(id){
+  const db=await openBookingAttachmentDb();
+  try{await bookingAttachmentRequest(db.transaction(BOOKING_ATTACHMENT_STORE,"readwrite").objectStore(BOOKING_ATTACHMENT_STORE).delete(String(id)))}finally{db.close()}
+}
+function formatAttachmentBytes(bytes){
+  const n=Number(bytes||0);if(n<1024)return `${n} B`;if(n<1024*1024)return `${(n/1024).toFixed(n<10240?1:0)} KB`;return `${(n/1024/1024).toFixed(1)} MB`;
+}
+function attachmentIcon(item){
+  const type=String(item?.type||"").toLowerCase(),ext=bookingAttachmentExt(item?.name||"");
+  return type==="application/pdf"||ext==="pdf"?"📄":"🖼️";
+}
+async function refreshBookingAttachmentBadges(){
+  const buttons=$$("[data-booking-attachments]");
+  await Promise.all(buttons.map(async btn=>{
+    try{
+      const count=(await listBookingAttachments(btn.dataset.bookingAttachments)).length;
+      const badge=btn.querySelector(".booking-attachment-count");
+      if(badge){badge.textContent=String(count);badge.hidden=!count}
+      btn.classList.toggle("has-attachments",count>0);
+    }catch{
+      const badge=btn.querySelector(".booking-attachment-count");
+      if(badge){badge.textContent="";badge.hidden=true}
+    }
+  }));
+}
+async function renderBookingAttachmentManager(){
+  const box=$("#bookingAttachmentList");if(!box||!activeBookingAttachmentTaskId)return;
+  box.innerHTML='<div class="empty">正在讀取本機附件…</div>';
+  try{
+    const list=await listBookingAttachments(activeBookingAttachmentTaskId);
+    box.innerHTML=list.length?list.map(item=>`<div class="booking-attachment-item">
+      <div class="booking-attachment-file-icon">${attachmentIcon(item)}</div>
+      <div class="booking-attachment-file-main"><b>${esc(item.name)}</b><small>${formatAttachmentBytes(item.size)} · ${new Date(item.addedAt).toLocaleString("zh-TW")}</small></div>
+      <div class="booking-attachment-item-actions"><button type="button" class="mini-btn" data-booking-attachment-open="${esc(item.id)}">開啟</button><button type="button" class="mini-btn danger" data-booking-attachment-delete="${esc(item.id)}">刪除</button></div>
+    </div>`).join(""):'<div class="empty booking-attachment-empty">還沒有附件。可加入電子票券 PDF、QR Code 截圖或訂位確認圖片。</div>';
+    const total=list.reduce((sum,item)=>sum+Number(item.size||0),0);
+    if($("#bookingAttachmentStorage"))$("#bookingAttachmentStorage").textContent=`${list.length} 個附件 · 約 ${formatAttachmentBytes(total)} · 僅此裝置`;
+  }catch(err){box.innerHTML=`<div class="empty">無法讀取附件：${esc(err.message)}</div>`}
+}
+async function openBookingAttachmentManager(taskId){
+  const task=TRIP?.bookingTasks?.find(t=>String(t.id)===String(taskId));
+  activeBookingAttachmentTaskId=String(taskId||"");
+  if($("#bookingAttachmentTitle"))$("#bookingAttachmentTitle").textContent=task?.title?`附件｜${task.title}`:"票券附件";
+  $("#bookingAttachmentModal")?.showModal();
+  await renderBookingAttachmentManager();
+}
+function closeBookingAttachmentPreview(){
+  const dlg=$("#bookingAttachmentPreview");if(dlg?.open)dlg.close();
+  const frame=$("#bookingAttachmentPreviewFrame"),img=$("#bookingAttachmentPreviewImage");
+  if(frame){frame.src="about:blank";frame.hidden=true}if(img){img.removeAttribute("src");img.hidden=true}
+  if(bookingAttachmentPreviewUrl){URL.revokeObjectURL(bookingAttachmentPreviewUrl);bookingAttachmentPreviewUrl=""}
+}
+async function openBookingAttachmentPreview(id){
+  const item=await getBookingAttachment(id);if(!item?.blob){toast("找不到這個附件");return}
+  closeBookingAttachmentPreview();
+  bookingAttachmentPreviewUrl=URL.createObjectURL(item.blob);
+  if($("#bookingAttachmentPreviewTitle"))$("#bookingAttachmentPreviewTitle").textContent=item.name||"附件預覽";
+  const frame=$("#bookingAttachmentPreviewFrame"),img=$("#bookingAttachmentPreviewImage"),unsupported=$("#bookingAttachmentPreviewUnsupported");
+  if(unsupported)unsupported.hidden=true;
+  const type=String(item.type||"").toLowerCase(),ext=bookingAttachmentExt(item.name||"");
+  if(type==="application/pdf"||ext==="pdf"){frame.src=bookingAttachmentPreviewUrl;frame.hidden=false;img.hidden=true}
+  else if(type.startsWith("image/")||["jpg","jpeg","png","webp","heic","heif"].includes(ext)){img.src=bookingAttachmentPreviewUrl;img.hidden=false;frame.hidden=true}
+  else{frame.hidden=true;img.hidden=true;if(unsupported)unsupported.hidden=false}
+  const extLink=$("#bookingAttachmentExternal"),download=$("#bookingAttachmentDownload");
+  if(extLink)extLink.href=bookingAttachmentPreviewUrl;
+  if(download){download.href=bookingAttachmentPreviewUrl;download.download=item.name||"ticket"}
+  $("#bookingAttachmentPreview")?.showModal();
+}
+async function handleBookingAttachmentFiles(files){
+  if(!activeBookingAttachmentTaskId)return;
+  const list=[...(files||[])];if(!list.length)return;
+  let added=0;const errors=[];
+  for(const file of list){try{await saveBookingAttachment(activeBookingAttachmentTaskId,file);added++}catch(err){errors.push(err.message)}}
+  await renderBookingAttachmentManager();await refreshBookingAttachmentBadges();
+  if(added)toast(`已加入 ${added} 個離線附件`);
+  if(errors.length)toast(errors[0]);
+}
+
 function taskDone(task){
   return Object.prototype.hasOwnProperty.call(state.taskStatus,task.id) ? !!state.taskStatus[task.id] : !!task.defaultDone;
 }
@@ -1538,42 +2990,37 @@ function countdownText(task){
   if(days>=1)return `還有 ${days} 天 ${remain} 小時`;
   return `還有 ${hours} 小時`;
 }
-function allBookingTasks(){return [...(TRIP.bookingTasks||[]),...(state.bookingItems||[])];}
 async function toggleBookingTask(id){
-  const task=allBookingTasks().find(t=>t.id===id); if(!task)return;
+  const task=TRIP.bookingTasks.find(t=>t.id===id); if(!task)return;
   const wasDone=taskDone(task);
   state.taskStatus[id]=!wasDone;
   saveLocal("taskStatus",state.taskStatus);
   if(state.cloud){try{await setCloud("taskStatus",state.taskStatus)}catch{}}
   renderBookings();
   if(!wasDone){
-    const allDone=allBookingTasks().every(taskDone);
-    toast(allDone?"所有訂位／票券任務都完成了":"已標記完成");
+    const allDone=TRIP.bookingTasks.every(taskDone);
+    buddyCelebrate(allDone?pickLine(BUDDY_DIALOG.booking.all):pickLine(BUDDY_DIALOG.booking.complete),allDone?"./buddy_celebrate.png?v=430":"./usagi_success.png?v=430","booking");
   }
 }
-function bookingVisualStatus(t,done){
-  if(done)return {label:"已完成",cls:"done"};
-  if(/現場|小火車/i.test(`${t.title||""} ${t.detail||""}`))return {label:"現場處理",cls:"onsite"};
-  if(/預約|訂位|包車|租車|確認/i.test(`${t.title||""} ${t.detail||""}`))return {label:"待確認",cls:"pending"};
-  return {label:"待處理",cls:"pending"};
-}
 function bookingTaskCard(t){
-  const done=taskDone(t),vs=bookingVisualStatus(t,done),pdfKey=bookingPdfKey(t);
-  return `<div class="task-card ${done?"done":""}">
+  const done=taskDone(t);
+  return `<div class="task-card ${done?"done":"buddy-task-pending"}">
     <button class="task-check" data-task-id="${esc(t.id)}" aria-label="${done?"標記未完成":"標記完成"}">${done?"✓":"○"}</button>
     <div class="task-body">
-      <div class="task-top"><span>${esc(t.type)}</span><b>${esc(t.when||"")}</b><em class="booking-state ${vs.cls}">${vs.label}</em></div>
+      <div class="task-top"><span>${esc(t.type)}</span><b>${esc(t.when||"")}</b></div>
       <div class="task-title">${esc(t.title)}</div>
       <div class="task-detail">${esc(t.detail||"")}</div>
       ${!done?`<div class="task-countdown">${esc(countdownText(t))}</div>`:""}
-      <div class="booking-card-actions">${t.map?`<a class="mini-action-link" target="_blank" rel="noopener" href="${mapSearch(t.map)}">↗ 位置</a>`:""}${pdfAttachmentControls(pdfKey,t.title||"訂位票券")}${t.custom?`<button class="mini-btn" data-delete-booking="${esc(t.id)}" type="button">刪除</button>`:""}</div>
+      <div class="task-inline-actions">
+        ${t.map?`<a class="mini-action-link task-action-btn" target="_blank" rel="noopener" href="${mapSearch(t.map)}"><span class="task-action-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 17 17 7"/><path d="M9 7h8v8"/></svg></span><span>位置</span></a>`:""}
+        <button type="button" class="mini-action-link task-action-btn booking-attachment-btn" data-booking-attachments="${esc(t.id)}"><span class="task-action-icon booking-clip-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m20.5 11.5-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.7 9.7a2 2 0 0 1-2.8-2.8l9-9"/></svg></span><span class="booking-attachment-label">附件</span><span class="booking-attachment-count" hidden></span></button>
+      </div>
     </div>
   </div>`;
 }
 function renderBookings(){
-  const tasks=allBookingTasks();
-  const pending=tasks.filter(t=>!taskDone(t));
-  const done=tasks.filter(taskDone);
+  const pending=TRIP.bookingTasks.filter(t=>!taskDone(t));
+  const done=TRIP.bookingTasks.filter(taskDone);
   $("#bookingList").innerHTML=`
     <section class="task-section">
       <div class="task-section-title"><span>🔥</span><div><b>尚未處理</b><small>${pending.length} 項</small></div></div>
@@ -1583,6 +3030,7 @@ function renderBookings(){
       <div class="task-section-title"><span>✅</span><div><b>已完成／已訂</b><small>${done.length} 項</small></div></div>
       <div class="task-stack">${done.map(bookingTaskCard).join("")}</div>
     </section>`;
+  refreshBookingAttachmentBadges().catch(err=>console.warn("Attachment badge refresh failed",err));
 }
 function renderShopping(){
   const members=["全部",...TRIP.members];
@@ -1604,7 +3052,7 @@ function renderShopping(){
           <button class="mini-btn" data-delete-shopping="${i.id}">刪</button>
         </div>
       </div>
-    </div>`).join(""):`<div class="empty-art-card"><img src="./nov_empty_shopping.webp?v=160" alt="目前還沒有購物清單"></div>`;
+    </div>`).join(""):`<div class="empty">目前沒有購物項目。</div>`;
 }
 function computeExpense(){
   const paid=Object.fromEntries(TRIP.members.map(m=>[m,0]));
@@ -1626,84 +3074,40 @@ function settlementText(net){
   return net[a]>0?`${b} → ${a} ¥${Math.round(net[a]).toLocaleString()}`:`${a} → ${b} ¥${Math.round(-net[a]).toLocaleString()}`;
 }
 function renderExpenses(){
-  const s=computeExpense();
+  const s=computeExpense(),rate=activeFxRate();
+  renderFxCard();
   $("#expenseSummary").innerHTML=`<div class="eyebrow">旅費總計</div><div class="summary-total">¥${Math.round(s.total).toLocaleString()}</div>
+    ${rate?`<div class="summary-twd">約 NT$${formatTwd(s.total*rate)}</div>`:""}
     <div class="list-meta">${TRIP.members.map(m=>`${esc(m)} 已付款 ¥${Math.round(s.paid[m]).toLocaleString()}`).join(" · ")}</div>
     <div class="settlement"><b>目前結算</b><br>${esc(settlementText(s.net))}</div>`;
   $("#expenseList").innerHTML=state.expenses.length?state.expenses.slice().reverse().map(i=>`
     <div class="list-item"><div class="list-main"><div><div class="list-title">${esc(i.name)}</div>
-      <div class="list-meta">¥${Number(i.amount).toLocaleString()} · ${esc(i.payer)} 付款 · 分攤：${esc((i.participants||TRIP.members).join("、"))}${i.date?` · ${esc(i.date)}`:""}</div>
-      </div><button class="mini-btn" data-delete-expense="${i.id}">刪</button></div></div>`).join(""):`<div class="empty-art-card"><img src="./nov_empty_expense.webp?v=160" alt="目前還沒有花費紀錄"></div>`;
+      <div class="list-meta">¥${Number(i.amount).toLocaleString()}${rate?` · 約 NT$${formatTwd(Number(i.amount)*rate)}`:""} · ${esc(i.payer)} 付款 · 分攤：${esc((i.participants||TRIP.members).join("、"))}${i.date?` · ${esc(i.date)}`:""}</div>
+      </div><button class="mini-btn" data-delete-expense="${i.id}">刪</button></div></div>`).join(""):`<div class="empty">還沒有記帳紀錄。</div>`;
 }
-const EXCHANGE_RATE_STORAGE_KEY=`${APP_NAMESPACE}:manual-exchange-rate`;
-function getManualExchangeRate(){try{const n=Number(localStorage.getItem(EXCHANGE_RATE_STORAGE_KEY)||0);return Number.isFinite(n)&&n>0?n:0}catch{return 0}}
-function saveManualExchangeRate(value){const n=Number(value);try{if(Number.isFinite(n)&&n>0)localStorage.setItem(EXCHANGE_RATE_STORAGE_KEY,String(n));else localStorage.removeItem(EXCHANGE_RATE_STORAGE_KEY)}catch{}return Number.isFinite(n)&&n>0?n:0}
-function safeArithmetic(raw){
-  let s=String(raw||"").trim().replace(/[，,]/g,"").replace(/×/g,"*").replace(/÷/g,"/").replace(/[−–—]/g,"-").replace(/＋/g,"+").replace(/（/g,"(").replace(/）/g,")");
-  if(!s)return null;if(s.length>80||!/^[0-9+\-*/().\s]+$/.test(s))return NaN;
-  try{const value=Function(`"use strict";return (${s})`)();return typeof value==="number"&&Number.isFinite(value)?value:NaN}catch{return NaN}
-}
-function money0(n){return Math.round(Number(n)||0).toLocaleString("zh-TW")}
-function money2(n){return (Math.round((Number(n)||0)*100)/100).toLocaleString("zh-TW",{minimumFractionDigits:0,maximumFractionDigits:2})}
-function formatExchangeRate(n){const v=Number(n);return Number.isFinite(v)?v.toLocaleString("zh-TW",{minimumFractionDigits:0,maximumFractionDigits:6,useGrouping:false}):""}
-function renderExchangeTool(){
-  const rateInput=$("#exchangeRateInput"),expr=$("#jpyCalcInput"),result=$("#exchangeResult"),twd=$("#twdCalcInput"),reverse=$("#exchangeReverseResult");
-  if(!rateInput||!result)return;
-  const saved=getManualExchangeRate();if(document.activeElement!==rateInput&&rateInput.value===""&&saved)rateInput.value=String(saved);
-  const rate=Number(rateInput.value||saved||0),jpy=safeArithmetic(expr?.value||"");
-  if(!rate||rate<=0){result.innerHTML='<small>計算結果</small><strong>先輸入匯率</strong><span>例如：1 JPY = 0.215 TWD</span>';if(reverse)reverse.textContent="—";return}
-  if(jpy===null)result.innerHTML=`<small>目前匯率</small><strong>¥100 ≈ NT$${money2(100*rate)}</strong><span>輸入日圓金額或算式即可換算</span>`;
-  else if(Number.isNaN(jpy))result.innerHTML='<small>計算結果</small><strong>算式格式不正確</strong><span>只支援數字、+ − × ÷、括號</span>';
-  else result.innerHTML=`<small>計算結果</small><strong>¥${money2(jpy)} ≈ NT$${money2(jpy*rate)}</strong><span>1 JPY = ${formatExchangeRate(rate)} TWD</span>`;
-  const twdValue=Number(String(twd?.value||"").replace(/,/g,""));if(reverse)reverse.textContent=twd?.value&&Number.isFinite(twdValue)?`≈ ¥${money0(twdValue/rate)}`:"—";
-}
-function googleMapsUrlFromText(raw){
-  const urls=String(raw||"").match(/https?:\/\/[^\s]+/g)||[];
-  for(const token of urls){try{const u=new URL(token.replace(/[)>\]，。]+$/g,""));const h=u.hostname.toLowerCase();if(h==="maps.app.goo.gl"||h==="goo.gl"||h.endsWith("google.com")||h.endsWith("google.co.jp"))return u.toString()}catch{}}
-  return "";
-}
-function mapNameFromUrl(url){
-  if(!url)return "";try{const u=new URL(url);const m=u.pathname.match(/\/maps\/place\/([^/]+)/i);if(m)return decodeURIComponent(m[1].replace(/\+/g," "));const q=u.searchParams.get("query")||u.searchParams.get("q");return q?decodeURIComponent(q.replace(/\+/g," ")):""}catch{return ""}
-}
-function parseGoogleMapsShare(raw){
-  const text=String(raw||"").trim(),url=googleMapsUrlFromText(text);const lines=text.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);let name="",address="";
-  for(const line of lines){if(/^https?:\/\//i.test(line))continue;if(!name){name=line;continue}if(!address){address=line;break}}
-  if(!name)name=mapNameFromUrl(url);return {name:name.slice(0,120),address:address.slice(0,180),url};
-}
-function previewMapImport(){
-  const raw=$("#mapImportRaw"),name=$("#mapImportName"),box=$("#mapImportPreview");if(!raw||!name||!box)return;
-  const parsed=parseGoogleMapsShare(raw.value);if(parsed.name&&!name.value.trim())name.value=parsed.name;
-  const finalName=name.value.trim()||parsed.name;const url=parsed.url;
-  if(!raw.value.trim()){box.innerHTML='<b>貼上後會先解析名稱與 Google Maps 連結。</b><small>支援 Google Maps 分享文字、完整網址與 maps.app.goo.gl 短網址。</small>';return}
-  box.innerHTML=`<b>${esc(finalName||"尚未取得地點名稱")}</b><small>${url?"✓ 已辨識 Google Maps 連結":"尚未辨識 Google Maps 連結；仍可用名稱建立搜尋入口"}${parsed.address?`・${esc(parsed.address)}`:""}</small>`;
-}
-async function saveMapImport(){
-  const raw=$("#mapImportRaw"),nameEl=$("#mapImportName");if(!raw||!nameEl)return;const parsed=parseGoogleMapsShare(raw.value);const name=nameEl.value.trim()||parsed.name;if(!name){toast("請補上地點名稱");nameEl.focus();return}
-  const obj={id:uid(),name,url:parsed.url||"",address:parsed.address||"",day:$("#mapImportDay")?.value||"",category:$("#mapImportCategory")?.value||"景點",note:$("#mapImportNote")?.value.trim()||"",createdAt:Date.now()};
-  await cloudAdd("mapPlaces",obj);renderMapImports();raw.value="";nameEl.value="";if($("#mapImportNote"))$("#mapImportNote").value="";previewMapImport();toast("已加入地點清單");
-}
-function renderMapImports(){
-  const box=$("#mapImportList");if(!box)return;const items=(state.mapPlaces||[]).slice().sort((a,b)=>{const da=Number(String(a.day||"").replace("D",""))||99,db=Number(String(b.day||"").replace("D",""))||99;return da-db||(b.createdAt||0)-(a.createdAt||0)});
-  box.innerHTML=items.length?items.map(i=>{const href=i.url||mapSearch([i.name,i.address].filter(Boolean).join(" "));return `<div class="list-item map-place-item"><div class="list-main"><div><div class="list-title">${esc(i.name)}</div><div class="list-meta">${esc([i.day,i.category,i.address,i.note].filter(Boolean).join(" · ")||"未指定")}</div></div><div class="list-actions"><a class="mini-btn" target="_blank" rel="noopener" href="${esc(href)}">地圖</a><button class="mini-btn" data-delete-map-place="${esc(i.id)}">刪</button></div></div></div>`}).join(""):'<div class="empty">還沒有匯入地點。從 Google Maps 按「分享」後，把文字或連結貼到上方即可。</div>';
-}
-function renderNotes(){
-  const area=$("#notesArea"); if(area)area.value=state.notes||"";
-  const empty=$("#notesEmptyState"); if(empty)empty.hidden=!!String(state.notes||"").trim();
-}
-function renderTools(){renderBookings();renderAutumnWatch(TRIP.days[state.dayIndex]);renderExchangeTool();renderMapImports();renderShopping();renderExpenses();renderNotes()}
-function renderAll(){applySceneLanguageUI();renderDays();renderSchedule();renderFood();renderTools()}
+function renderNotes(){ $("#notesArea").value=state.notes||""; }
+function renderTools(){renderBookings();renderShopping();renderExpenses();renderNotes();renderImportedPlaces()}
+function renderAll(){renderDays();renderSchedule();renderFood();renderTools()}
 
 function switchView(v){
+  const prev=state.view;
   state.view=v;
   $$(".view").forEach(x=>x.classList.toggle("active",x.id===`${v}View`));
   $$(".nav-btn").forEach(x=>x.classList.toggle("active",x.dataset.view===v));
+  $$(".buddy-top-item").forEach(x=>x.classList.toggle("active",x.dataset.view===v));
   window.scrollTo({top:0,behavior:"smooth"});
+  if(v==="food") setTimeout(()=>buddyPeek("purin"),450);
+  if(v==="tools") setTimeout(()=>buddyPeek("usagi"),450);
+  if(prev&&prev!==v)setTimeout(()=>maybePageSwitchDashEgg("view"),240);
 }
 function switchTool(t){
+  const prev=state.tool;
   state.tool=t;
-  if(t==="autumn"){autumnWatchScope="all";renderAutumnWatch(TRIP.days[state.dayIndex]);}
   $$(".tool-card").forEach(x=>x.classList.toggle("active",x.dataset.tool===t));
   $$(".tool-panel").forEach(x=>x.classList.toggle("active",x.id===`${t}Panel`));
+  if(t==="expense")setTimeout(()=>ensureFxRate(),0);
+  if(t==="import")setTimeout(()=>renderImportedPlaces(),0);
+  if(prev&&prev!==t)setTimeout(()=>maybePageSwitchDashEgg("tool"),260);
 }
 function localUpsert(key,obj){
   const arr=state[key]; const idx=arr.findIndex(x=>x.id===obj.id);
@@ -1739,14 +3143,6 @@ function openModal(type){
   if(type==="food"){
     title.textContent="新增想吃店家";
     fields.innerHTML=field("店名","name","text","例如：咖啡廳") + field("區域","location","text","例如：天神") + field("備註","note","text","想吃什麼");
-  }else if(type==="booking"){
-    title.textContent="新增訂位／票券";
-    fields.innerHTML=selectField("類型","bookingType",["訂位","票券","住宿","交通","現場處理","其他"])+
-      field("名稱","name","text","例如：福岡水炊晚餐")+
-      field("時間／日期","when","text","例如：D8 18:30")+
-      field("處理期限（選填）","deadline","datetime-local","")+
-      field("備註","detail","text","例如：出發前再次確認")+
-      field("地點（選填）","map","text","例如：博多華味鳥");
   }else if(type==="shopping"){
     title.textContent="新增購物";
     fields.innerHTML=field("商品","name","text","例如：On Cloud 7")+
@@ -1767,10 +3163,6 @@ async function handleSubmit(e){
   const base={id:uid(),name:fd.get("name")?.trim()};
   if(type==="food"){
     await cloudAdd("foods",{...base,location:fd.get("location")?.trim(),note:fd.get("note")?.trim(),checked:false}); renderFood();
-  }else if(type==="booking"){
-    const deadlineRaw=fd.get("deadline")||"";
-    await cloudAdd("bookingItems",{...base,attachmentKey:base.id,type:fd.get("bookingType")||"訂位",title:base.name,when:fd.get("when")?.trim(),deadline:deadlineRaw?new Date(deadlineRaw).toISOString():"",detail:fd.get("detail")?.trim(),map:fd.get("map")?.trim(),defaultDone:false,custom:true});
-    renderBookings();
   }else if(type==="shopping"){
     await cloudAdd("shopping",{...base,owner:fd.get("owner"),amount:Number(fd.get("amount")||0),shop:fd.get("shop")?.trim(),day:fd.get("day")?.trim(),checked:false}); renderShopping();
   }else{
@@ -1781,20 +3173,18 @@ async function handleSubmit(e){
 }
 
 
-const DISPLAY_THEME_KEY=`${APP_NAMESPACE}:displayTheme`;
-const FONT_SIZE_KEY=`${APP_NAMESPACE}:fontSize`;
-const THEME_META={travel:"#A8673F",sea:"#58788C",wa:"#8C4A3C"};
+const DISPLAY_THEME_KEY="kyushu-oct-2026:displayTheme";
+const FONT_SIZE_KEY="kyushu-oct-2026:fontSize";
+const THEME_META={travel:"#A8673F",sea:"#58788C",wa:"#874B43",buddy:"#E0A93A"};
 
 function getDisplaySetting(key,fallback){
   try{return localStorage.getItem(key)||fallback}catch{return fallback}
 }
 function applyDisplaySettings(){
-  let theme=getDisplaySetting(DISPLAY_THEME_KEY,"wa");
-  if(!["travel","sea","wa"].includes(theme)){theme="wa";try{localStorage.setItem(DISPLAY_THEME_KEY,theme)}catch{}}
+  const theme=getDisplaySetting(DISPLAY_THEME_KEY,"travel");
   const fontSize=getDisplaySetting(FONT_SIZE_KEY,"standard");
   document.documentElement.dataset.theme=theme;
   document.documentElement.dataset.fontSize=fontSize;
-  document.documentElement.dataset.sceneLang=getSceneLanguage();
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content",THEME_META[theme]||THEME_META.travel);
   $$("[data-theme-choice]").forEach(b=>{
     const selected=b.dataset.themeChoice===theme;
@@ -1808,11 +3198,10 @@ function applyDisplaySettings(){
   });
 }
 function setDisplayTheme(theme){
-  if(!["travel","sea","wa"].includes(theme))return;
+  if(!["travel","sea","wa","buddy"].includes(theme))return;
   try{localStorage.setItem(DISPLAY_THEME_KEY,theme)}catch{}
   applyDisplaySettings();
-  const currentDayIndex=state?.dayIndex??0;
-  if(TRIP?.days?.[currentDayIndex]) renderWeather(TRIP.days[currentDayIndex]).catch(()=>{});
+  if(theme==="buddy"){setTimeout(()=>buddySparkBurst(50,32),120);setTimeout(()=>maybePurinWalkEgg(),900)}
 }
 function setFontSize(size){
   if(!["standard","large","xlarge"].includes(size))return;
@@ -1823,74 +3212,110 @@ function setFontSize(size){
 function bind(){
   if(appBound)return; appBound=true;
   document.addEventListener("click",async e=>{
-    const weatherCardTap=e.target.closest("#weatherCard");
-    if(weatherCardTap&&weatherCardTap.dataset.preview==='1'&&!e.target.closest('button,a,input,select,textarea,label')){handleWeatherPreviewTap();return;}
-    const dayArt=e.target.closest("#daySceneCard");if(dayArt){openDayLightbox(state.dayIndex);return;}
+    const weatherSwitch=e.target.closest("[data-weather-switch]");
+    if(weatherSwitch){handleWeatherBuddyTap();return;}
+    const buddyReaction=e.target.closest("[data-buddy-react]");
+    if(buddyReaction){buddyReact(buddyReaction.dataset.buddyReact,buddyReaction);}
     const themeChoice=e.target.closest("[data-theme-choice]");if(themeChoice){setDisplayTheme(themeChoice.dataset.themeChoice);return}
     const fontChoice=e.target.closest("[data-font-choice]");if(fontChoice){setFontSize(fontChoice.dataset.fontChoice);return}
-    const dayLangChoice=e.target.closest("[data-day-lang]");if(dayLangChoice){setSceneLanguage(dayLangChoice.dataset.dayLang);return}
     const d=e.target.closest("[data-day]");if(d){state.dayIndex=Number(d.dataset.day);state.decisionDrafts={};renderDays();renderSchedule();return}
-    const n=e.target.closest("[data-view]");if(n){switchView(n.dataset.view);if(n.dataset.tool)switchTool(n.dataset.tool);return}
+    const n=e.target.closest("[data-view]");if(n){switchView(n.dataset.view);return}
     const t=e.target.closest("[data-tool]");if(t){switchTool(t.dataset.tool);return}
     const o=e.target.closest("[data-open-modal]");if(o){openModal(o.dataset.openModal);return}
     const m=e.target.closest("[data-member]");if(m){state.shoppingMember=m.dataset.member;renderShopping();return}
-    const autumnOpen=e.target.closest("[data-autumn-open]");if(autumnOpen){openAutumnEditor(autumnOpen.dataset.autumnOpen);return}
-    const autumnScope=e.target.closest("[data-autumn-scope]");if(autumnScope){autumnWatchScope=autumnScope.dataset.autumnScope==="all"?"all":"day";renderAutumnWatch(TRIP.days[state.dayIndex]);return}
-    const autumnSort=e.target.closest("[data-autumn-sort]");if(autumnSort){autumnSortMode=["priority","date","status","stale"].includes(autumnSort.dataset.autumnSort)?autumnSort.dataset.autumnSort:"priority";try{localStorage.setItem("kyushu-nov-2026:autumn-sort",autumnSortMode)}catch{}renderAutumnWatch(TRIP.days[state.dayIndex]);return}
-    const autumnChoice=e.target.closest("[data-autumn-status-choice]");if(autumnChoice){autumnDraftStatus=autumnChoice.dataset.autumnStatusChoice;$$("#autumnModal [data-autumn-status-choice]").forEach(btn=>btn.classList.toggle("active",btn===autumnChoice));return}
+    const linkedVariant=e.target.closest("[data-linked-variant-option]");if(linkedVariant){chooseLinkedVariant(linkedVariant.dataset.linkedVariantSet,linkedVariant.dataset.linkedVariantOption);return}
+    const linkedVariantClear=e.target.closest("[data-linked-variant-clear]");if(linkedVariantClear){clearLinkedVariant(linkedVariantClear.dataset.linkedVariantClear);return}
     const decisionConfirm=e.target.closest("[data-decision-confirm]");if(decisionConfirm){await confirmDecision(decisionConfirm.dataset.decisionConfirm);return}
     const decisionClear=e.target.closest("[data-decision-clear]");if(decisionClear){await clearDecision(decisionClear.dataset.decisionClear);return}
     const decision=e.target.closest("[data-decision-id]");if(decision){stageDecision(decision.dataset.decisionId,decision.dataset.decisionOption);return}
-    const pdfAttach=e.target.closest("[data-pdf-attach]");if(pdfAttach){await attachPdf(pdfAttach.dataset.pdfAttach,pdfAttach.dataset.pdfLabel||"PDF附件");return}
-    const pdfOpen=e.target.closest("[data-pdf-open]");if(pdfOpen){await openPdfAttachment(pdfOpen.dataset.pdfOpen);return}
-    const pdfDelete=e.target.closest("[data-pdf-delete]");if(pdfDelete){await deletePdfAttachment(pdfDelete.dataset.pdfDelete);return}
+    const attachmentManager=e.target.closest("[data-booking-attachments]");if(attachmentManager){await openBookingAttachmentManager(attachmentManager.dataset.bookingAttachments);return}
+    const attachmentOpen=e.target.closest("[data-booking-attachment-open]");if(attachmentOpen){await openBookingAttachmentPreview(attachmentOpen.dataset.bookingAttachmentOpen);return}
+    const attachmentDelete=e.target.closest("[data-booking-attachment-delete]");if(attachmentDelete){if(confirm("刪除這個本機附件？")){await deleteBookingAttachment(attachmentDelete.dataset.bookingAttachmentDelete);await renderBookingAttachmentManager();await refreshBookingAttachmentBadges();toast("附件已刪除")}return}
     const task=e.target.closest("[data-task-id]");if(task){await toggleBookingTask(task.dataset.taskId);return}
+    const importedDelete=e.target.closest("[data-delete-imported-place]");if(importedDelete){await deleteImportedPlace(importedDelete.dataset.deleteImportedPlace);return}
     for(const [attr,key,render] of [["data-check-food","foods",renderFood],["data-check-shopping","shopping",renderShopping]]){
-      const x=e.target.closest(`[${attr}]`);if(x){const id=x.getAttribute(attr);const before=state[key].find(i=>i.id===id)?.checked;await toggleItem(key,id);render();if(!before)toast("已完成");return}
+      const x=e.target.closest(`[${attr}]`);if(x){const id=x.getAttribute(attr);const before=state[key].find(i=>i.id===id)?.checked;await toggleItem(key,id);render();if(!before)buddyCelebrate(key==="foods"?pickLine(BUDDY_DIALOG.food.complete):pickLine(BUDDY_DIALOG.shop.complete),key==="foods"?"./purin_clap.png?v=430":"./buddy_success.png?v=430",key==="foods"?"food":"shop");return}
     }
-    for(const [attr,key,render] of [["data-delete-food","foods",renderFood],["data-delete-shopping","shopping",renderShopping],["data-delete-expense","expenses",renderExpenses],["data-delete-map-place","mapPlaces",renderMapImports],["data-delete-booking","bookingItems",renderBookings]]){
+    for(const [attr,key,render] of [["data-delete-food","foods",renderFood],["data-delete-shopping","shopping",renderShopping],["data-delete-expense","expenses",renderExpenses]]){
       const x=e.target.closest(`[${attr}]`);if(x){await deleteItem(key,x.getAttribute(attr));render();toast("已刪除");return}
     }
   });
-  $("#dayLandscapeBtn")?.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();toggleDayLandscape()});
-  $("#dayLightboxClose")?.addEventListener("click",closeDayLightbox);
-  $("#dayLightboxPrev")?.addEventListener("click",()=>moveDayLightbox(-1));
-  $("#dayLightboxNext")?.addEventListener("click",()=>moveDayLightbox(1));
-  $("#dayImageLightbox")?.addEventListener("click",e=>{if(e.target.closest?.("[data-day-lightbox-close]"))closeDayLightbox()});
-  const dayLightboxStage=$("#dayImageLightbox .day-image-lightbox-stage");
-  if(dayLightboxStage){
-    const pointers=new Map();let swipeStart=null,panStart=null,pinchStart=null,lastTap=0,lastPointerType="mouse";
-    const point=e=>({x:e.clientX,y:e.clientY});
-    dayLightboxStage.addEventListener("pointerdown",e=>{
-      if(e.button!==undefined&&e.button!==0)return;lastPointerType=e.pointerType||"mouse";try{dayLightboxStage.setPointerCapture(e.pointerId)}catch{};pointers.set(e.pointerId,point(e));
-      if(pointers.size===1){swipeStart={...point(e),id:e.pointerId};panStart={...point(e),panX:dayImagePanX,panY:dayImagePanY,id:e.pointerId}}
-      if(pointers.size===2){const pts=[...pointers.values()];pinchStart={distance:Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y),zoom:dayImageZoom};}
-    });
-    dayLightboxStage.addEventListener("pointermove",e=>{
-      if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,point(e));
-      if(pointers.size>=2&&pinchStart){e.preventDefault();const pts=[...pointers.values()].slice(0,2),dist=Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y);setDayImageZoom(pinchStart.zoom*(dist/(pinchStart.distance||1)));return}
-      if(dayImageZoom>1&&panStart&&panStart.id===e.pointerId){e.preventDefault();dayImagePanX=panStart.panX+(e.clientX-panStart.x);dayImagePanY=panStart.panY+(e.clientY-panStart.y);applyDayImageZoom()}
-    },{passive:false});
-    const endPointer=e=>{
-      const start=swipeStart&&swipeStart.id===e.pointerId?swipeStart:null,cur=point(e);pointers.delete(e.pointerId);
-      if(pointers.size<2)pinchStart=null;
-      if(start&&dayImageZoom<=1.001&&!dayLandscapeActive){const dx=cur.x-start.x,dy=cur.y-start.y;if(Math.abs(dx)>44&&Math.abs(dx)>Math.abs(dy)*1.15)moveDayLightbox(dx<0?1:-1)}
-      if(!dayLandscapeActive&&(e.pointerType==="touch"||e.pointerType==="pen")&&start){const dx=cur.x-start.x,dy=cur.y-start.y;if(Math.abs(dx)<12&&Math.abs(dy)<12){const now=Date.now();if(now-lastTap<300){e.preventDefault();setDayImageZoom(dayImageZoom>1?1:2.5);lastTap=0}else lastTap=now}}
-      if(!pointers.size){swipeStart=null;panStart=null}
+  const heroEgg=$("#buddyHeroEgg");
+  if(heroEgg){
+    const heroImg=heroEgg.querySelector("img");
+    const heroGallery=[
+      "./hero-cover-v51.webp?v=510",
+      "./buddy_hero.png?v=430",
+      "./buddy_celebrate.png?v=430",
+      "./buddy_chill.png?v=430",
+      "./buddy_eat.png?v=430"
+    ];
+    let heroIndex=0,swipeIgnoreClick=false;
+    heroGallery.slice(1).forEach(src=>{const p=new Image();p.src=src;if(p.decode)p.decode().catch(()=>{})});
+    const syncDots=()=>{$$("#buddyHeroDots [data-hero-index]").forEach((d,i)=>d.classList.toggle("active",i===heroIndex))};
+    const setHero=(idx,animate=true)=>{
+      heroIndex=(idx+heroGallery.length)%heroGallery.length;
+      if(heroImg){
+        heroImg.classList.remove("swap");
+        if(animate)void heroImg.offsetWidth;
+        heroImg.src=heroGallery[heroIndex];
+        if(animate)heroImg.classList.add("swap");
+      }
+      syncDots();
     };
-    dayLightboxStage.addEventListener("pointerup",endPointer);dayLightboxStage.addEventListener("pointercancel",e=>{pointers.delete(e.pointerId);if(!pointers.size){swipeStart=null;panStart=null;pinchStart=null}});
-    dayLightboxStage.addEventListener("dblclick",e=>{if(lastPointerType!=="mouse"||dayLandscapeActive)return;e.preventDefault();setDayImageZoom(dayImageZoom>1?1:2.5)});
+    $$("#buddyHeroDots [data-hero-index]").forEach(dot=>dot.addEventListener("click",()=>setHero(Number(dot.dataset.heroIndex))));
+
+    let sx=0,sy=0,spid=null;
+    heroEgg.addEventListener("pointerdown",e=>{if(e.button!==undefined&&e.button!==0)return;sx=e.clientX;sy=e.clientY;spid=e.pointerId;swipeIgnoreClick=false},{passive:true});
+    heroEgg.addEventListener("pointerup",e=>{
+      if(spid!==e.pointerId)return;
+      const dx=e.clientX-sx,dy=e.clientY-sy;spid=null;
+      if(Math.abs(dx)>=42&&Math.abs(dx)>Math.abs(dy)*1.15){
+        swipeIgnoreClick=true;setHero(heroIndex+(dx<0?1:-1));
+        try{navigator.vibrate?.(8)}catch{}
+        setTimeout(()=>swipeIgnoreClick=false,380);
+      }
+    },{passive:true});
+    heroEgg.addEventListener("pointercancel",()=>{spid=null;swipeIgnoreClick=false},{passive:true});
+
+    // Hero tap is intentionally inert: swipe changes artwork, long-press opens the easter egg.
+    heroEgg.addEventListener("click",()=>{
+      if(swipeIgnoreClick)return;
+    });
+    bindSafeHold(heroEgg,()=>{preloadSecretLifeAssets();showHeroEgg(pickLine(HERO_EGG_POOL))},{ms:760,move:11,allowInteractiveRoot:true});
+    syncDots();
   }
-  $("#dayZoomOut")?.addEventListener("click",()=>setDayImageZoom(dayImageZoom-.5));
-  $("#dayZoomIn")?.addEventListener("click",()=>setDayImageZoom(dayImageZoom+.5));
-  $("#dayZoomReset")?.addEventListener("click",resetDayImageZoom);
-  window.addEventListener("resize",()=>{if(dayLandscapeActive)syncDayLandscapeFallback();if($("#dayImageLightbox")?.classList.contains("show"))applyDayImageZoom()});
-  const handleDayFullscreenExit=()=>{
-    const fs=document.fullscreenElement||document.webkitFullscreenElement;
-    if(dayLandscapeActive&&dayLandscapeNativeFullscreen&&!fs)exitDayLandscape({exitFullscreen:false});
-  };
-  document.addEventListener("fullscreenchange",handleDayFullscreenExit);
-  document.addEventListener("webkitfullscreenchange",handleDayFullscreenExit);
+  $("#secretLifeEntry")?.addEventListener("click",e=>{e.stopPropagation();openSecretLifeAlbum()});
+  $("#secretLifeClose")?.addEventListener("click",e=>{e.stopPropagation();closeSecretLifeAlbum()});
+  $("#secretLifePrev")?.addEventListener("click",e=>{e.stopPropagation();moveSecretLife(-1)});
+  $("#secretLifeNext")?.addEventListener("click",e=>{e.stopPropagation();moveSecretLife(1)});
+  $("#secretLifeImg")?.addEventListener("click",e=>{
+    e.stopPropagation();
+    if(secretLifeSwipeIgnoreClick)return;
+    moveSecretLife(1);
+  });
+  $("#secretLifeAlbum")?.addEventListener("click",e=>{if(e.target===e.currentTarget)closeSecretLifeAlbum()});
+  const secretStage=$("#secretLifeStage");
+  if(secretStage){
+    let ssx=0,ssy=0,spointer=null;
+    secretStage.addEventListener("pointerdown",e=>{if(e.button!==undefined&&e.button!==0)return;ssx=e.clientX;ssy=e.clientY;spointer=e.pointerId},{passive:true});
+    secretStage.addEventListener("pointerup",e=>{
+      if(spointer!==e.pointerId)return;
+      const dx=e.clientX-ssx,dy=e.clientY-ssy;spointer=null;
+      if(Math.abs(dx)>=42&&Math.abs(dx)>Math.abs(dy)*1.15){
+        secretLifeSwipeIgnoreClick=true;
+        moveSecretLife(dx<0?1:-1);
+        try{navigator.vibrate?.(8)}catch{}
+        setTimeout(()=>{secretLifeSwipeIgnoreClick=false},360);
+      }
+    },{passive:true});
+    secretStage.addEventListener("pointercancel",()=>{spointer=null},{passive:true});
+  }
+  $("#buddyCelebration")?.addEventListener("click",e=>{
+    const wrap=e.currentTarget;
+    if(wrap.dataset.heroEgg==="1"){if(e.target===wrap)closeHeroEgg();return}
+    wrap.classList.remove("show");
+  });
   $("#guideClose")?.addEventListener("click",()=>closeGuide());
   $("#guideSaveBtn")?.addEventListener("click",saveGuideNote);
   $("#guideNoteArea")?.addEventListener("input",e=>{
@@ -1901,26 +3326,27 @@ function bind(){
   });
   $("#guideModal")?.addEventListener("click",e=>{if(e.target===$("#guideModal"))closeGuide()});
   $("#guideModal")?.addEventListener("cancel",e=>{e.preventDefault();closeGuide()});
-  $("#autumnModalClose")?.addEventListener("click",closeAutumnEditor);
-  $("#autumnModalSave")?.addEventListener("click",()=>saveAutumnEditor());
-  $("#autumnModal")?.addEventListener("click",e=>{if(e.target===$("#autumnModal"))closeAutumnEditor()});
-  $("#autumnModal")?.addEventListener("cancel",e=>{e.preventDefault();closeAutumnEditor()});
   $("#foodNearbyOpen")?.addEventListener("click",()=>$("#foodNearbyModal")?.showModal());
   $("#foodNearbyClose")?.addEventListener("click",()=>$("#foodNearbyModal")?.close());
   $("#foodNearbyModal")?.addEventListener("click",e=>{if(e.target===$("#foodNearbyModal"))$("#foodNearbyModal").close()});
-
-  $("#exchangeRateInput")?.addEventListener("input",e=>{saveManualExchangeRate(e.target.value);renderExchangeTool()});
-  $("#jpyCalcInput")?.addEventListener("input",renderExchangeTool);
-  $("#twdCalcInput")?.addEventListener("input",renderExchangeTool);
-  $("#exchangeClearBtn")?.addEventListener("click",()=>{if($("#jpyCalcInput"))$("#jpyCalcInput").value="";if($("#twdCalcInput"))$("#twdCalcInput").value="";renderExchangeTool()});
-  $("#mapImportRaw")?.addEventListener("input",previewMapImport);
-  $("#mapImportName")?.addEventListener("input",previewMapImport);
-  $("#mapImportSaveBtn")?.addEventListener("click",saveMapImport);
-  $("#settingsBtn").addEventListener("click",()=>{$("#settingsModal").showModal();applyDisplaySettings();refreshOfflinePackStatus().catch(()=>{})});
+  $("#bookingAttachmentClose")?.addEventListener("click",()=>$("#bookingAttachmentModal")?.close());
+  $("#bookingAttachmentModal")?.addEventListener("click",e=>{if(e.target===$("#bookingAttachmentModal"))$("#bookingAttachmentModal").close()});
+  $("#bookingAttachmentInput")?.addEventListener("change",async e=>{try{await handleBookingAttachmentFiles(e.target.files)}finally{e.target.value=""}});
+  $("#bookingAttachmentPreviewClose")?.addEventListener("click",closeBookingAttachmentPreview);
+  $("#bookingAttachmentPreview")?.addEventListener("click",e=>{if(e.target===$("#bookingAttachmentPreview"))closeBookingAttachmentPreview()});
+  $("#bookingAttachmentPreview")?.addEventListener("cancel",e=>{e.preventDefault();closeBookingAttachmentPreview()});
+  $("#settingsBtn").addEventListener("click",()=>{$("#settingsModal").showModal();applyDisplaySettings();renderVariantConfigStatus()});
   $("#settingsClose").addEventListener("click",()=>$("#settingsModal").close());
-  $("#offlinePackDownloadBtn")?.addEventListener("click",()=>downloadOfflinePack());
-  $("#offlinePackRemoveBtn")?.addEventListener("click",()=>removeOfflinePack());
   $("#settingsModal").addEventListener("click",e=>{if(e.target===$("#settingsModal"))$("#settingsModal").close()});
+  $("#variantConfigInput")?.addEventListener("change",async e=>{
+    const file=e.target.files?.[0];if(!file)return;
+    try{await importVariantConfigFile(file);toast("私人行程方案已匯入")}
+    catch(err){console.error(err);toast(`匯入失敗：${err.message}`)}
+    finally{e.target.value=""}
+  });
+  $("#variantConfigClear")?.addEventListener("click",()=>{
+    if(confirm("清除這台裝置的私人行程方案設定與 A/B 選擇？"))clearVariantConfig();
+  });
   $("#displayResetBtn").addEventListener("click",()=>{
     try{
       localStorage.removeItem(DISPLAY_THEME_KEY);
@@ -1929,6 +3355,15 @@ function bind(){
     applyDisplaySettings();
     toast("已恢復預設顯示");
   });
+  $("#fxJpyInput")?.addEventListener("input",updateFxCalculator);
+  $("#fxSettingsBtn")?.addEventListener("click",openFxRateModal);
+  $("#fxRefreshBtn")?.addEventListener("click",()=>ensureFxRate({force:true,notify:true}));
+  $("#fxRateClose")?.addEventListener("click",()=>$("#fxRateModal")?.close());
+  $("#fxRateModal")?.addEventListener("click",e=>{if(e.target===$("#fxRateModal"))$("#fxRateModal").close()});
+  $("#fxRateForm")?.addEventListener("submit",saveFxRateSettings);
+  $("#placeImportParseBtn")?.addEventListener("click",parsePlaceImportDrafts);
+  $("#placeImportAddBtn")?.addEventListener("click",addPlaceImportDrafts);
+  $("#placeImportText")?.addEventListener("paste",()=>setTimeout(()=>{if(($("#placeImportText")?.value||"").trim())parsePlaceImportDrafts()},30));
   $("#modalClose").addEventListener("click",()=>$("#formModal").close());
   $("#modalForm").addEventListener("submit",handleSubmit);
   $("#firebaseTestBtn").addEventListener("click", async()=>{
@@ -1949,8 +3384,20 @@ function bind(){
       toast(`Firebase：${err.message}`);
     }
   });
+  const syncPill=$("#syncPill");
+  const forceCloudSync=async()=>{
+    if(!navigator.onLine){toast("目前離線，資料已保存在本機");return}
+    if($("#syncText"))$("#syncText").textContent="手動同步中…";
+    const ok=await connectCloud({force:true});
+    toast(ok?"雲端同步完成":"同步失敗，繼續使用本機資料");
+  };
+  syncPill?.addEventListener("click",forceCloudSync);
+  syncPill?.addEventListener("keydown",e=>{
+    if(e.key==="Enter"||e.key===" "){e.preventDefault();forceCloudSync()}
+  });
+
   $("#notesArea").addEventListener("input",e=>{
-    state.notes=e.target.value;saveLocal("notes",state.notes);const noteEmpty=$("#notesEmptyState");if(noteEmpty)noteEmpty.hidden=!!String(state.notes||"").trim();$("#noteStatus").textContent="本機已儲存";
+    state.notes=e.target.value;saveLocal("notes",state.notes);$("#noteStatus").textContent="本機已儲存";
     clearTimeout(state.noteTimer);
     state.noteTimer=setTimeout(async()=>{
       if(state.cloud){
@@ -1980,8 +3427,34 @@ function bind(){
 }
 
 function stopCloudPollers(){for(const stop of [...pollers]){try{stop()}catch{}}}
-async function connectCloud(){
+function cloudLastSyncAt(){
+  try{return Number(localStorage.getItem(storeKey("cloudLastSyncAt"))||0)}catch{return 0}
+}
+function markCloudSyncedNow(){
+  try{localStorage.setItem(storeKey("cloudLastSyncAt"),String(Date.now()))}catch{}
+}
+async function connectCloud({force=false}={}){
   stopCloudPollers();
+  if(!navigator.onLine){
+    enterOfflineMode();
+    return false;
+  }
+
+  // If this device synced recently, do not issue another batch of REST reads just because the page
+  // was reopened. This is the main roaming/data-saver behavior; writes still go to Firebase on edit.
+  const recentSync=Date.now()-cloudLastSyncAt()<CLOUD_SYNC_COOLDOWN_MS;
+  if(!force && recentSync){
+    state.cloud=true;
+    $("#syncPill")?.classList.add("cloud");
+    if($("#syncText"))$("#syncText").textContent="省流量模式・本機資料";
+    if(activeGuideContext){
+      const key=activeGuideContext.key;
+      if(state.guideNotePending?.[key])setGuideSaveStatus("已存本機・等待同步","pending");
+      else setGuideSaveStatus(guideNoteText(key)?"✓ 本機資料已就緒":"已開啟自動儲存","synced");
+    }
+    return true;
+  }
+
   const ok=await initFirebase();
   if(!ok){
     state.cloud=false;
@@ -1990,39 +3463,49 @@ async function connectCloud(){
     const msg=getLastFirebaseError();
     if(msg&&$("#noteStatus")) $("#noteStatus").textContent=`⚠ Firebase 未連線：${msg}`;
     if(activeGuideContext)setGuideSaveStatus("已存本機・等待重新同步","pending");
-    if(navigator.onLine)setTimeout(()=>resumeCloudAfterOnline(),2500);
     return false;
   }
   state.cloud=true;
   $("#syncPill")?.classList.add("cloud");
-  if($("#syncText"))$("#syncText").textContent="Firebase 已連線";
+  if($("#syncText"))$("#syncText").textContent="同步一次中…";
 
-  // Guide notes are merged before polling. Pending offline edits are never blindly overwritten.
+  // Guide notes are merged once before the rest of the one-shot sync. Pending offline edits are
+  // never blindly overwritten.
   try{
     const remoteGuideNotes=await request(pathFor("guideNotes"),{method:"GET"});
     mergeGuideNotesFromCloud(remoteGuideNotes,{syncPending:false});
   }catch(err){console.warn("Guide notes initial merge failed",err)}
   await syncPendingGuideNotes();
+  await syncPendingImportedPlaces();
 
   const mappings=[
     ["foods",v=>{if(v!==null){state.foods=normalizeCloud(v);saveLocal("foods",state.foods);renderFood()}}],
-    ["shopping",v=>{if(v!==null){state.shopping=normalizeCloud(v).map(x=>({...x,owner:normalizeMemberLabel(x.owner)}));saveLocal("shopping",state.shopping);renderShopping()}}],
-    ["expenses",v=>{if(v!==null){state.expenses=normalizeCloud(v).map(x=>({...x,payer:normalizeMemberLabel(x.payer),participants:(x.participants||[]).map(normalizeMemberLabel)}));saveLocal("expenses",state.expenses);renderExpenses()}}],
-    ["mapPlaces",v=>{if(v!==null){state.mapPlaces=normalizeCloud(v);saveLocal("mapPlaces",state.mapPlaces);renderMapImports()}}],
-    ["bookingItems",v=>{if(v!==null){state.bookingItems=normalizeCloud(v).map(x=>({...x,custom:true,title:x.title||x.name||"未命名訂位"}));saveLocal("bookingItems",state.bookingItems);renderBookings()}}],
+    ["shopping",v=>{if(v!==null){state.shopping=normalizeCloud(v);saveLocal("shopping",state.shopping);renderShopping()}}],
+    ["expenses",v=>{if(v!==null){state.expenses=normalizeCloud(v);saveLocal("expenses",state.expenses);renderExpenses()}}],
+    ["importedPlaces",v=>{if(v!==null&&!state.importedPlacesPending){state.importedPlaces=normalizeImportedPlaces(v);saveLocal("importedPlaces",state.importedPlaces);renderImportedPlaces();renderSchedule()}}],
     ["taskStatus",v=>{if(v && typeof v==="object"){state.taskStatus=v;saveLocal("taskStatus",v);renderBookings()}}],
     ["decisions",v=>{if(v && typeof v==="object"){state.decisions=v;saveLocal("decisions",v);renderSchedule()}}],
-    ["autumnStatus",v=>{if(v && typeof v==="object"){state.autumnStatus=v;saveLocal("autumnStatus",v);renderAutumnWatch(TRIP.days[state.dayIndex])}}],
     ["guideNotes",v=>mergeGuideNotesFromCloud(v)],
     ["notes",v=>{if(typeof v==="string" && document.activeElement!==$("#notesArea")){state.notes=v;saveLocal("notes",v);renderNotes()}}]
   ];
-  mappings.forEach(([k,cb])=>{try{subscribe(k,cb)}catch{}});
+  const results=await Promise.all(mappings.map(async([k,cb])=>{
+    try{
+      const value=await request(pathFor(k),{method:"GET"});
+      cb(value);
+      return true;
+    }catch(err){
+      console.warn(`Firebase one-shot sync failed (${k})`,err);
+      return false;
+    }
+  }));
+  if(results.some(Boolean)) markCloudSyncedNow();
+  if($("#syncText"))$("#syncText").textContent=results.some(Boolean)?"雲端已同步・省流量":"同步失敗・本機模式";
   if(activeGuideContext){
     const key=activeGuideContext.key;
     if(state.guideNotePending?.[key])setGuideSaveStatus("已存本機・同步中…","saving");
     else setGuideSaveStatus(guideNoteText(key)?"✓ 雲端同步完成":"已開啟自動儲存","synced");
   }
-  return true;
+  return results.some(Boolean);
 }
 
 
@@ -2054,7 +3537,7 @@ async function resumeCloudAfterOnline(){
       if(activeGuideContext)setGuideSaveStatus("本機已儲存・登入後再同步","pending");
       return;
     }
-    await connectCloud();
+    await connectCloud({force:true});
   }finally{cloudReconnectInFlight=false}
 }
 function enterOfflineMode(){
@@ -2072,10 +3555,6 @@ function setAuthStatus(message,kind=""){
   if(!el)return;
   el.textContent=message||"";
   el.dataset.kind=kind;
-  const art=$("#authLoadingArt");
-  const busy=!kind && /正在|載入|確認登入/.test(String(message||""));
-  if(art)art.hidden=!busy;
-  $("#authGate")?.classList.toggle("is-busy",busy);
 }
 function showAuthGate(){
   $("#authGate")?.removeAttribute("hidden");
@@ -2105,32 +3584,16 @@ function cachedTrip(){
   }catch{return null}
 }
 function formatTripDate(){
-  const days=TRIP?.days||[];
-  const first=days[0]?.date||OFFICIAL_TRIP_START, last=days.at(-1)?.date||OFFICIAL_TRIP_END;
-  const short=d=>String(d||"").slice(5).replace("-",".");
-  return `${short(first)} — ${short(last)}`;
-}
-const HERO_ROUTE_MAP={FUKUOKA:'福岡',HAKATA:'博多',YUFUIN:'由布院',YUFUINN:'由布院',ASO:'阿蘇',KUMAMOTO:'熊本',BEPPU:'別府',TAKACHIHO:'高千穗'};
-function translateHeroRouteLabel(label=''){
-  const raw=String(label||'').trim();
-  if(!raw)return '';
-  const key=raw.toUpperCase().replace(/\s+/g,'');
-  return HERO_ROUTE_MAP[key]||raw;
-}
-function splitHeroRoute(raw=''){
-  return String(raw||'').split(/→|->|→|➝|—|-/).map(x=>x.trim()).filter(Boolean).map(translateHeroRouteLabel);
+  // Authoritative trip range: 2026/10/09–2026/10/18.
+  // Do not let stale Firebase metadata override the cover date.
+  return "10.09 — 10.18";
 }
 function applyPrivateTripMeta(){
-  const title=$("#heroPrivateTitle"); if(title) title.textContent=TRIP.heroTitle||TRIP.title||"九州家族紅葉旅";
+  const title=$("#heroPrivateTitle"); if(title) title.textContent=TRIP.heroTitle||TRIP.title||"私人旅程";
   const date=$("#heroPrivateDate"); if(date) date.textContent=formatTripDate();
-  const route=$("#heroPrivateRoute"); if(route){
-    const raw=TRIP.heroRoute||"FUKUOKA → YUFUIN → ASO → KUMAMOTO → FUKUOKA";
-    const places=splitHeroRoute(raw);
-    route.innerHTML=places.map((x,i)=>`${i?'<i>→</i>':''}<span>${esc(x)}</span>`).join("");
-  }
-  const season=$("#heroPrivateSeason"); if(season) season.textContent=String(TRIP.season||"2026・晩秋").replace("・"," · ");
-  const duration=$("#heroTripDuration"); if(duration) duration.textContent=TRIP.durationLabel||`${TRIP.days?.length||9}天`;
-  document.title=TRIP.appTitle||"九州家族紅葉旅";
+  const route=$("#heroPrivateRoute"); if(route) route.textContent=TRIP.heroRoute||"PRIVATE TRIP";
+  const season=$("#heroPrivateSeason"); if(season) season.textContent="2026・秋";
+  document.title="私人旅程";
 }
 async function fetchPrivateTrip(){
   const content=await request(`${ROOT}/content`,{method:"GET"});
@@ -2138,23 +3601,16 @@ async function fetchPrivateTrip(){
   return content;
 }
 async function bootTrip(content,user,{offline=false}={}){
-  TRIP={...content,members:FAMILY_MEMBER_LABELS.slice()};
+  TRIP=content;
   currentAuthUser=user||null;
   state=createState();
-  normalizeFamilyCollections();
   state.dayIndex=initialDay();
   applyPrivateTripMeta();
   applyDisplaySettings();
-  await loadPdfAttachmentIndex();
   bind();
   renderAll();
-  if(!window.__kyushuNowNextTimer){
-    window.__kyushuNowNextTimer=setInterval(()=>{
-      if(TRIP&&state)renderNowNext(TRIP.days[state.dayIndex]);
-    },60000);
-  }
   showPrivateApp();
-  refreshOfflinePackStatus().catch(()=>{});
+  setTimeout(()=>{maybePurinWalkEgg();maybeUrgentBookingEgg();maybeTripStartEgg()},650);
   const email=$("#accountEmail"); if(email) email.textContent=user?.email||"離線已授權裝置";
   if(offline){
     state.cloud=false;
@@ -2165,9 +3621,37 @@ async function bootTrip(content,user,{offline=false}={}){
     connectCloud();
   }
 }
+async function refreshPrivateTripCacheInBackground(user){
+  if(!navigator.onLine)return;
+  try{
+    const content=await fetchPrivateTrip();
+    cacheAuthorizedTrip(content,user);
+  }catch(err){
+    console.warn("Private trip background refresh skipped",err);
+  }
+}
 async function handleAuthorizedUser(user){
   currentAuthUser=user;
   setAuthStatus("正在載入私人旅程…");
+  const cached=cachedTrip();
+  const sameUser=!cached?.auth?.email || !user?.email || cached.auth.email===user.email;
+  const cacheAge=Date.now()-Number(cached?.auth?.verifiedAt||0);
+
+  // An already-authorized device must enter from its local private copy immediately.
+  // Network refresh is background-only, so a slow Firebase connection can never block the gate.
+  if(cached && sameUser){
+    try{
+      await bootTrip(cached.content,user,{offline:!navigator.onLine});
+      if(navigator.onLine && (cacheAge<0 || cacheAge>=PRIVATE_CONTENT_REFRESH_MS)){
+        void refreshPrivateTripCacheInBackground(user);
+      }
+      return;
+    }catch(cacheErr){
+      console.warn("Cached private trip boot failed; retrying network copy",cacheErr);
+      setAuthStatus("本機快取需更新，正在重新載入私人旅程…");
+    }
+  }
+
   try{
     const content=await fetchPrivateTrip();
     cacheAuthorizedTrip(content,user);
@@ -2238,8 +3722,13 @@ async function startPrivateAuth(){
     if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
     firebase.auth().onAuthStateChanged(user=>{
-      if(user) handleAuthorizedUser(user);
-      else { showAuthGate(); setAuthStatus("請使用已授權的 Google 帳號登入。"); }
+      if(user){
+        void handleAuthorizedUser(user).catch(err=>{
+          console.error("Authorized-user boot failed",err);
+          showAuthGate();
+          setAuthStatus(`無法開啟私人旅程：${err?.message||err}`,"error");
+        });
+      }else { showAuthGate(); setAuthStatus("請使用已授權的 Google 帳號登入。"); }
     });
   }catch(err){
     setAuthStatus(`Firebase 初始化失敗：${err.message}`,"error");
@@ -2249,9 +3738,38 @@ async function startPrivateAuth(){
 startPrivateAuth();
 
 if("serviceWorker" in navigator){
+  let swReloading=false;
+  let swUpdateReg=null;
+
+  const showAppUpdateBanner=reg=>{
+    if(!reg?.waiting||!navigator.serviceWorker.controller)return;
+    swUpdateReg=reg;
+    const banner=$("#appUpdateBanner");
+    if(banner)banner.hidden=false;
+  };
+
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{
+    if(swReloading)return;
+    swReloading=true;
+    window.location.reload();
+  });
+
   window.addEventListener("load", async()=>{
     try{
-      const reg = await navigator.serviceWorker.register("./sw.js?v=11110",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5335",{updateViaCache:"none"});
+      if(reg.waiting)showAppUpdateBanner(reg);
+      reg.addEventListener("updatefound",()=>{
+        const worker=reg.installing;if(!worker)return;
+        worker.addEventListener("statechange",()=>{
+          if(worker.state==="installed"&&navigator.serviceWorker.controller)showAppUpdateBanner(reg);
+        });
+      });
+      $("#appUpdateNow")?.addEventListener("click",()=>{
+        const worker=swUpdateReg?.waiting;
+        if(!worker)return;
+        const btn=$("#appUpdateNow");if(btn){btn.disabled=true;btn.textContent="更新中…"}
+        worker.postMessage({type:"SKIP_WAITING"});
+      });
       await reg.update();
     }catch(e){console.warn("Service Worker update failed",e)}
   });
