@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.33 D5 Afternoon Options */
+/* Private travel PWA · Firebase Auth gated content · v5.3.34 Booking Action Polish */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -2914,9 +2914,13 @@ async function refreshBookingAttachmentBadges(){
   await Promise.all(buttons.map(async btn=>{
     try{
       const count=(await listBookingAttachments(btn.dataset.bookingAttachments)).length;
-      btn.textContent=count?`📎 附件 ${count}`:"📎 附件";
+      const badge=btn.querySelector(".booking-attachment-count");
+      if(badge){badge.textContent=String(count);badge.hidden=!count}
       btn.classList.toggle("has-attachments",count>0);
-    }catch{btn.textContent="📎 附件"}
+    }catch{
+      const badge=btn.querySelector(".booking-attachment-count");
+      if(badge){badge.textContent="";badge.hidden=true}
+    }
   }));
 }
 async function renderBookingAttachmentManager(){
@@ -3008,8 +3012,8 @@ function bookingTaskCard(t){
       <div class="task-detail">${esc(t.detail||"")}</div>
       ${!done?`<div class="task-countdown">${esc(countdownText(t))}</div>`:""}
       <div class="task-inline-actions">
-        ${t.map?`<a class="mini-action-link" target="_blank" rel="noopener" href="${mapSearch(t.map)}">↗ 位置</a>`:""}
-        <button type="button" class="mini-action-link booking-attachment-btn" data-booking-attachments="${esc(t.id)}">📎 附件</button>
+        ${t.map?`<a class="mini-action-link task-action-btn" target="_blank" rel="noopener" href="${mapSearch(t.map)}"><span class="task-action-icon" aria-hidden="true">↗</span><span>位置</span></a>`:""}
+        <button type="button" class="mini-action-link task-action-btn booking-attachment-btn" data-booking-attachments="${esc(t.id)}"><span class="task-action-icon booking-clip-icon" aria-hidden="true">📎</span><span class="booking-attachment-label">附件</span><span class="booking-attachment-count" hidden></span></button>
       </div>
     </div>
   </div>`;
@@ -3752,7 +3756,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5333",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5334",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;

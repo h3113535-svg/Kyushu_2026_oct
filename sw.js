@@ -1,4 +1,4 @@
-/* Kyushu 2026 Oct PWA · v5.3.33 D5 Afternoon Options
+/* Kyushu 2026 Oct PWA · v5.3.34 Booking Action Polish
  * Goals:
  * 1) static images are downloaded once and reused across app versions;
  * 2) app shell updates remain reliable;
@@ -6,7 +6,7 @@
  * 4) caches belonging to other GitHub Pages repos are never touched.
  */
 const CACHE_PREFIX = "kyushu-oct-";
-const SHELL_CACHE = "kyushu-oct-shell-v5.3.33";
+const SHELL_CACHE = "kyushu-oct-shell-v5.3.34";
 const ASSET_CACHE = "kyushu-oct-assets-v1";
 const RUNTIME_CACHE = "kyushu-oct-runtime-v1";
 const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|22|23)$/;
@@ -14,8 +14,8 @@ const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|2
 // Small files that are expected to change when app code changes.
 const SHELL = [
   "./index.html",
-  "./app.js?v=5333",
-  "./style.css?v=5333",
+  "./app.js?v=5334",
+  "./style.css?v=5334",
   "./manifest.json",
   "./firebase-config.js?v=430"
 ];

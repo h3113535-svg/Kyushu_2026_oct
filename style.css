@@ -3429,3 +3429,57 @@ html[data-font-size="xlarge"] .linked-variant-ref-block ul,html[data-font-size="
 html[data-theme="buddy"] .booking-attachment-sheet,html[data-theme="buddy"] .booking-attachment-preview-sheet{background:#fffaf5;border-color:#eadfd4}html[data-theme="sea"] .booking-attachment-sheet,html[data-theme="sea"] .booking-attachment-preview-sheet{background:rgba(255,255,255,.94)}html[data-theme="wa"] .booking-attachment-sheet,html[data-theme="wa"] .booking-attachment-preview-sheet{border-radius:8px;background:#fcf8f1}
 @media(max-width:620px){.booking-attachment-modal,.booking-attachment-preview{width:100%;max-width:none;margin:0;align-self:end}.booking-attachment-sheet,.booking-attachment-preview-sheet{border-radius:24px 24px 0 0;padding:17px;max-height:92vh}.booking-attachment-item{grid-template-columns:34px minmax(0,1fr);}.booking-attachment-item-actions{grid-column:2;justify-content:flex-start}.booking-attachment-actions{align-items:flex-start;flex-direction:column}.booking-attachment-actions small{text-align:left}.booking-attachment-preview-body{min-height:260px}}
 
+
+
+/* v5.3.34 · Booking card action polish
+   Keep Location / Attachment controls visually identical. Attachment counts use a
+   compact badge so adding files never changes the button width. */
+#bookingPanel .task-inline-actions{gap:8px}
+#bookingPanel .task-inline-actions .task-action-btn{
+  box-sizing:border-box;
+  width:104px;
+  min-width:104px;
+  height:40px;
+  min-height:40px;
+  padding:0 11px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  line-height:1;
+  white-space:nowrap;
+  border-radius:12px;
+}
+#bookingPanel .task-action-icon{
+  width:16px;
+  height:16px;
+  display:inline-grid;
+  place-items:center;
+  flex:0 0 16px;
+  font-size:14px;
+  line-height:1;
+}
+#bookingPanel .booking-clip-icon{font-size:13px}
+#bookingPanel .booking-attachment-count{
+  min-width:17px;
+  height:17px;
+  padding:0 4px;
+  box-sizing:border-box;
+  display:inline-grid;
+  place-items:center;
+  border-radius:999px;
+  background:var(--accent);
+  color:#fff;
+  font-size:9px;
+  font-weight:900;
+  line-height:1;
+}
+#bookingPanel .booking-attachment-count[hidden]{display:none!important}
+#bookingPanel .booking-attachment-btn.has-attachments{
+  background:var(--soft-bg);
+}
+html[data-font-size="large"] #bookingPanel .task-inline-actions .task-action-btn{width:118px;min-width:118px;height:48px;min-height:48px;padding:0 13px}
+html[data-font-size="xlarge"] #bookingPanel .task-inline-actions .task-action-btn{width:132px;min-width:132px;height:54px;min-height:54px;padding:0 14px}
+@media(max-width:380px){
+  #bookingPanel .task-inline-actions .task-action-btn{width:98px;min-width:98px}
+}

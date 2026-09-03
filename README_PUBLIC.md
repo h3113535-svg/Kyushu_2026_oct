@@ -191,3 +191,11 @@
 - A branch decision may use `hideUntilSelected: true`, so unselected alternative stops do not clutter the timeline; only the fixed route remains visible until a choice is confirmed.
 - D3/D9 linked-variant behavior and v5.3.32 booking PDF/image attachments are unchanged.
 - New local keys: `${TRIP.id}:privateDayPatches` and `${TRIP.id}:privateDecisions`.
+
+
+## v5.3.34 Booking Action Polish
+
+- Polished booking-card action controls only; no itinerary/auth/attachment-storage logic changed.
+- `位置` and `附件` now use the same fixed width and height on booking cards.
+- Attachment count is rendered as a compact badge, so `附件 1/2/...` no longer changes button size.
+- Reduced the visual weight of the paperclip icon and aligned both action labels consistently.
