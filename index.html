@@ -1,458 +1,362 @@
-<!doctype html>
+<!DOCTYPE html>
+
 <html lang="zh-Hant">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#A8673F" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="九州 秋旅" />
-  <meta name="robots" content="noindex,nofollow" />
-  <link rel="manifest" href="./manifest.json" />
-  <link rel="apple-touch-icon" href="./icon-192.png" />
-  <script>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
+<meta content="#F6F2E9" name="theme-color"/>
+<meta content="yes" name="apple-mobile-web-app-capable"/>
+<meta content="default" name="apple-mobile-web-app-status-bar-style"/>
+<meta content="九州家族紅葉旅" name="apple-mobile-web-app-title"/>
+<meta content="noindex,nofollow" name="robots"/>
+<link href="./manifest.json" rel="manifest"/>
+<link href="./icon-192.png" rel="apple-touch-icon"/>
+<script>
     try{
-      document.documentElement.dataset.theme=localStorage.getItem("kyushu-oct-2026:displayTheme")||"travel";
-      document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
+      const savedTheme=localStorage.getItem("kyushu-nov-2026:displayTheme")||"wa"; document.documentElement.dataset.theme=["travel","sea","wa"].includes(savedTheme)?savedTheme:"wa";
+      document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-nov-2026:fontSize")||"standard";
+      document.documentElement.dataset.sceneLang=localStorage.getItem("kyushu-nov-2026:scene-lang")||"zh";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=5334" />
-  <title>私人旅程</title>
-  <meta name="app-version" content="5.3.34" />
-  <link rel="preload" as="image" href="./day-scene-v52-01.webp?v=520" fetchpriority="high">
+<link href="./style.css?v=11110" rel="stylesheet"/>
+<title>九州家族紅葉旅</title>
+<meta content="1.11.10" name="app-version"/>
+<link as="image" fetchpriority="high" href="./nov_loading_scene.webp?v=160" rel="preload"/>
 </head>
 <body>
-  <section id="authGate" class="auth-gate">
-    <div class="auth-card">
-      <div class="auth-lock">🔒</div>
-      <span class="auth-kicker">PRIVATE TRIP</span>
-      <h1>私人旅程</h1>
-      <p>行程內容只有已授權的 Google 帳號才能載入。</p>
-      <button type="button" class="google-login-btn" id="googleLoginBtn"><span>G</span> 使用 Google 登入</button>
-      <div class="auth-status" id="authStatus">正在確認登入狀態…</div>
-      <div class="auth-build" aria-label="App version">v5.3.34</div>
-    </div>
-  </section>
-  <div id="app" hidden>
-    <header class="hero theme-hero">
-      <button class="settings-btn" id="settingsBtn" aria-label="顯示設定">Aa</button>
-      <div class="buddy-hero-v42">
-        <img class="buddy-hero-cloud cloud-a buddy-only-art" src="./ui-cloud.webp?v=440" alt="" aria-hidden="true" />
-        <img class="buddy-hero-cloud cloud-b buddy-only-art" src="./ui-cloud.webp?v=440" alt="" aria-hidden="true" />
-        <div class="hero-copy buddy-hero-copy">
-          <span class="buddy-season" id="heroPrivateSeason"></span>
-          <h1 id="heroPrivateTitle">私人旅程</h1>
-          <div class="hero-date" id="heroPrivateDate"></div>
-          <div class="hero-route" id="heroPrivateRoute"></div>
-          <div class="hero-submeta buddy-only-art" aria-label="旅程摘要"><span>10天9夜</span><i></i><span>旅伴手帳</span></div>
-        </div>
-        <button type="button" class="buddy-hero-art buddy-only-art" id="buddyHeroEgg" aria-label="旅伴彩蛋">
-          <img src="./hero-cover-v51.webp?v=510" alt="布丁狗與烏薩奇旅行首頁圖" />
-        </button>
-        <div class="buddy-hero-tapcue buddy-only-art" aria-hidden="true">↔ 左右滑換首頁圖・長按有彩蛋</div>
-      </div>
-    </header>
-    <div class="buddy-hero-dots buddy-only-art" id="buddyHeroDots" aria-label="旅伴貼紙切換">
-      <button type="button" class="active" data-hero-index="0" aria-label="第 1 張旅伴貼紙"></button>
-      <button type="button" data-hero-index="1" aria-label="第 2 張旅伴貼紙"></button>
-      <button type="button" data-hero-index="2" aria-label="第 3 張旅伴貼紙"></button>
-      <button type="button" data-hero-index="3" aria-label="第 4 張旅伴貼紙"></button>
-      <button type="button" data-hero-index="4" aria-label="第 5 張旅伴貼紙"></button>
-    </div>
+<section class="auth-gate is-busy" id="authGate">
+<div class="auth-card"><div class="auth-loading-art" id="authLoadingArt"><img alt="正在載入秋日旅程" decoding="async" fetchpriority="high" src="./nov_loading_scene.webp?v=160"/></div>
 
-    <main>
-      <section id="scheduleView" class="view active">
-        <div class="day-strip-wrap">
-          <div id="dayStrip" class="day-strip" aria-label="旅行日期"></div>
-        </div>
-        <section id="weatherCard" class="weather-card skeleton">
-          <div class="weather-main">
-            <div>
-              <div class="eyebrow" id="weatherLocation">天氣</div>
-              <div class="weather-temp" id="weatherTemp">載入中</div>
-              <div class="weather-desc" id="weatherDesc">—</div>
-            </div>
-            <div class="weather-icon" id="weatherIcon">☁️</div>
-          </div>
-          <div class="rain-box" id="rainBox"></div>
-          <div class="weather-buddy-speech buddy-only-art" id="weatherBuddySpeech" role="status" aria-live="polite"></div>
-          <div class="weather-buddy-slot buddy-only-art" id="weatherBuddySlot"></div>
-        </section>
-        <section class="day-title day-title-v46">
-          <div class="day-title-main">
-            <span id="dayNumber">D1</span>
-            <h2 id="dayTitle">行程</h2>
-            <span id="dayVariantBadge" class="day-variant-badge" hidden></span>
-          </div>
-          <p id="daySubtitle"></p>
-        </section>
-        <button type="button" id="daySceneCard" class="day-scene-card buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="day" aria-label="今日旅伴主題插畫">
-          <img id="daySceneImage" src="./day-scene-v52-01.webp?v=520" alt="布丁狗與烏薩奇今日旅行">
-          <span class="day-scene-progress"><i><em id="daySceneProgressBar"></em></i></span>
-        </button>
-        <section id="dayBrief" class="day-brief"></section>
-        <div id="decisionArea"></div>
-        <section id="timeline" class="timeline"></section>
-        <section id="hotelReturnCard" class="hotel-return-card" hidden></section>
-      </section>
+<span class="auth-kicker">PRIVATE TRIP</span>
+<h1>九州家族紅葉旅</h1>
+<p>行程內容只有已授權的 Google 帳號才能載入。</p>
+<button class="google-login-btn" id="googleLoginBtn" type="button"><span>G</span> 使用 Google 登入</button>
+<div class="auth-status" id="authStatus">正在確認登入狀態…</div>
 
-      <section id="foodView" class="view">
-        <div class="section-heading section-heading-with-art food-heading-v45">
-          <div class="food-heading-copy">
-            <span class="eyebrow">美食手帳</span>
-            <h2>餐飲安排</h2>
-            <div class="food-heading-tags" aria-label="美食功能">
-              <span>已訂餐廳</span><span>候選清單</span><span>附近搜尋</span>
-            </div>
-          </div>
-          <img class="buddy-food-duo buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="food" src="./buddy_eat.png?v=430" alt="布丁狗與烏薩奇吃東西" />
-        </div>
-        <button type="button" class="food-nearby-trigger" id="foodNearbyOpen">
-          <span class="food-nearby-trigger-icon buddy-only-art"><img src="./ui-coffee.webp?v=440" alt=""></span>
-          <span class="food-nearby-trigger-copy"><b>附近找吃的</b><small>咖啡・甜點・拉麵・燒肉…直接開 Google Maps</small></span>
-          <em>›</em>
-        </button>
+</div>
+</section>
+<div hidden="" id="app">
+<header class="hero theme-hero">
+<button aria-label="開啟設定" class="settings-btn" id="settingsBtn" title="顯示設定">⚙︎</button>
+<div class="hero-stage">
+<div class="hero-copy">
+<span class="hero-season" id="heroPrivateSeason"></span>
+<h1 id="heroPrivateTitle">九州家族紅葉旅</h1>
+<div class="hero-date" id="heroPrivateDate"></div>
+<div class="hero-route" id="heroPrivateRoute"></div>
+</div>
+</div>
+</header>
 
-        <div class="card">
-          <div class="card-title-row food-plan-title"><div><div class="eyebrow">用餐計畫</div><h3>已安排與候選</h3></div></div>
-          <div class="food-decor buddy-only-art"><img src="./purin_pudding.png?v=430" alt=""><img src="./purin_spoon.png?v=430" alt=""></div><div id="plannedFood" class="planned-food-list"></div>
-        </div>
+<main>
+<section class="view active" id="scheduleView">
+<div class="day-strip-wrap">
+<div aria-label="旅行日期" class="day-strip" id="dayStrip"></div>
+</div>
+<section class="weather-card skeleton" id="weatherCard">
+<div class="weather-main">
+<div>
+<div class="eyebrow" id="weatherLocation">天氣</div>
+<div class="weather-temp" id="weatherTemp">載入中</div>
+<div class="weather-desc" id="weatherDesc">—</div>
+</div>
+<div class="weather-icon" id="weatherIcon">☁️</div>
+</div>
+<div class="rain-box" id="rainBox"></div>
+<div class="weather-mode-hint" id="weatherModeHint"></div>
 
 
+</section>
+<section class="day-title day-title-v46">
+<div class="day-title-main-group">
+<div class="day-title-main">
+<span id="dayNumber">D1</span>
+<h2 id="dayTitle">行程</h2>
+</div>
+<div aria-label="今日資訊" class="day-title-meta" id="dayTitleMeta"></div>
+</div>
+<p id="daySubtitle"></p>
+</section>
+<button aria-label="今日旅程主題視覺" class="day-scene-card nov-day-art" id="daySceneCard" type="button">
+<img alt="今日旅程主題視覺" id="daySceneImage" src="./day-scene-zh-v17-01.webp?v=170"/>
+<span class="day-scene-progress"><i><em id="daySceneProgressBar"></em></i></span>
+</button>
+<section class="day-brief" id="dayBrief"></section>
+<section class="now-next-card" hidden="" id="nowNextCard"></section>
+<section class="family-meta-card" hidden="" id="familyMetaCard"></section>
+<section class="driving-card" hidden="" id="drivingCard"></section>
+<section class="official-status-card" hidden="" id="officialStatusArea"></section>
+<div id="decisionArea"></div>
+<section class="timeline" id="timeline"></section>
+<section class="hotel-return-card" hidden="" id="hotelReturnCard"></section>
+</section>
+<section class="view" id="foodView">
+<div class="section-heading section-heading-with-art food-heading-v45">
+<div class="food-heading-copy">
+<span class="eyebrow">美食手帳</span>
+<h2>餐飲安排</h2>
+<div aria-label="美食功能" class="food-heading-tags">
+<span>已訂餐廳</span><span>候選清單</span><span>附近搜尋</span>
+</div>
+</div>
+</div>
+<button class="food-nearby-trigger" id="foodNearbyOpen" type="button">
 
-        <div class="card buddy-wishlist-card">
-          <img class="wishlist-purin buddy-only-art" src="./purin_clap.png?v=430" alt="" aria-hidden="true">
-          <div class="card-title-row">
-            <div>
-              <div class="eyebrow">想吃清單</div>
-              <h3>想吃清單</h3>
-            </div>
-            <button class="icon-btn" data-open-modal="food" aria-label="新增美食">＋</button>
-          </div>
-          <div id="foodList" class="list-stack"></div>
-        </div>
-      </section>
+<span class="food-nearby-trigger-copy"><b>附近找吃的</b><small>咖啡・甜點・拉麵・燒肉…直接開 Google Maps</small></span>
+<em>›</em>
+</button>
+<div class="card">
+<div class="card-title-row food-plan-title"><div><div class="eyebrow">用餐計畫</div><h3>已安排與候選</h3></div></div>
+<div class="planned-food-list" id="plannedFood"></div>
+</div>
+<div class="card">
 
-      <section id="toolsView" class="view">
-        <div class="section-heading tools-heading-v42">
-          <div><span class="eyebrow">旅行工具</span><h2>旅程工具</h2></div>
-          <div class="tools-heading-icons buddy-only-art"><img src="./travel_suitcase.png?v=430" alt=""><img src="./travel_ticket.png?v=431" alt=""></div>
-        </div>
-        <div id="toolMenu" class="tool-grid">
-          <button class="tool-card active" data-tool="booking"><span class="tool-emoji">🎫</span><img class="tool-card-art buddy-only-art" src="./travel_ticket.png?v=431" alt=""><b>訂位票券</b><small>訂位・票券</small></button>
-          <button class="tool-card" data-tool="shopping"><span class="tool-emoji">🛍️</span><img class="tool-card-art buddy-only-art" src="./travel_shopping.png?v=430" alt=""><b>購物清單</b><small>採買</small></button>
-          <button class="tool-card" data-tool="expense"><span class="tool-emoji">💴</span><img class="tool-card-art buddy-only-art" src="./travel_coffee.png?v=430" alt=""><b>記帳</b><small>支出・分帳</small></button>
-          <button class="tool-card" data-tool="note"><span class="tool-emoji">📝</span><img class="tool-card-art buddy-only-art" src="./travel_camera.png?v=430" alt=""><b>記事</b><small>備忘・同步</small></button>
-          <button class="tool-card" data-tool="import"><span class="tool-emoji">📍</span><img class="tool-card-art buddy-only-art" src="./travel_suitcase.png?v=430" alt=""><b>快速匯入</b><small>Maps・景點</small></button>
-        </div>
+<div class="card-title-row">
+<div>
+<div class="eyebrow">想吃清單</div>
+<h3>想吃清單</h3>
+</div>
+<button aria-label="新增美食" class="icon-btn" data-open-modal="food">＋</button>
+</div>
+<div class="list-stack" id="foodList"></div>
+</div>
+</section>
+<section class="view" id="toolsView">
+<div class="section-heading tools-heading-v42">
+<div><span class="eyebrow">旅行工具</span><h2>旅程工具</h2></div>
 
-        <div id="bookingPanel" class="tool-panel active">
-          <div class="panel-heading panel-heading-with-art buddy-panel-head booking-head-v42">
-            <div><span class="eyebrow">待辦與搶票</span><h3>訂位／搶票倒數任務</h3></div>
-            <div class="booking-buddy-strip buddy-only-art" aria-label="布丁狗確認、烏薩奇衝刺">
-              <img class="booking-purin-art buddy-reactable" data-buddy-react="purin" data-buddy-context="booking" src="./booking-check-purin.webp?v=460" alt="布丁狗確認票券">
-              <span class="booking-ticket-divider"><img src="./travel_ticket.png?v=431" alt=""></span>
-              <img class="booking-usagi-art buddy-reactable" data-buddy-react="usagi" data-buddy-context="booking" src="./booking-dash-usagi.webp?v=460" alt="烏薩奇衝刺">
-            </div>
-          </div>
-          <p class="privacy-note">私人票券可直接附加 PDF／圖片並離線查看；附件只存在這台裝置，不會上傳 Firebase 或公開 GitHub。</p>
-          <div id="bookingList" class="list-stack"></div>
-        </div>
-
-        <div id="shoppingPanel" class="tool-panel">
-          <div class="panel-heading buddy-panel-head">
-            <div><span class="eyebrow">採買</span><h3>購物清單</h3></div>
-            <div class="panel-actions-with-art buddy-panel-pair">
-              <img class="panel-character-art buddy-only-art buddy-reactable" data-buddy-react="purin" data-buddy-context="shop" src="./purin_clap.png?v=430" alt="布丁狗拍手">
-              <img class="panel-character-art buddy-only-art buddy-reactable" data-buddy-react="usagi" data-buddy-context="shop" src="./usagi_point.png?v=430" alt="烏薩奇指路">
-              <img class="shopping-art buddy-only-art" src="./travel_shopping.png?v=430" alt="">
-              <button class="icon-btn" data-open-modal="shopping" aria-label="新增購物">＋</button>
-            </div>
-          </div>
-          <div id="shoppingSummary" class="member-pills"></div>
-          <div id="shoppingList" class="list-stack"></div>
-        </div>
-
-        <div id="expensePanel" class="tool-panel">
-          <div class="panel-heading buddy-panel-head">
-            <div><span class="eyebrow">分帳</span><h3>旅費記帳</h3></div>
-            <div class="panel-actions-with-art buddy-panel-pair">
-              <img class="panel-character-art expense-character buddy-only-art buddy-reactable" data-buddy-react="purin" data-buddy-context="money" src="./purin_surprise.png?v=430" alt="布丁狗驚訝">
-              <img class="panel-character-art expense-usagi buddy-only-art buddy-reactable" data-buddy-react="usagi" data-buddy-context="money" src="./usagi_sticker.png?v=430" alt="烏薩奇">
-              <img class="expense-art buddy-only-art" src="./travel_coffee.png?v=430" alt="">
-              <button class="icon-btn" data-open-modal="expense" aria-label="新增記帳">＋</button>
-            </div>
-          </div>
-          <section id="fxCard" class="fx-card summary-card" aria-label="日圓台幣匯率換算">
-            <div class="fx-head">
-              <div><span class="eyebrow">JPY → TWD</span><h3>匯率換算</h3></div>
-              <button type="button" id="fxSettingsBtn" class="mini-btn">調整</button>
-            </div>
-            <div class="fx-rate-line"><span>1 JPY =</span><strong id="fxRateValue">—</strong><span>TWD</span><em id="fxRateMode" data-mode="auto">自動匯率</em></div>
-            <div class="fx-converter">
-              <label class="fx-input-box"><small>JPY</small><input id="fxJpyInput" type="number" inputmode="decimal" min="0" step="1" value="1000" aria-label="日圓金額"></label>
-              <span class="fx-arrow" aria-hidden="true">→</span>
-              <div class="fx-output-box"><small>TWD</small><strong id="fxTwdOutput">—</strong></div>
-            </div>
-            <div class="fx-foot"><span id="fxRateMeta">尚未取得匯率</span><a href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer">Rates by Exchange Rate API</a></div>
-          </section>
-          <div id="expenseSummary" class="summary-card"></div>
-          <div id="expenseList" class="list-stack"></div>
-        </div>
-
-        <div id="notePanel" class="tool-panel">
-          <div class="panel-heading"><div><span class="eyebrow">旅行備忘</span><h3>旅行記事</h3></div></div><div class="notes-chill buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="note"><img src="./buddy_chill.png?v=430" alt="布丁狗與烏薩奇休息"></div>
-          <textarea id="notesArea" class="notes-area" placeholder="行前提醒、臨時備註、想買的東西…"></textarea>
-          <button type="button" class="primary-btn" id="firebaseTestBtn" style="margin-top:10px">測試 Firebase 連線</button>
-          <div id="noteStatus" class="save-status">輸入後自動儲存</div>
-        </div>
-
-        <div id="importPanel" class="tool-panel">
-          <div class="panel-heading">
-            <div><span class="eyebrow">QUICK IMPORT</span><h3>Google Maps 快速匯入</h3></div>
-          </div>
-          <section class="place-import-card">
-            <p class="place-import-help">貼上 Google Maps 地點網址或店名／景點名稱，一行一個。解析在手機本機完成，不會因為輸入內容產生額外 API 流量。</p>
-            <textarea id="placeImportText" class="place-import-text" placeholder="例如：
-ASO MILK FACTORY
-https://www.google.com/maps/place/...
-高千穗峽 | https://maps.app.goo.gl/..."></textarea>
-            <div class="place-import-options">
-              <label><span>加入日期</span><select id="placeImportDay"></select></label>
-              <label><span>預計時間</span><input id="placeImportTime" type="time" value="10:00"></label>
-              <label><span>類型</span><select id="placeImportCategory"><option>景點</option><option>餐廳</option><option>咖啡</option><option>購物</option><option>住宿</option><option>其他</option></select></label>
-            </div>
-            <div class="place-import-actions">
-              <button type="button" id="placeImportParseBtn" class="mini-btn">解析預覽</button>
-              <button type="button" id="placeImportAddBtn" class="primary-btn" disabled>加入行程</button>
-            </div>
-            <div id="placeImportStatus" class="place-import-status">尚未解析</div>
-            <div id="placeImportPreview" class="place-import-preview"></div>
-          </section>
-          <section class="place-import-saved">
-            <div class="card-title-row"><div><span class="eyebrow">IMPORTED</span><h3>已匯入景點</h3></div></div>
-            <div id="importedPlacesList" class="list-stack"></div>
-          </section>
-        </div>
-      </section>
-    </main>
-
-    <nav class="bottom-nav" aria-label="主選單">
-      <button class="nav-btn active" data-view="schedule"><span>🗓️</span><b>行程</b></button>
-      <button class="nav-btn" data-view="food"><span>🍴</span><b>美食</b></button>
-      <button class="nav-btn" data-view="tools"><span>☰</span><b>旅程工具</b></button>
-    </nav>
-  </div>
-
-
-  <dialog id="settingsModal" class="settings-modal">
-    <div class="settings-sheet">
-      <div class="settings-head">
-        <div><span class="eyebrow">顯示設定</span><h3>閱讀與外觀</h3></div>
-        <button type="button" class="close-btn" id="settingsClose" aria-label="關閉">×</button>
-      </div>
-      <section class="setting-section">
-        <div class="setting-label"><b>文字大小</b><small>大字與特大會連同卡片間距、按鈕高度、行距一起放大。</small></div>
-        <div class="segmented-control three" role="group" aria-label="文字大小">
-          <button type="button" data-font-choice="standard">標準</button>
-          <button type="button" data-font-choice="large">大字</button>
-          <button type="button" data-font-choice="xlarge">特大</button>
-        </div>
-      </section>
-      <section class="setting-section">
-        <div class="setting-label"><b>網站風格</b><small>三套版面結構不同，只共用同一份行程資料。</small></div>
-        <div class="theme-preview-grid">
-          <button type="button" class="theme-preview-card theme-preview-travel" data-theme-choice="travel">
-            <span class="preview-paper"><span class="preview-kicker">2026・秋</span><span class="preview-title">九州 秋旅</span><span class="preview-line"></span><span class="preview-row"><i>21:00</i><b>晚餐預約</b></span><span class="preview-row"><i>D3</i><b>夕陽散步</b></span></span>
-            <span class="theme-preview-copy"><b>旅冊</b><small>日本旅遊雜誌・紙張感</small></span><em>預設</em>
-          </button>
-          <button type="button" class="theme-preview-card theme-preview-sea" data-theme-choice="sea">
-            <span class="preview-sea"><span class="preview-sun"></span><span class="preview-wave"></span><span class="preview-time">17:50</span><span class="preview-place">海邊散步</span></span>
-            <span class="theme-preview-copy"><b>海空</b><small>清爽留白・現代旅行 App</small></span><em></em>
-          </button>
-          <button type="button" class="theme-preview-card theme-preview-wa" data-theme-choice="wa">
-            <span class="preview-washi"><span class="preview-seal">九州</span><span class="preview-wa-line"></span><span class="preview-wa-row">十月十一日　散步</span><span class="preview-wa-row">十月十五日　自然景色</span></span>
-            <span class="theme-preview-copy"><b>和風</b><small>御朱印帳・旅館・紀念章</small></span><em></em>
-          </button>
-          <button type="button" class="theme-preview-card theme-preview-buddy" data-theme-choice="buddy">
-            <span class="preview-buddy preview-buddy-v42">
-              <img class="buddy-mini-duo" src="./buddy_hero.png?v=430" alt="" />
-              <span class="buddy-mini-title">九州 秋旅</span>
-              <span class="buddy-mini-note">旅伴手帳 ♡</span>
-            </span>
-            <span class="theme-preview-copy"><b>旅伴</b><small>布丁狗 × 烏薩奇・旅伴貼紙手帳</small></span><em>特別版</em>
-          </button>
-        </div>
-      </section>
-      <section class="setting-section private-variant-setting">
-        <div class="setting-label"><b>私人行程方案</b><small id="variantConfigStatus">尚未匯入私人方案設定檔。</small></div>
-        <div class="variant-config-actions">
-          <label class="mini-btn variant-config-import">匯入方案設定檔<input id="variantConfigInput" type="file" accept="application/json,.json" hidden></label>
-          <button type="button" class="mini-btn" id="variantConfigClear">清除方案資料</button>
-        </div>
-        <small class="variant-config-privacy">方案內容只存這台瀏覽器的 LocalStorage，不會寫進公開 GitHub 程式碼。</small>
-      </section>
-      <section class="setting-section account-setting">
-        <div class="setting-label"><b>私人帳號</b><small id="accountEmail">—</small></div>
-        <button type="button" class="logout-btn" id="logoutBtn">登出這台裝置</button>
-      </section>
-      <section class="setting-section sync-setting"><div class="setting-label"><b>資料同步</b><small>省流量模式：不做背景輪詢；點狀態可手動同步</small></div><div class="sync-status" id="syncPill" role="button" tabindex="0" title="點一下手動同步"><span class="dot"></span><span id="syncText">本機模式</span></div></section>
-      <button type="button" class="reset-display-btn" id="displayResetBtn">恢復預設顯示</button>
-    </div>
-  </dialog>
+</div>
+<div class="tool-grid" id="toolMenu">
+<button class="tool-card active" data-tool="booking"><span class="tool-emoji">🎫</span><b>訂位票券</b><small>訂位・票券</small></button>
+<button class="tool-card" data-tool="autumn"><span class="tool-emoji">🍁</span><b>紅葉觀測</b><small>紅葉・銀杏</small></button>
+<button class="tool-card" data-tool="exchange"><span class="tool-emoji">¥</span><b>匯率計算</b><small>JPY ↔ TWD</small></button>
+<button class="tool-card" data-tool="mapimport"><span class="tool-emoji">📍</span><b>地點匯入</b><small>Google Maps</small></button>
+<button class="tool-card" data-tool="shopping"><span class="tool-emoji">🛍️</span><b>購物清單</b><small>採買</small></button>
+<button class="tool-card" data-tool="expense"><span class="tool-emoji">💴</span><b>記帳</b><small>支出・分帳</small></button>
+<button class="tool-card" data-tool="note"><span class="tool-emoji">📝</span><b>記事</b><small>備忘・同步</small></button>
+</div>
+<div class="tool-panel active" id="bookingPanel">
+<div class="panel-heading panel-heading-with-art booking-head-v42">
+<div><span class="eyebrow">待辦與搶票</span><h3>訂位／搶票倒數任務</h3></div>
+<div class="panel-actions-with-art"><button aria-label="新增訂位或票券" class="icon-btn" data-open-modal="booking" type="button">＋</button></div>
+</div>
+<p class="privacy-note">私人 QR Code、完整訂位編號不要寫進公開 GitHub 原始碼；可放在記事或你自己的受保護雲端連結。</p>
+<div class="list-stack" id="bookingList"></div>
+</div>
+<div class="tool-panel" id="autumnPanel">
+<section class="autumn-watch" id="autumnWatch"></section>
+</div>
+<div class="tool-panel" id="exchangePanel">
+<div class="panel-heading"><div><span class="eyebrow">CURRENCY</span><h3>日圓／台幣匯率計算</h3></div></div>
+<div class="exchange-tool-card">
+<label class="exchange-rate-field"><span>手動匯率</span><div><b>1 JPY =</b><input id="exchangeRateInput" inputmode="decimal" placeholder="例如 0.215" type="text"/><b>TWD</b></div><small>自行輸入你實際換匯或信用卡估算匯率；只儲存在這趟旅程的這台裝置。</small></label>
+<div class="exchange-calc-grid">
+<label><span>日圓算式</span><input id="jpyCalcInput" inputmode="decimal" placeholder="例如 3280 + 880" type="text"/></label>
+<div class="exchange-result" id="exchangeResult"><small>計算結果</small><strong>先輸入匯率</strong><span>支援 + − × ÷ 和括號</span></div>
+</div>
+<div class="exchange-reverse-row"><label><span>台幣反算</span><input id="twdCalcInput" inputmode="decimal" placeholder="例如 1000" type="text"/></label><div id="exchangeReverseResult">—</div></div>
+<button class="secondary-tool-btn" id="exchangeClearBtn" type="button">清除金額</button>
+</div>
+</div>
+<div class="tool-panel" id="mapimportPanel">
+<div class="panel-heading"><div><span class="eyebrow">QUICK IMPORT</span><h3>Google Maps 地點匯入</h3></div></div>
+<div class="map-import-card">
+<label class="map-import-raw"><span>貼上 Google Maps 分享內容</span><textarea id="mapImportRaw" placeholder="可直接貼上 Google Maps 分享文字或網址，例如：
+由布まぶし 心
+https://maps.app.goo.gl/…"></textarea></label>
+<div class="map-import-fields">
+<label><span>地點名稱</span><input id="mapImportName" placeholder="自動抓不到時補名稱" type="text"/></label>
+<label><span>安排日期</span><select id="mapImportDay"><option value="">未指定</option><option>D1</option><option>D2</option><option>D3</option><option>D4</option><option>D5</option><option>D6</option><option>D7</option><option>D8</option><option>D9</option></select></label>
+<label><span>分類</span><select id="mapImportCategory"><option>景點</option><option>餐廳</option><option>購物</option><option>住宿</option><option>其他</option></select></label>
+<label><span>備註</span><input id="mapImportNote" placeholder="例如：雨天備案、看到再決定" type="text"/></label>
+</div>
+<div class="map-import-preview" id="mapImportPreview"><b>貼上後會先解析名稱與 Google Maps 連結。</b><small>短網址本身無法離線讀出店名；若分享內容只有 maps.app.goo.gl 網址，補上名稱即可。</small></div>
+<button class="primary-btn" id="mapImportSaveBtn" type="button">加入地點清單</button>
+</div>
+<div class="map-import-list-head"><b>已匯入地點</b><small>會同步到 Firebase；點「地圖」先看地點頁，再自行選路線。</small></div>
+<div class="list-stack" id="mapImportList"></div>
+</div>
+<div class="tool-panel" id="shoppingPanel">
+<div class="panel-heading">
+<div><span class="eyebrow">採買</span><h3>購物清單</h3></div>
+<div class="panel-actions-with-art">
 
 
 
-  <dialog id="guideModal" class="guide-modal">
-    <div class="guide-sheet">
-      <div class="guide-drag-handle" aria-hidden="true"></div>
-      <div class="guide-head">
-        <div class="guide-mascot-wrap buddy-only-art"><img id="guideMascot" src="./usagi_point.png?v=430" alt="烏薩奇"></div>
-        <div class="guide-head-copy">
-          <span class="eyebrow" id="guideKicker">旅伴小攻略</span>
-          <h3 id="guideTitle">景點攻略</h3>
-          <small id="guideMeta"></small>
-        </div>
-        <button type="button" class="close-btn" id="guideClose" aria-label="關閉">×</button>
-      </div>
-      <div id="guideSections" class="guide-sections"></div>
-      <section class="guide-personal-note">
-        <div class="guide-note-title"><b>我的備忘</b><small>自動儲存・離線可寫・登入後跨裝置同步</small></div>
-        <textarea id="guideNoteArea" placeholder="例如：BEAMS 在新館 2F、看到限定色先確認尺寸、到現場記得問店員…"></textarea>
-        <div class="guide-note-actions">
-          <span id="guideSaveStatus" data-state="idle">已開啟自動儲存</span>
-          <button type="button" id="guideSaveBtn" class="mini-btn guide-save-btn">立即同步</button>
-        </div>
-      </section>
-      <div id="guideActions" class="guide-actions"></div>
-      <div class="guide-footer-buddies buddy-only-art" aria-hidden="true">
-        <img src="./purin_tip.png?v=430" alt="">
-        <img src="./usagi_point.png?v=430" alt="">
-      </div>
-    </div>
-  </dialog>
+<button aria-label="新增購物" class="icon-btn" data-open-modal="shopping">＋</button>
+</div>
+</div>
+<div class="member-pills" id="shoppingSummary"></div>
+<div class="list-stack" id="shoppingList"></div>
+</div>
+<div class="tool-panel" id="expensePanel">
+<div class="panel-heading">
+<div><span class="eyebrow">分帳</span><h3>旅費記帳</h3></div>
+<div class="panel-actions-with-art">
 
-  <div id="guideCoach" class="guide-coach buddy-only-art" hidden>
-    <img src="./usagi_point.png?v=430" alt="">
-    <span><b>旅伴小攻略</b><small>按住行程卡約 0.75 秒，放開後查看</small></span>
-  </div>
 
-  <dialog id="foodNearbyModal" class="food-nearby-modal">
-    <div class="food-nearby-sheet">
-      <div class="food-nearby-sheet-head">
-        <div><span class="eyebrow">QUICK SEARCH</span><h3>附近找吃的</h3></div>
-        <button type="button" class="close-btn" id="foodNearbyClose" aria-label="關閉">×</button>
-      </div>
-      <p>選一個類別，直接用 Google Maps 搜尋你現在附近。</p>
-      <div id="foodQuick" class="chip-grid food-quick-sheet-grid"></div>
-      <div class="food-sheet-buddies buddy-only-art" aria-hidden="true">
-        <img class="food-sheet-purin buddy-reactable" data-buddy-react="purin" data-buddy-context="food" src="./purin_peek_edge.png?v=430" alt="">
-        <img class="food-sheet-usagi buddy-reactable" data-buddy-react="usagi" data-buddy-context="food" src="./usagi_point.png?v=430" alt="">
-      </div>
-    </div>
-  </dialog>
 
-  <dialog id="bookingAttachmentModal" class="booking-attachment-modal">
-    <div class="booking-attachment-sheet">
-      <div class="booking-attachment-head">
-        <div><span class="eyebrow">OFFLINE TICKETS</span><h3 id="bookingAttachmentTitle">票券附件</h3></div>
-        <button type="button" class="close-btn" id="bookingAttachmentClose" aria-label="關閉">×</button>
-      </div>
-      <p class="booking-attachment-note">PDF／圖片會存進這台裝置的 IndexedDB，可離線開啟。Chrome 與由 Chrome 安裝的 PWA 共用；其他瀏覽器不會自動共用。清除網站資料會刪除附件。</p>
-      <div id="bookingAttachmentList" class="booking-attachment-list"></div>
-      <div class="booking-attachment-actions">
-        <label class="primary-btn booking-attachment-add">＋ 加入 PDF／圖片<input id="bookingAttachmentInput" type="file" accept="application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif" multiple hidden></label>
-        <small id="bookingAttachmentStorage">附件只存本機</small>
-      </div>
-    </div>
-  </dialog>
+<button aria-label="新增記帳" class="icon-btn" data-open-modal="expense">＋</button>
+</div>
+</div>
+<div class="summary-card" id="expenseSummary"></div>
+<div class="list-stack" id="expenseList"></div>
+</div>
+<div class="tool-panel" id="notePanel">
+<div class="panel-heading"><div><span class="eyebrow">旅行備忘</span><h3>旅行記事</h3></div></div>
+<div class="empty-art-card note-empty-art" hidden="" id="notesEmptyState"><img alt="目前還沒有任何記事" src="./nov_empty_notes.webp?v=160"/></div>
+<textarea class="notes-area" id="notesArea" placeholder="行前提醒、臨時備註、想買的東西…"></textarea>
+<button class="primary-btn" id="firebaseTestBtn" style="margin-top:10px" type="button">測試 Firebase 連線</button>
+<div class="save-status" id="noteStatus">輸入後自動儲存</div>
+</div>
+</section>
+</main>
+</div>
+<nav aria-label="主選單" class="bottom-nav">
+<button class="nav-btn active" data-view="schedule"><span>🗓️</span><b>行程</b></button>
+<button class="nav-btn" data-view="food"><span>🍴</span><b>美食</b></button>
+<button class="nav-btn" data-tool="note" data-view="tools"><span>📝</span><b>記事</b></button>
+</nav>
+<dialog class="settings-modal" id="settingsModal">
+<div class="settings-sheet">
+<div class="settings-head">
+<div><span class="eyebrow">顯示設定</span><h3>閱讀與外觀</h3></div>
+<button aria-label="關閉" class="close-btn" id="settingsClose" type="button">×</button>
+</div>
+<section class="setting-section">
+<div class="setting-label"><b>文字大小</b><small>大字與特大會連同卡片間距、按鈕高度、行距一起放大。</small></div>
+<div aria-label="文字大小" class="segmented-control three" role="group">
+<button data-font-choice="standard" type="button">標準</button>
+<button data-font-choice="large" type="button">大字</button>
+<button data-font-choice="xlarge" type="button">特大</button>
+</div>
+</section>
+<section class="setting-section">
+<div class="setting-label"><b>網站風格</b><small>三套版面結構不同，只共用同一份行程資料。</small></div>
+<div class="theme-preview-grid">
+<button class="theme-preview-card theme-preview-travel" data-theme-choice="travel" type="button">
+<span class="preview-paper"><span class="preview-kicker">2026・晩秋</span><span class="preview-title">九州 家族紅葉旅</span><span class="preview-line"></span><span class="preview-row"><i>D5</i><b>紅葉路線</b></span><span class="preview-row"><i>D8</i><b>秋月・竈門</b></span></span>
+<span class="theme-preview-copy"><b>旅冊</b><small>日本旅遊雜誌・紙張感</small></span><em></em>
+</button>
+<button class="theme-preview-card theme-preview-sea" data-theme-choice="sea" type="button">
+<span class="preview-sea"><span class="preview-sun"></span><span class="preview-wave"></span><span class="preview-time">17:50</span><span class="preview-place">海邊散步</span></span>
+<span class="theme-preview-copy"><b>海空</b><small>清爽留白・現代旅行 App</small></span><em></em>
+</button>
+<button class="theme-preview-card theme-preview-wa" data-theme-choice="wa" type="button">
+<span class="preview-washi"><span class="preview-seal">九州</span><span class="preview-wa-line"></span><span class="preview-wa-row">十一月廿五日　紅葉</span><span class="preview-wa-row">十一月廿八日　秋月</span></span>
+<span class="theme-preview-copy"><b>和風秋旅</b><small>楓葉・銀杏・旅館手冊</small></span><em>預設</em>
+</button>
 
-  <dialog id="bookingAttachmentPreview" class="booking-attachment-preview">
-    <div class="booking-attachment-preview-sheet">
-      <div class="booking-attachment-head">
-        <div><span class="eyebrow">TICKET PREVIEW</span><h3 id="bookingAttachmentPreviewTitle">附件預覽</h3></div>
-        <button type="button" class="close-btn" id="bookingAttachmentPreviewClose" aria-label="關閉">×</button>
-      </div>
-      <div class="booking-attachment-preview-body">
-        <iframe id="bookingAttachmentPreviewFrame" title="PDF 預覽" hidden></iframe>
-        <img id="bookingAttachmentPreviewImage" alt="票券圖片預覽" hidden>
-        <div id="bookingAttachmentPreviewUnsupported" class="empty" hidden>此格式無法直接預覽，可使用「開新頁」或「另存」。</div>
-      </div>
-      <div class="booking-attachment-preview-actions">
-        <a id="bookingAttachmentExternal" class="mini-btn" target="_blank" rel="noopener">開新頁</a>
-        <a id="bookingAttachmentDownload" class="mini-btn">另存檔案</a>
-      </div>
-    </div>
-  </dialog>
+</div>
+</section>
+<section class="setting-section account-setting">
+<div class="setting-label"><b>私人帳號</b><small id="accountEmail">—</small></div>
+<button class="logout-btn" id="logoutBtn" type="button">登出這台裝置</button>
+</section>
+<section class="setting-section sync-setting"><div class="setting-label"><b>資料同步</b><small>Firebase 連線狀態</small></div><div class="sync-status" id="syncPill"><span class="dot"></span><span id="syncText">本機模式</span></div></section>
+<section class="setting-section offline-pack-setting">
+<div class="setting-label"><b>離線旅行包</b><small>D1–D9 中文／日文主圖、Decision、天氣與紅葉圖片一次下載；私人行程資料會保留在這台已授權裝置。</small></div>
+<div class="offline-pack-card">
+<div class="offline-pack-row"><div><strong id="offlinePackStatus">正在檢查離線資料…</strong><small>完整包約 48 MB，共 47 項素材（含9張中文高清PNG；日文維持WebP）。</small></div><span class="offline-pack-badge">OFFLINE</span></div>
+<div class="offline-pack-progress" aria-hidden="true"><i id="offlinePackProgressBar"></i></div>
+<div class="offline-pack-progress-text" id="offlinePackProgressText"></div>
+<div class="offline-pack-actions"><button class="primary-btn" id="offlinePackDownloadBtn" type="button">下載完整離線包</button><button class="offline-remove-btn" hidden id="offlinePackRemoveBtn" type="button">移除離線包</button></div>
+</div>
+</section>
+<button class="reset-display-btn" id="displayResetBtn" type="button">恢復預設顯示</button>
+</div>
+</dialog>
+<div aria-hidden="true" class="day-image-lightbox" id="dayImageLightbox">
+<div class="day-image-lightbox-backdrop" data-day-lightbox-close="1"></div>
+<div aria-label="每日旅程圖片檢視" aria-modal="true" class="day-image-lightbox-card" role="dialog">
+<div class="day-image-lightbox-head"><b id="dayLightboxTitle">D1</b><div class="day-lightbox-head-actions"><button aria-label="橫向全螢幕" class="day-landscape-btn" id="dayLandscapeBtn" title="橫向全螢幕" type="button"><span aria-hidden="true">↔</span><small id="dayLandscapeLabel">橫向</small></button><div aria-label="每日主圖語言" class="day-lang-toggle" role="group"><button data-day-lang="zh" type="button">中</button><button data-day-lang="ja" type="button">日</button></div><button aria-label="關閉" id="dayLightboxClose" type="button">×</button></div></div>
+<div class="day-image-lightbox-stage">
+<img alt="每日旅程主題圖" id="dayLightboxImage"/>
+<button aria-label="上一天" class="day-lightbox-nav prev" id="dayLightboxPrev" type="button">‹</button>
+<button aria-label="下一天" class="day-lightbox-nav next" id="dayLightboxNext" type="button">›</button>
+</div>
+<div class="day-image-lightbox-foot"><span id="dayLightboxCounter">1 / 9</span><div class="day-zoom-controls" aria-label="圖片縮放"><button aria-label="縮小" id="dayZoomOut" type="button">−</button><button aria-label="重設縮放" id="dayZoomReset" type="button"><span id="dayZoomLabel">100%</span></button><button aria-label="放大" id="dayZoomIn" type="button">＋</button></div><small>橫向全螢幕最適合看字；100% 時左右滑換天</small></div>
+</div>
+</div>
 
-  <dialog id="fxRateModal" class="modal fx-rate-modal">
-    <form method="dialog" id="fxRateForm">
-      <div class="modal-head">
-        <div><span class="eyebrow">EXCHANGE RATE</span><h3>匯率設定</h3></div>
-        <button type="button" class="close-btn" id="fxRateClose" aria-label="關閉">×</button>
-      </div>
-      <div class="fx-mode-options">
-        <label><input type="radio" name="fxMode" value="auto" checked><span><b>自動匯率</b><small id="fxAutoRatePreview">尚未取得自動匯率</small></span></label>
-        <label><input type="radio" name="fxMode" value="manual"><span><b>手動匯率</b><small>適合用信用卡實際換算或自行抓保守值</small></span></label>
-      </div>
-      <div class="field fx-manual-field"><label>1 JPY = 幾 TWD</label><input id="fxManualRateInput" name="manualRate" type="number" inputmode="decimal" min="0.0001" step="0.0001" placeholder="例如 0.215"></div>
-      <button type="button" id="fxRefreshBtn" class="mini-btn fx-refresh-btn">立即更新自動匯率</button>
-      <button class="primary-btn" type="submit">儲存匯率設定</button>
-    </form>
-  </dialog>
+<dialog class="autumn-modal" id="autumnModal">
+<div class="autumn-editor-sheet">
+<div class="autumn-editor-head">
+<div><span class="eyebrow">AUTUMN WATCH</span><h3 id="autumnModalTitle">紅葉觀測</h3><small id="autumnModalMeta"></small></div>
+<button aria-label="關閉" class="close-btn" id="autumnModalClose" type="button">×</button>
+</div>
+<div class="autumn-editor-baseline" id="autumnModalBaseline"></div>
+<div aria-label="紅葉狀態" class="autumn-status-choice-grid" role="group">
+<button data-autumn-status-choice="unknown" type="button"><span>?</span><b>未確認</b></button>
+<button data-autumn-status-choice="coloring" type="button"><span>🍂</span><b>色づき</b></button>
+<button data-autumn-status-choice="peak" type="button"><span>🍁</span><b>見頃</b></button>
+<button data-autumn-status-choice="past" type="button"><span>🍂</span><b>見頃過ぎ</b></button>
+<button data-autumn-status-choice="skip" type="button"><span>—</span><b>不追</b></button>
+</div>
+<label class="autumn-note-field"><span>我的觀測備註</span><textarea id="autumnModalNote" placeholder="例如：官方 11/24 更新見頃、IG 最近照片約 7 成紅…"></textarea></label>
+<div class="autumn-modal-updated" id="autumnModalUpdated">最後確認：尚未確認</div>
+<div class="autumn-modal-sources" id="autumnModalSources"></div>
+<button class="primary-btn autumn-save-btn" id="autumnModalSave" type="button">儲存並標記已確認</button>
+</div>
+</dialog>
+<dialog class="guide-modal" id="guideModal">
+<div class="guide-sheet">
+<div aria-hidden="true" class="guide-drag-handle"></div>
+<div class="guide-head">
 
-  <dialog id="formModal" class="modal">
-    <form method="dialog" id="modalForm">
-      <div class="modal-head">
-        <div><span class="eyebrow" id="modalEyebrow">新增</span><h3 id="modalTitle">新增</h3></div>
-        <button type="button" class="close-btn" id="modalClose">×</button>
-      </div>
-      <div id="modalFields"></div>
-      <button class="primary-btn" type="submit">儲存</button>
-    </form>
-  </dialog>
+<div class="guide-head-copy">
+<span class="eyebrow" id="guideKicker">旅伴小攻略</span>
+<h3 id="guideTitle">景點攻略</h3>
+<small id="guideMeta"></small>
+</div>
+<button aria-label="關閉" class="close-btn" id="guideClose" type="button">×</button>
+</div>
+<div class="guide-sections" id="guideSections"></div>
+<section class="guide-personal-note">
+<div class="guide-note-title"><b>我的備忘</b><small>自動儲存・離線可寫・登入後跨裝置同步</small></div>
+<textarea id="guideNoteArea" placeholder="例如：BEAMS 在新館 2F、看到限定色先確認尺寸、到現場記得問店員…"></textarea>
+<div class="guide-note-actions">
+<span data-state="idle" id="guideSaveStatus">已開啟自動儲存</span>
+<button class="mini-btn guide-save-btn" id="guideSaveBtn" type="button">立即同步</button>
+</div>
+</section>
+<div class="guide-actions" id="guideActions"></div>
 
-  <div id="buddyPeekLayer" class="buddy-peek-layer buddy-only-art" aria-hidden="true"></div>
-  <div id="buddyCelebration" class="buddy-celebration buddy-only-art" aria-hidden="true">
-    <div class="buddy-celebrate-card">
-      <div id="buddyEggStage" class="buddy-egg-stage">
-        <img id="buddyCelebrateImg" src="./buddy_success.png?v=430" alt="">
-        <div id="buddyEggHotspots" class="buddy-egg-hotspots" aria-label="彩蛋角色互動區"></div>
-        <div id="buddyEggSpeech" class="buddy-egg-speech" role="status" aria-live="polite"></div>
-      </div>
-      <div id="buddyCelebrateText">完成！</div>
-      <button type="button" id="secretLifeEntry" class="secret-life-entry" aria-label="打開主人不在家的秘密生活">🏠 偷偷看家裡</button>
-    </div>
-  </div>
+</div>
+</dialog>
 
-  <div id="secretLifeAlbum" class="secret-life-album buddy-only-art" aria-hidden="true">
-    <div class="secret-life-card" role="dialog" aria-modal="true" aria-labelledby="secretLifeTitle">
-      <button type="button" id="secretLifeClose" class="secret-life-close" aria-label="返回彩蛋">×</button>
-      <div class="secret-life-kicker">SECRET LIFE</div>
-      <div id="secretLifeTitle" class="secret-life-title">主人不在家的秘密生活</div>
-      <div id="secretLifeStage" class="secret-life-stage">
-        <img id="secretLifeImg" alt="主人不在家的秘密生活">
-        <button type="button" id="secretLifePrev" class="secret-life-nav secret-life-prev" aria-label="上一張">‹</button>
-        <button type="button" id="secretLifeNext" class="secret-life-nav secret-life-next" aria-label="下一張">›</button>
-      </div>
-      <div class="secret-life-footer">
-        <span id="secretLifeCounter" class="secret-life-counter">1 / 12</span>
-        <span class="secret-life-hint">點圖片切換下一張</span>
-      </div>
-    </div>
-  </div>
-  <div id="buddySparkLayer" class="buddy-spark-layer buddy-only-art" aria-hidden="true"></div>
-  <div id="buddySpeechBubble" class="buddy-speech-bubble buddy-only-art" role="status" aria-live="polite"></div>
-  <div id="purinWalkEgg" class="purin-walk-egg buddy-only-art" aria-hidden="true"><img src="./purin_walk.png?v=431" alt=""></div>
-  <div id="usagiUrgentEgg" class="usagi-urgent-egg buddy-only-art" aria-hidden="true"><img src="./usagi_dash.png?v=431" alt=""><div class="usagi-urgent-egg-text">嗚拉呀哈呀哈嗚拉～</div></div>
-  <div id="appUpdateBanner" class="app-update-banner" hidden role="status" aria-live="polite">
-    <div class="app-update-copy"><b>✨ 新版本已準備完成</b><small>更新 App 程式，不會清除記事、記帳或本機資料。</small></div>
-    <button type="button" id="appUpdateNow" class="app-update-btn">立即更新</button>
-  </div>
-  <div id="toast" class="toast" role="status"></div>
-  <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-  <script defer src="./firebase-config.js?v=430"></script>
-  <script defer src="./app.js?v=5334"></script>
+<dialog class="food-nearby-modal" id="foodNearbyModal">
+<div class="food-nearby-sheet">
+<div class="food-nearby-sheet-head">
+<div><span class="eyebrow">QUICK SEARCH</span><h3>附近找吃的</h3></div>
+<button aria-label="關閉" class="close-btn" id="foodNearbyClose" type="button">×</button>
+</div>
+<p>選一個類別，直接用 Google Maps 搜尋你現在附近。</p>
+<div class="chip-grid food-quick-sheet-grid" id="foodQuick"></div>
+
+</div>
+</dialog>
+<dialog class="modal" id="formModal">
+<form id="modalForm" method="dialog">
+<div class="modal-head">
+<div><span class="eyebrow" id="modalEyebrow">新增</span><h3 id="modalTitle">新增</h3></div>
+<button class="close-btn" id="modalClose" type="button">×</button>
+</div>
+<div id="modalFields"></div>
+<button class="primary-btn" type="submit">儲存</button>
+</form>
+</dialog>
+
+
+
+
+
+
+
+<div class="toast" id="toast" role="status"></div>
+<script defer="" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script defer="" src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script defer="" src="./firebase-config.js?v=11110"></script>
+<script defer="" src="./app.js?v=11110"></script>
 </body>
 </html>
