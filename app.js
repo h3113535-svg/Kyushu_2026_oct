@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.35 Booking Action Alignment Fix */
+/* Private travel PWA · Firebase Auth gated content · v5.3.36 Date Weekday Fix */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -2325,10 +2325,23 @@ function eventVisible(e){
   return selected===e.optionId;
 }
 
+function weekdayForIsoDate(isoDate){
+  // Compute the weekday from the calendar date itself, not from the viewer's local timezone.
+  // The old implementation parsed 00:00 JST and then called getDay(); in Taiwan that instant
+  // is still 23:00 on the previous day, so 2026-10-09 incorrectly appeared as Thursday.
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(isoDate||""));
+  if(!m)return "";
+  const y=Number(m[1]),mo=Number(m[2]),d=Number(m[3]);
+  return "日一二三四五六"[new Date(Date.UTC(y,mo-1,d)).getUTCDay()]||"";
+}
+function shortDateForIsoDate(isoDate,fallback=""){
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(isoDate||""));
+  return m?`${m[2]}/${m[3]}`:String(fallback||"");
+}
 function renderDays(){
   $("#dayStrip").innerHTML=TRIP.days.map((d,i)=>`
     <button class="day-btn ${i===state.dayIndex?"active":""}" data-day="${i}">
-      <span class="weekday">週${"日一二三四五六"[new Date(d.date+"T00:00:00+09:00").getDay()]}</span><span class="date">${d.shortDate.slice(3)}</span><span class="d">D${i+1}</span>
+      <span class="weekday">週${weekdayForIsoDate(d.date)}</span><span class="date">${shortDateForIsoDate(d.date,d.shortDate).slice(3)}</span><span class="d">D${i+1}</span>
     </button>`).join("");
   const active=$("#dayStrip .active"); if(active) active.scrollIntoView({behavior:"smooth",inline:"center",block:"nearest"});
 }
@@ -3756,7 +3769,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5335",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5336",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
