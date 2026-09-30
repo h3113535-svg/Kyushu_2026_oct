@@ -229,3 +229,12 @@
 - A private source day marked as authoritative now takes precedence over older local day patches.
 - Private itinerary content is distributed separately and is not included in this public package.
 - Large asset cache and existing interaction behavior remain unchanged.
+
+## v5.3.40 — Authoritative D5 refresh
+
+- Fixes stale private-content behavior after Firebase itinerary updates: an authorized device still boots instantly from its local private cache, but every online launch now verifies the current Firebase `content` in the background.
+- When Firebase `content` differs from the cached copy, the active app applies the new trip payload immediately and re-renders the current day instead of requiring a second reload or waiting for the previous six-hour refresh window.
+- A day marked `sourcePriority: true` now also gives its Firebase decision definitions precedence over stale device-local imported decisions with the same ID. This prevents an old D5 private config from reintroducing removed branches.
+- The public package still contains no private itinerary payload. The corrected Firebase content and cumulative private itinerary config are distributed separately.
+- No visual assets changed; the stable asset cache remains `kyushu-oct-assets-v1`.
+

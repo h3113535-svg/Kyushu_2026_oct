@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.39 Firebase D5 Source */
+/* Private travel PWA · Firebase Auth gated content · v5.3.40 D5 Source Refresh */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -9,7 +9,6 @@ const PRIVATE_CONTENT_CACHE_KEY = "kyushu-private:content-cache";
 const PRIVATE_AUTH_CACHE_KEY = "kyushu-private:auth-cache";
 // Roaming/data-saver policy: the large private itinerary is refreshed at most once every 6 hours
 // on an already-authorized device. Mutable lists still sync separately when their low-data sync is due.
-const PRIVATE_CONTENT_REFRESH_MS = 6 * 60 * 60 * 1000;
 // Cloud reads are intentionally one-shot, never 4-second polling. Reopening the app within this
 // window uses the local copy; edits still attempt immediate cloud writes while online.
 const CLOUD_SYNC_COOLDOWN_MS = 30 * 60 * 1000;
@@ -256,7 +255,11 @@ function privateDayPatchFor(dayIndex){
   return state?.privateDayPatches?.[String(Number(dayIndex))]||null;
 }
 function decisionById(id){
-  return (state?.privateDecisions||[]).find(x=>x.id===id)||(TRIP?.decisions||[]).find(x=>x.id===id)||null;
+  const key=String(id||"");
+  const tripDecision=(TRIP?.decisions||[]).find(x=>x.id===key)||null;
+  const isAuthoritative=(TRIP?.days||[]).some(day=>day?.sourcePriority===true&&(day.decisionIds||[]).map(String).includes(key));
+  if(isAuthoritative)return tripDecision;
+  return (state?.privateDecisions||[]).find(x=>x.id===key)||tripDecision;
 }
 
 function variantSetForDay(dayIndex){
@@ -3640,12 +3643,29 @@ async function bootTrip(content,user,{offline=false}={}){
   }
 }
 async function refreshPrivateTripCacheInBackground(user){
-  if(!navigator.onLine)return;
+  if(!navigator.onLine)return false;
   try{
     const content=await fetchPrivateTrip();
+    const before=JSON.stringify(TRIP||null);
+    const after=JSON.stringify(content||null);
     cacheAuthorizedTrip(content,user);
+    if(before!==after){
+      const currentDate=TRIP?.days?.[state?.dayIndex]?.date||"";
+      TRIP=content;
+      if(state){
+        const nextIdx=currentDate?TRIP.days.findIndex(d=>d.date===currentDate):-1;
+        if(nextIdx>=0)state.dayIndex=nextIdx;
+        else state.dayIndex=Math.max(0,Math.min(Number(state.dayIndex)||0,Math.max(0,(TRIP.days?.length||1)-1)));
+      }
+      applyPrivateTripMeta();
+      renderAll();
+      toast("行程已同步最新版本");
+      return true;
+    }
+    return false;
   }catch(err){
     console.warn("Private trip background refresh skipped",err);
+    return false;
   }
 }
 async function handleAuthorizedUser(user){
@@ -3653,16 +3673,15 @@ async function handleAuthorizedUser(user){
   setAuthStatus("正在載入私人旅程…");
   const cached=cachedTrip();
   const sameUser=!cached?.auth?.email || !user?.email || cached.auth.email===user.email;
-  const cacheAge=Date.now()-Number(cached?.auth?.verifiedAt||0);
 
   // An already-authorized device must enter from its local private copy immediately.
   // Network refresh is background-only, so a slow Firebase connection can never block the gate.
   if(cached && sameUser){
     try{
       await bootTrip(cached.content,user,{offline:!navigator.onLine});
-      if(navigator.onLine && (cacheAge<0 || cacheAge>=PRIVATE_CONTENT_REFRESH_MS)){
-        void refreshPrivateTripCacheInBackground(user);
-      }
+      // Keep instant cached boot, but always verify Firebase when online.
+      // If private content changed, refreshPrivateTripCacheInBackground applies it immediately.
+      if(navigator.onLine) void refreshPrivateTripCacheInBackground(user);
       return;
     }catch(cacheErr){
       console.warn("Cached private trip boot failed; retrying network copy",cacheErr);
@@ -3774,7 +3793,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5339",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5340",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
