@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.38 Hotpot and D5 Route */
+/* Private travel PWA · Firebase Auth gated content · v5.3.39 Firebase D5 Source */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -251,6 +251,8 @@ function mergePrivateDecisions(existing,incoming){
   return [...map.values()];
 }
 function privateDayPatchFor(dayIndex){
+  // A day explicitly updated at the private source takes precedence over older local imports.
+  if(TRIP?.days?.[dayIndex]?.sourcePriority===true)return null;
   return state?.privateDayPatches?.[String(Number(dayIndex))]||null;
 }
 function decisionById(id){
@@ -3772,7 +3774,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5338",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5339",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;

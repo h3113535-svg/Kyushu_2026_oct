@@ -223,3 +223,9 @@
 ## v5.3.38 — Hotpot image and private route update
 - Replaced the hotpot scene image with the supplied picture.
 - Private itinerary configuration updated independently.
+
+## v5.3.39 — Private source precedence
+
+- A private source day marked as authoritative now takes precedence over older local day patches.
+- Private itinerary content is distributed separately and is not included in this public package.
+- Large asset cache and existing interaction behavior remain unchanged.
