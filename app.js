@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.36 Date Weekday Fix */
+/* Private travel PWA · Firebase Auth gated content · v5.3.38 Hotpot and D5 Route */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -272,7 +272,7 @@ function effectiveDay(dayIndex){
   const original=TRIP?.days?.[dayIndex];
   if(!original)return original;
   const patch=privateDayPatchFor(dayIndex);
-  const base=patch?{...original,...patch,events:Array.isArray(patch.events)?patch.events:(original.events||[]),decisionIds:Array.isArray(patch.decisionIds)?patch.decisionIds:(original.decisionIds||[])}:original;
+  const base=patch?{...original,...patch,events:Array.isArray(patch.events)?patch.events:[...(Array.isArray(patch.prependEvents)?patch.prependEvents:[]),...(original.events||[])],decisionIds:Array.isArray(patch.decisionIds)?patch.decisionIds:(original.decisionIds||[])}:original;
   const set=variantSetForDay(dayIndex);
   if(!set)return base;
   const option=selectedVariantOption(set);
@@ -314,13 +314,16 @@ async function importVariantConfigFile(file){
   const incoming=normalizeVariantSets(payload.variantSets);
   const incomingPatches=normalizePrivateDayPatches(payload.dayPatches);
   const incomingDecisions=normalizePrivateDecisions(payload.decisions);
+  const removedDecisionIds=(Array.isArray(payload.removedDecisionIds)?payload.removedDecisionIds:[]).map(String);
   if(!incoming.length&&!Object.keys(incomingPatches).length&&!incomingDecisions.length)throw new Error("設定檔內沒有可用方案或行程選項");
   state.variantSets=mergeVariantSets(state.variantSets,incoming);
   state.privateDayPatches={...(state.privateDayPatches||{}),...incomingPatches};
-  state.privateDecisions=mergePrivateDecisions(state.privateDecisions,incomingDecisions);
+  state.privateDecisions=mergePrivateDecisions(state.privateDecisions,incomingDecisions).filter(x=>!removedDecisionIds.includes(x.id));
+  for(const id of removedDecisionIds){if(state.decisions)delete state.decisions[id];if(state.decisionDrafts)delete state.decisionDrafts[id]}
   saveLocal("variantSets",state.variantSets);
   saveLocal("privateDayPatches",state.privateDayPatches);
   saveLocal("privateDecisions",state.privateDecisions);
+  if(removedDecisionIds.length)saveLocal("decisions",state.decisions||{});
   renderVariantConfigStatus();
   renderSchedule();
 }
@@ -1614,7 +1617,7 @@ const HERO_EGG_POOL=[
 ];
 
 const SECRET_LIFE_SCENES=[
-  {id:"hotpot-party",image:"./secret-life-hotpot-party.webp?v=5319",alt:"趁主人不在，呆呆獸、可達鴨、火腿豬、暴暴龍、木木梟、Olaf、海豹與百變怪一起圍著火鍋開派對"},
+  {id:"hotpot-party",image:"./secret-life-hotpot-party.webp?v=5338",alt:"趁主人不在，呆呆獸、可達鴨、火腿豬、暴暴龍、木木梟、Olaf、海豹與百變怪一起圍著火鍋開派對"},
   {id:"want-to-travel",image:"./secret-life-want-to-travel.webp?v=5319",alt:"大家偷偷準備行李，也想一起去旅行"},
   {id:"seal-gang-mission",image:"./secret-life-seal-gang-mission.webp?v=5319",alt:"可達鴨、呆呆獸和木木梟組成討伐隊，前往海豹與百變怪的抱枕基地"},
   {id:"midnight-snack",image:"./secret-life-midnight-snack.webp?v=5319",alt:"深夜大家偷偷拿零食吃"},
@@ -2399,7 +2402,7 @@ function syncBuddyWeather(){
 
 function mapDirections(q){return mapSearch(q)}
 function hotelForDay(index){
-  const explicit=TRIP.days?.[index]?.hotel;
+  const explicit=effectiveDay(index)?.hotel||TRIP.days?.[index]?.hotel;
   if(explicit?.name && (explicit.nav||explicit.name))return {title:explicit.name,nav:explicit.nav||explicit.name};
   let latest=null;
   for(let i=0;i<=index;i++){
@@ -3769,7 +3772,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5336",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5338",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;

@@ -213,3 +213,13 @@
 - 星期現在直接依 ISO 行事曆日期用 UTC 計算，不受手機所在時區影響；2026/10/09–10/18 依序為五、六、日、一、二、三、四、五、六、日。
 - 日期數字也改由 `day.date` 產生，避免 Firebase 中舊的 `shortDate` metadata 造成顯示不一致。
 - 不修改 D1–D10 行程內容、D3/D9 方案、D5 選項、Booking 附件、登入或其他功能。
+
+
+## v5.3.37 — Itinerary Update
+- Private itinerary configuration updated.
+- Private day event and lodging overrides supported.
+
+
+## v5.3.38 — Hotpot image and private route update
+- Replaced the hotpot scene image with the supplied picture.
+- Private itinerary configuration updated independently.

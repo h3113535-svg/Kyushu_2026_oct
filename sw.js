@@ -1,4 +1,4 @@
-/* Kyushu 2026 Oct PWA · v5.3.36 Date Weekday Fix
+/* Kyushu 2026 Oct PWA · v5.3.38 Hotpot and D5 Route
  * Goals:
  * 1) static images are downloaded once and reused across app versions;
  * 2) app shell updates remain reliable;
@@ -6,7 +6,7 @@
  * 4) caches belonging to other GitHub Pages repos are never touched.
  */
 const CACHE_PREFIX = "kyushu-oct-";
-const SHELL_CACHE = "kyushu-oct-shell-v5.3.36";
+const SHELL_CACHE = "kyushu-oct-shell-v5.3.38";
 const ASSET_CACHE = "kyushu-oct-assets-v1";
 const RUNTIME_CACHE = "kyushu-oct-runtime-v1";
 const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|22|23)$/;
@@ -14,8 +14,8 @@ const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|2
 // Small files that are expected to change when app code changes.
 const SHELL = [
   "./index.html",
-  "./app.js?v=5336",
-  "./style.css?v=5336",
+  "./app.js?v=5338",
+  "./style.css?v=5338",
   "./manifest.json",
   "./firebase-config.js?v=430"
 ];
@@ -65,18 +65,6 @@ const ASSETS = [
   "./purin_tip.png?v=430",
   "./purin_walk.png?v=431",
   "./seal_gang.png?v=5311",
-  "./secret-life-block-building.webp?v=5319",
-  "./secret-life-ditto-usagi.webp?v=5319",
-  "./secret-life-hide-and-seek.webp?v=5319",
-  "./secret-life-hotpot-party.webp?v=5319",
-  "./secret-life-house-mess.webp?v=5319",
-  "./secret-life-midnight-snack.webp?v=5319",
-  "./secret-life-olaf-bed.webp?v=5319",
-  "./secret-life-pillow-fight.webp?v=5319",
-  "./secret-life-seal-gang-mission.webp?v=5319",
-  "./secret-life-sofa-battle.webp?v=5319",
-  "./secret-life-want-to-travel.webp?v=5319",
-  "./secret-life-watchduty-sleep.webp?v=5319",
   "./travel_camera.png?v=430",
   "./travel_coffee.png?v=430",
   "./travel_shopping.png?v=430",
