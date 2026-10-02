@@ -230,6 +230,14 @@
 - Private itinerary content is distributed separately and is not included in this public package.
 - Large asset cache and existing interaction behavior remain unchanged.
 
+
+## v5.3.42 — Takachiho parking 07:30
+
+- D7 private itinerary is updated around the confirmed 2026-10-15 08:30 Takachiho Gorge boat reservation.
+- The public shell version is bumped so installed PWAs request the newest private itinerary content immediately through the v5.3.40 refresh mechanism.
+- No private itinerary payload is stored in this public package; Firebase content and the cumulative private itinerary config are distributed separately.
+- No visual assets changed; the stable asset cache remains `kyushu-oct-assets-v1`.
+
 ## v5.3.40 — Authoritative D5 refresh
 
 - Fixes stale private-content behavior after Firebase itinerary updates: an authorized device still boots instantly from its local private cache, but every online launch now verifies the current Firebase `content` in the background.

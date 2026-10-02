@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.40 D5 Source Refresh */
+/* Private travel PWA · Firebase Auth gated content · v5.3.42 Takachiho Parking 07:30 */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -3793,7 +3793,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5340",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5342",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
