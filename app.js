@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.50 Clean Asset Pipeline */
+/* Private travel PWA · Firebase Auth gated content · v5.3.52 Stable Booking Attachment IDs */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -194,6 +194,15 @@ function normalizeJournalMap(raw){
   }
   return out;
 }
+function normalizeBookingFoodEntries(raw){
+  if(!Array.isArray(raw))return [];
+  return raw.map(item=>({
+    id:String(item?.id||""),
+    name:String(item?.name||"").trim(),
+    createdAt:Number(item?.createdAt||0)
+  })).filter(item=>item.id&&item.name);
+}
+
 function createState(){
   return {
     dayIndex:0, view:"schedule", tool:"booking", shoppingMember:"全部",
@@ -203,6 +212,7 @@ function createState(){
     privateDayPatches:normalizePrivateDayPatches(loadLocal("privateDayPatches",{})), privateDecisions:normalizePrivateDecisions(loadLocal("privateDecisions",[])),
     fx:normalizeFxState(loadLocal("fxRate",{})),
     taskStatus:loadLocal("taskStatus",{}), decisions:loadLocal("decisions",{}), decisionDrafts:{},
+    bookingFoodEntries:normalizeBookingFoodEntries(loadLocal("bookingFoodEntries",[])), activeBookingCategory:"",
     notes:loadLocal("notes",""),
     journals:normalizeJournalMap(loadLocal("journals",{})), journalDayIndex:null, journalTimers:{}, journalPollTimer:null, journalPulling:false,
     guideNotes:normalizeGuideNotesMap(loadLocal("guideNotes",{})),
@@ -3058,12 +3068,30 @@ function openBookingAttachmentDb(){
 function bookingAttachmentRequest(req){
   return new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error("附件資料庫操作失敗"))});
 }
+const BOOKING_ATTACHMENT_LEGACY_ALIASES={
+  "booking-hotel-d1":["richmond"],
+  "booking-hotel-d2":["richmond"],
+  "booking-hotel-d3":["richmond"],
+  "booking-hotel-d4":["etavia"],
+  "booking-hotel-d5":["senomoto"],
+  "booking-hotel-d6":["grateful"],
+  "booking-hotel-d7":["kamenoi"],
+  "booking-hotel-d8":["kumamoto-sakura"],
+  "booking-hotel-d9":["kumamoto-sakura"]
+};
+function bookingAttachmentLookupKeys(taskId){
+  const canonical=String(taskId||"");
+  return [...new Set([canonical,...(BOOKING_ATTACHMENT_LEGACY_ALIASES[canonical]||[])].filter(Boolean))];
+}
 async function listBookingAttachments(taskId){
   const db=await openBookingAttachmentDb();
   try{
     const tx=db.transaction(BOOKING_ATTACHMENT_STORE,"readonly");
-    const list=await bookingAttachmentRequest(tx.objectStore(BOOKING_ATTACHMENT_STORE).index("taskId").getAll(String(taskId)));
-    return (list||[]).sort((a,b)=>Number(b.addedAt||0)-Number(a.addedAt||0));
+    const index=tx.objectStore(BOOKING_ATTACHMENT_STORE).index("taskId");
+    const groups=await Promise.all(bookingAttachmentLookupKeys(taskId).map(key=>bookingAttachmentRequest(index.getAll(key))));
+    const seen=new Set(),merged=[];
+    for(const item of groups.flat()){if(item?.id&&!seen.has(item.id)){seen.add(item.id);merged.push(item)}}
+    return merged.sort((a,b)=>Number(b.addedAt||0)-Number(a.addedAt||0));
   }finally{db.close()}
 }
 async function getBookingAttachment(id){
@@ -3127,10 +3155,23 @@ async function renderBookingAttachmentManager(){
     if($("#bookingAttachmentStorage"))$("#bookingAttachmentStorage").textContent=`${list.length} 個附件 · 約 ${formatAttachmentBytes(total)} · 僅此裝置`;
   }catch(err){box.innerHTML=`<div class="empty">無法讀取附件：${esc(err.message)}</div>`}
 }
-async function openBookingAttachmentManager(taskId){
-  const task=TRIP?.bookingTasks?.find(t=>String(t.id)===String(taskId));
+function bookingSlotTitle(taskId){
+  const id=String(taskId||"");
+  const task=TRIP?.bookingTasks?.find(t=>String(t.id)===id);
+  if(task?.title)return task.title;
+  const hotelMatch=id.match(/^booking-hotel-d(\d+)$/);
+  if(hotelMatch){
+    const day=TRIP?.days?.[Number(hotelMatch[1])-1];
+    return day?`D${hotelMatch[1]} ${day.hotel?.name||"住宿"}`:"住宿";
+  }
+  const custom=state?.bookingFoodEntries?.find(x=>`booking-food-${x.id}`===id);
+  if(custom)return custom.name;
+  return "票券附件";
+}
+async function openBookingAttachmentManager(taskId,titleOverride=""){
   activeBookingAttachmentTaskId=String(taskId||"");
-  if($("#bookingAttachmentTitle"))$("#bookingAttachmentTitle").textContent=task?.title?`附件｜${task.title}`:"票券附件";
+  const title=String(titleOverride||bookingSlotTitle(taskId)||"票券附件");
+  if($("#bookingAttachmentTitle"))$("#bookingAttachmentTitle").textContent=`附件｜${title}`;
   $("#bookingAttachmentModal")?.showModal();
   await renderBookingAttachmentManager();
 }
@@ -3164,6 +3205,95 @@ async function handleBookingAttachmentFiles(files){
   await renderBookingAttachmentManager();await refreshBookingAttachmentBadges();
   if(added)toast(`已加入 ${added} 個離線附件`);
   if(errors.length)toast(errors[0]);
+}
+
+const BOOKING_CATEGORY_META={
+  hotel:{icon:"🏨",title:"住宿",subtitle:"D1–D9 每晚分開放票券"},
+  boat:{icon:"🚣",title:"高千穗划船",subtitle:"D7 · 10/15 08:30"},
+  car:{icon:"🚗",title:"租車",subtitle:"由布院取車／熊本還車"},
+  train:{icon:"🚆",title:"由布院車票",subtitle:"由布院之森 1 號"},
+  food:{icon:"🍽️",title:"美食",subtitle:"訂位確認＋自訂餐廳"}
+};
+function bookingCategorySlots(category){
+  if(category==="hotel"){
+    return (TRIP?.days||[]).slice(0,9).map((day,i)=>({
+      id:`booking-hotel-d${i+1}`,
+      label:`D${i+1}`,
+      title:day.hotel?.name||"住宿",
+      meta:`${day.date?.slice(5).replace("-","/")||""}`
+    }));
+  }
+  if(category==="boat"){
+    const t=TRIP?.bookingTasks?.find(x=>x.id==="takachiho-boat");
+    return [{id:t?.id||"takachiho-boat",label:"D7",title:t?.title||"高千穗峽划船",meta:t?.when||"10/15 08:30"}];
+  }
+  if(category==="car"){
+    const t=TRIP?.bookingTasks?.find(x=>x.id==="nissan");
+    return [{id:t?.id||"nissan",label:"D5→D8",title:t?.title||"Nissan Rent a Car",meta:t?.when||"10/13 10:00"}];
+  }
+  if(category==="train"){
+    const t=TRIP?.bookingTasks?.find(x=>x.id==="yufuin-no-mori");
+    return [{id:t?.id||"yufuin-no-mori",label:"D4",title:t?.title||"由布院之森 1 號",meta:t?.when||"10/12 09:17"}];
+  }
+  if(category==="food"){
+    const official=(TRIP?.bookingTasks||[]).filter(t=>String(t.type||"").includes("餐廳")&&t.defaultDone).map(t=>({id:t.id,label:t.when||"已訂",title:t.title,meta:t.detail||""}));
+    const custom=(state?.bookingFoodEntries||[]).map(t=>({id:`booking-food-${t.id}`,label:"自訂",title:t.name,meta:"自行新增" ,customId:t.id}));
+    return [...official,...custom];
+  }
+  return [];
+}
+function bookingCategoryCard(key){
+  const meta=BOOKING_CATEGORY_META[key],slots=bookingCategorySlots(key);
+  return `<button type="button" class="booking-category-card" data-booking-category="${key}">
+    <span class="booking-category-icon">${meta.icon}</span>
+    <span class="booking-category-copy"><b>${meta.title}</b><small>${meta.subtitle}</small></span>
+    <span class="booking-category-meta">${slots.length} 項 ›</span>
+  </button>`;
+}
+function renderBookingLibrary(){
+  const box=$("#bookingLibrary");if(!box)return;
+  box.innerHTML=["hotel","boat","car","train","food"].map(bookingCategoryCard).join("");
+}
+function renderBookingCategoryModal(){
+  const key=state.activeBookingCategory;
+  const meta=BOOKING_CATEGORY_META[key];
+  const box=$("#bookingCategoryList");
+  if(!meta||!box)return;
+  $("#bookingCategoryTitle").textContent=meta.title;
+  $("#bookingCategorySubtitle").textContent=meta.subtitle;
+  const slots=bookingCategorySlots(key);
+  box.innerHTML=slots.length?slots.map(slot=>`<div class="booking-folder-row">
+    <div class="booking-folder-day">${esc(slot.label||"")}</div>
+    <div class="booking-folder-copy"><b>${esc(slot.title||"")}</b>${slot.meta?`<small>${esc(slot.meta)}</small>`:""}</div>
+    <div class="booking-folder-actions">
+      <button type="button" class="mini-btn booking-folder-file-btn" data-booking-attachments="${esc(slot.id)}" data-booking-title="${esc(slot.title||"")}">PDF／圖片 <span class="booking-attachment-count" hidden></span></button>
+      ${slot.customId?`<button type="button" class="mini-btn danger" data-booking-food-delete="${esc(slot.customId)}">刪除</button>`:""}
+    </div>
+  </div>`).join(""):'<div class="empty">目前沒有項目。</div>';
+  const add=$("#bookingFoodAddArea");if(add)add.hidden=key!=="food";
+  const legacyNote=$("#bookingLegacyNote");if(legacyNote)legacyNote.hidden=key!=="hotel";
+  refreshBookingAttachmentBadges().catch(()=>{});
+}
+function openBookingCategory(key){
+  if(!BOOKING_CATEGORY_META[key])return;
+  state.activeBookingCategory=key;
+  renderBookingCategoryModal();
+  $("#bookingCategoryModal")?.showModal();
+}
+async function saveBookingFoodEntries(){
+  saveLocal("bookingFoodEntries",state.bookingFoodEntries);
+  if(state.cloud){
+    try{await setCloud("bookingFoodEntries",state.bookingFoodEntries);if($("#syncText"))$("#syncText").textContent="雲端已同步"}catch(err){console.warn("Booking food sync failed",err)}
+  }
+}
+async function addBookingFoodEntry(name){
+  name=String(name||"").trim();if(!name){toast("請輸入餐廳名稱");return false}
+  state.bookingFoodEntries.push({id:uid(),name,createdAt:Date.now()});
+  await saveBookingFoodEntries();renderBookingLibrary();renderBookingCategoryModal();toast("已新增美食票券分類");return true;
+}
+async function removeBookingFoodEntry(id){
+  state.bookingFoodEntries=state.bookingFoodEntries.filter(x=>x.id!==String(id));
+  await saveBookingFoodEntries();renderBookingLibrary();renderBookingCategoryModal();toast("已刪除分類名稱");
 }
 
 function taskDone(task){
@@ -3209,17 +3339,22 @@ function bookingTaskCard(t){
   </div>`;
 }
 function renderBookings(){
+  renderBookingLibrary();
   const pending=TRIP.bookingTasks.filter(t=>!taskDone(t));
   const done=TRIP.bookingTasks.filter(taskDone);
-  $("#bookingList").innerHTML=`
-    <section class="task-section">
-      <div class="task-section-title"><span>🔥</span><div><b>尚未處理</b><small>${pending.length} 項</small></div></div>
-      <div class="task-stack">${pending.length?pending.map(bookingTaskCard).join(""):`<div class="empty">目前沒有待處理任務。</div>`}</div>
-    </section>
-    <section class="task-section completed-section">
-      <div class="task-section-title"><span>✅</span><div><b>已完成／已訂</b><small>${done.length} 項</small></div></div>
-      <div class="task-stack">${done.map(bookingTaskCard).join("")}</div>
-    </section>`;
+  $("#bookingList").innerHTML=`<details class="booking-task-details">
+    <summary><span>📌 原本預約待辦</span><small>${pending.length} 待處理 · ${done.length} 已完成</small></summary>
+    <div class="booking-task-detail-body">
+      <section class="task-section">
+        <div class="task-section-title"><span>🔥</span><div><b>尚未處理</b><small>${pending.length} 項</small></div></div>
+        <div class="task-stack">${pending.length?pending.map(bookingTaskCard).join(""):`<div class="empty">目前沒有待處理任務。</div>`}</div>
+      </section>
+      <section class="task-section completed-section">
+        <div class="task-section-title"><span>✅</span><div><b>已完成／已訂</b><small>${done.length} 項</small></div></div>
+        <div class="task-stack">${done.map(bookingTaskCard).join("")}</div>
+      </section>
+    </div>
+  </details>`;
   refreshBookingAttachmentBadges().catch(err=>console.warn("Attachment badge refresh failed",err));
 }
 function renderShopping(){
@@ -3503,7 +3638,9 @@ function bind(){
     const decisionConfirm=e.target.closest("[data-decision-confirm]");if(decisionConfirm){await confirmDecision(decisionConfirm.dataset.decisionConfirm);return}
     const decisionClear=e.target.closest("[data-decision-clear]");if(decisionClear){await clearDecision(decisionClear.dataset.decisionClear);return}
     const decision=e.target.closest("[data-decision-id]");if(decision){stageDecision(decision.dataset.decisionId,decision.dataset.decisionOption);return}
-    const attachmentManager=e.target.closest("[data-booking-attachments]");if(attachmentManager){await openBookingAttachmentManager(attachmentManager.dataset.bookingAttachments);return}
+    const bookingCategory=e.target.closest("[data-booking-category]");if(bookingCategory){openBookingCategory(bookingCategory.dataset.bookingCategory);return}
+    const bookingFoodDelete=e.target.closest("[data-booking-food-delete]");if(bookingFoodDelete){if(confirm("刪除這個自訂餐廳分類？附件檔案不會自動刪除。"))await removeBookingFoodEntry(bookingFoodDelete.dataset.bookingFoodDelete);return}
+    const attachmentManager=e.target.closest("[data-booking-attachments]");if(attachmentManager){await openBookingAttachmentManager(attachmentManager.dataset.bookingAttachments,attachmentManager.dataset.bookingTitle||"");return}
     const attachmentOpen=e.target.closest("[data-booking-attachment-open]");if(attachmentOpen){await openBookingAttachmentPreview(attachmentOpen.dataset.bookingAttachmentOpen);return}
     const attachmentDelete=e.target.closest("[data-booking-attachment-delete]");if(attachmentDelete){if(confirm("刪除這個本機附件？")){await deleteBookingAttachment(attachmentDelete.dataset.bookingAttachmentDelete);await renderBookingAttachmentManager();await refreshBookingAttachmentBadges();toast("附件已刪除")}return}
     const task=e.target.closest("[data-task-id]");if(task){await toggleBookingTask(task.dataset.taskId);return}
@@ -3604,6 +3741,9 @@ function bind(){
   $("#foodNearbyOpen")?.addEventListener("click",()=>$("#foodNearbyModal")?.showModal());
   $("#foodNearbyClose")?.addEventListener("click",()=>$("#foodNearbyModal")?.close());
   $("#foodNearbyModal")?.addEventListener("click",e=>{if(e.target===$("#foodNearbyModal"))$("#foodNearbyModal").close()});
+  $("#bookingCategoryClose")?.addEventListener("click",()=>$("#bookingCategoryModal")?.close());
+  $("#bookingCategoryModal")?.addEventListener("click",e=>{if(e.target===$("#bookingCategoryModal"))$("#bookingCategoryModal").close()});
+  $("#bookingFoodAddForm")?.addEventListener("submit",async e=>{e.preventDefault();const input=$("#bookingFoodName");if(await addBookingFoodEntry(input?.value||"")){if(input)input.value=""}});
   $("#bookingAttachmentClose")?.addEventListener("click",()=>$("#bookingAttachmentModal")?.close());
   $("#bookingAttachmentModal")?.addEventListener("click",e=>{if(e.target===$("#bookingAttachmentModal"))$("#bookingAttachmentModal").close()});
   $("#bookingAttachmentInput")?.addEventListener("change",async e=>{try{await handleBookingAttachmentFiles(e.target.files)}finally{e.target.value=""}});
@@ -3771,6 +3911,7 @@ async function connectCloud({force=false}={}){
     ["expenses",v=>{if(v!==null){state.expenses=normalizeCloud(v);saveLocal("expenses",state.expenses);renderExpenses()}}],
     ["importedPlaces",v=>{if(v!==null&&!state.importedPlacesPending){state.importedPlaces=normalizeImportedPlaces(v);saveLocal("importedPlaces",state.importedPlaces);renderImportedPlaces();renderSchedule()}}],
     ["taskStatus",v=>{if(v && typeof v==="object"){state.taskStatus=v;saveLocal("taskStatus",v);renderBookings()}}],
+    ["bookingFoodEntries",v=>{if(Array.isArray(v)){state.bookingFoodEntries=normalizeBookingFoodEntries(v);saveLocal("bookingFoodEntries",state.bookingFoodEntries);renderBookings();if(state.activeBookingCategory==="food")renderBookingCategoryModal()}}],
     ["decisions",v=>{if(v && typeof v==="object"){state.decisions=v;saveLocal("decisions",v);renderSchedule()}}],
     ["guideNotes",v=>mergeGuideNotesFromCloud(v)],
     ["journals",v=>mergeJournalsFromCloud(v)],
@@ -4062,7 +4203,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5350",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5352",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
