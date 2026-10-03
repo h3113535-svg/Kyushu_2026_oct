@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.42 Takachiho Parking 07:30 */
+/* Private travel PWA · Firebase Auth gated content · v5.3.44 Shopping Item Only Required */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -3054,18 +3054,23 @@ function renderBookings(){
   refreshBookingAttachmentBadges().catch(err=>console.warn("Attachment badge refresh failed",err));
 }
 function renderShopping(){
-  const members=["全部",...TRIP.members];
+  const hasUnassigned=state.shopping.some(i=>!i.owner);
+  const members=["全部",...TRIP.members,...(hasUnassigned?["未指定"]:[])];
+  const byMember=m=>m==="全部"?state.shopping:(m==="未指定"?state.shopping.filter(i=>!i.owner):state.shopping.filter(i=>i.owner===m));
   $("#shoppingSummary").innerHTML=members.map(m=>{
-    const list=m==="全部"?state.shopping:state.shopping.filter(i=>i.owner===m);
+    const list=byMember(m);
     const open=list.filter(i=>!i.checked).length;
     return `<button class="member-pill ${state.shoppingMember===m?"active":""}" data-member="${esc(m)}">${esc(m)} · ${open}</button>`;
   }).join("");
-  const list=state.shoppingMember==="全部"?state.shopping:state.shopping.filter(i=>i.owner===state.shoppingMember);
-  $("#shoppingList").innerHTML=list.length?list.map(i=>`
+  if(state.shoppingMember==="未指定"&&!hasUnassigned)state.shoppingMember="全部";
+  const list=byMember(state.shoppingMember);
+  $("#shoppingList").innerHTML=list.length?list.map(i=>{
+    const meta=[i.owner||"",i.amount?`¥${Number(i.amount).toLocaleString()}`:"",i.shop?`📍 ${esc(i.shop)}`:"",i.day?esc(i.day):""].filter(Boolean).join(" · ");
+    return `
     <div class="list-item ${i.checked?"checked":""}">
       <div class="list-main">
         <div><div class="list-title">${esc(i.name)}</div>
-          <div class="list-meta">${esc(i.owner)}${i.amount?` · ¥${Number(i.amount).toLocaleString()}`:""}${i.shop?` · 📍 ${esc(i.shop)}`:""}${i.day?` · ${esc(i.day)}`:""}</div>
+          ${meta?`<div class="list-meta">${meta}</div>`:""}
         </div>
         <div class="list-actions">
           ${i.shop?`<a class="mini-btn" target="_blank" href="${mapSearch(i.shop)}">地圖</a>`:""}
@@ -3073,7 +3078,8 @@ function renderShopping(){
           <button class="mini-btn" data-delete-shopping="${i.id}">刪</button>
         </div>
       </div>
-    </div>`).join(""):`<div class="empty">目前沒有購物項目。</div>`;
+    </div>`;
+  }).join(""):`<div class="empty">目前沒有購物項目。</div>`;
 }
 function computeExpense(){
   const paid=Object.fromEntries(TRIP.members.map(m=>[m,0]));
@@ -3167,8 +3173,8 @@ function openModal(type){
   }else if(type==="shopping"){
     title.textContent="新增購物";
     fields.innerHTML=field("商品","name","text","例如：On Cloud 7")+
-      selectField("誰的","owner",TRIP.members)+field("預算（JPY）","amount","number","20000")+
-      field("店家","shop","text","例如：On Fukuoka")+field("預計哪天","day","text","例如：D2");
+      optionalSelectField("誰的","owner",TRIP.members,"未指定")+optionalField("預算（JPY）","amount","number","20000")+
+      optionalField("店家","shop","text","例如：On Fukuoka")+optionalField("預計哪天","day","text","例如：D2");
   }else{
     title.textContent="新增記帳";
     fields.innerHTML=field("名稱","name","text","例如：晚餐")+field("金額（JPY）","amount","number","4800")+
@@ -3178,14 +3184,17 @@ function openModal(type){
   modal.showModal();
 }
 function field(label,name,type,placeholder){return `<div class="field"><label>${label}</label><input required name="${name}" type="${type}" placeholder="${placeholder}"></div>`}
+function optionalField(label,name,type,placeholder){return `<div class="field"><label>${label}（選填）</label><input name="${name}" type="${type}" placeholder="${placeholder}"></div>`}
 function selectField(label,name,opts){return `<div class="field"><label>${label}</label><select name="${name}">${opts.map(o=>`<option>${esc(o)}</option>`).join("")}</select></div>`}
+function optionalSelectField(label,name,opts,emptyLabel="未指定"){return `<div class="field"><label>${label}（選填）</label><select name="${name}"><option value="">${esc(emptyLabel)}</option>${opts.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join("")}</select></div>`}
 async function handleSubmit(e){
   e.preventDefault(); const type=$("#formModal").dataset.type, fd=new FormData(e.currentTarget);
   const base={id:uid(),name:fd.get("name")?.trim()};
+  if(!base.name){toast(type==="shopping"?"請輸入商品名稱":"請輸入名稱");return}
   if(type==="food"){
     await cloudAdd("foods",{...base,location:fd.get("location")?.trim(),note:fd.get("note")?.trim(),checked:false}); renderFood();
   }else if(type==="shopping"){
-    await cloudAdd("shopping",{...base,owner:fd.get("owner"),amount:Number(fd.get("amount")||0),shop:fd.get("shop")?.trim(),day:fd.get("day")?.trim(),checked:false}); renderShopping();
+    await cloudAdd("shopping",{...base,owner:fd.get("owner")?.trim()||"",amount:Number(fd.get("amount")||0),shop:fd.get("shop")?.trim()||"",day:fd.get("day")?.trim()||"",checked:false}); renderShopping();
   }else{
     const participants=fd.getAll("participants");
     await cloudAdd("expenses",{...base,amount:Number(fd.get("amount")||0),payer:fd.get("payer"),participants,date:fd.get("date")||japanToday()});renderExpenses();
@@ -3793,7 +3802,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5342",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5344",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;

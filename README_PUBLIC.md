@@ -231,6 +231,15 @@
 - Large asset cache and existing interaction behavior remain unchanged.
 
 
+
+## v5.3.43 — D2 breakfast / Gallica / Tenjin shopping replan
+
+- D2 private itinerary is rebuilt around 07:00 DACOMECCA, the fixed 09:00–12:00 Gallica Daimyo appointment, the specified Daimyo kurobuta tonkatsu lunch, and the 20:00 Sukiyaki Yamasho reservation.
+- During the salon appointment, the solo route is now aimed at 10:00-opening hobby / card shops instead of morning PARCO shopping.
+- Afternoon order is fixed to Tenjin Underground Mall → ONE FUKUOKA → PARCO → SOLARIA → Daimyo / Imaizumi → Canal City, with shoes first at Canal City.
+- D2 is marked authoritative in Firebase content so the old local Gallica prepend patch cannot duplicate the salon event.
+- Private itinerary content remains separate from the public package. No visual assets changed; the stable asset cache remains `kyushu-oct-assets-v1`.
+
 ## v5.3.42 — Takachiho parking 07:30
 
 - D7 private itinerary is updated around the confirmed 2026-10-15 08:30 Takachiho Gorge boat reservation.
@@ -246,3 +255,12 @@
 - The public package still contains no private itinerary payload. The corrected Firebase content and cumulative private itinerary config are distributed separately.
 - No visual assets changed; the stable asset cache remains `kyushu-oct-assets-v1`.
 
+
+## v5.3.44 — Shopping item-only required
+
+- Keeps the full v5.3.43 D2 shopping replan.
+- Shopping list now requires only the item/product name.
+- Owner, budget, store and planned day are optional.
+- Owner defaults to unassigned instead of silently assigning the first trip member.
+- Adds an `未指定` shopping filter only when unassigned items exist.
+- Optional shopping metadata no longer renders leading separators when fields are blank.
