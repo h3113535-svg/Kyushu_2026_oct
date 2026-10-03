@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.49 iOS Transparent Art Rendering Fix */
+/* Private travel PWA · Firebase Auth gated content · v5.3.50 Clean Asset Pipeline */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -41,8 +41,8 @@ let cloudReconnectInFlight = false;
 const GUIDE_DEVICE_ID_KEY = "kyushu-private:guide-device-id";
 
 const BUDDY_FAST_ASSETS=[
-  "./day-scene-v52-01.webp?v=520","./day-scene-v52-02.webp?v=520","./day-scene-v52-03.webp?v=549","./day-scene-v52-04.webp?v=520","./day-scene-v52-05.webp?v=520",
-  "./day-scene-v52-06.webp?v=520","./day-scene-v52-07.webp?v=520","./day-scene-v52-08.webp?v=520","./day-scene-v52-09.webp?v=549","./day-scene-v52-10.webp?v=520",
+  "./day-scene-v52-01.webp?v=520","./day-scene-v52-02.webp?v=520","./day-scene-v52-03.webp?v=550","./day-scene-v52-04.webp?v=520","./day-scene-v52-05.webp?v=520",
+  "./day-scene-v52-06.webp?v=520","./day-scene-v52-07.webp?v=520","./day-scene-v52-08.webp?v=520","./day-scene-v52-09.webp?v=550","./day-scene-v52-10.webp?v=520",
   "./weather-rain-usagi-v47.webp?v=470","./weather-sunny-usagi-v536.webp?v=536","./weather-teruteru-usagi-v536.webp?v=536","./weather-cloudy-usagi-v536.webp?v=536","./weather-thunder-usagi-v536.webp?v=536","./weather-snow-usagi-v536.webp?v=536","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
   "./egg-sendoff-v539.png?v=539","./egg-cry-v539.png?v=539","./egg-home-sleep-v539.png?v=539",
   "./duck_gang.png?v=5311","./seal_gang.png?v=5311",
@@ -2127,9 +2127,10 @@ function buddyPeek(kind="purin"){
   buddyPeek._timer=setTimeout(()=>{layer.classList.remove("show");setTimeout(()=>{layer.className="buddy-peek-layer buddy-only-art";layer.innerHTML=""},480)},2400);
 }
 function dailySceneAsset(index){
-  const dayNo=index+1;
-  const token=(dayNo===3||dayNo===9)?549:520;
-  return `./day-scene-v52-${String(dayNo).padStart(2,"0")}.webp?v=${token}`;
+  // D3 and D9 intentionally swap illustrations without modifying the underlying asset files.
+  if(index===2) return "./day-scene-v52-09.webp?v=550";
+  if(index===8) return "./day-scene-v52-03.webp?v=550";
+  return `./day-scene-v52-${String(index+1).padStart(2,"0")}.webp?v=520`;
 }
 function renderDailyScene(){
   const img=$("#daySceneImage"), bar=$("#daySceneProgressBar");
@@ -3518,7 +3519,7 @@ function bind(){
   if(heroEgg){
     const heroImg=heroEgg.querySelector("img");
     const heroGallery=[
-      "./hero-cover-v51.webp?v=549",
+      "./hero-cover-v51.webp?v=510",
       "./buddy_hero.png?v=430",
       "./buddy_celebrate.png?v=430",
       "./buddy_chill.png?v=430",
@@ -4061,7 +4062,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5345",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5350",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
