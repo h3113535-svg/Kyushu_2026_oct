@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.46 Itinerary + Shared Daily Journal */
+/* Private travel PWA · Firebase Auth gated content · v5.3.48 THE BLOSSOM + D3/D9 Daily Art Swap */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -41,8 +41,8 @@ let cloudReconnectInFlight = false;
 const GUIDE_DEVICE_ID_KEY = "kyushu-private:guide-device-id";
 
 const BUDDY_FAST_ASSETS=[
-  "./day-scene-v52-01.webp?v=520","./day-scene-v52-02.webp?v=520","./day-scene-v52-03.webp?v=520","./day-scene-v52-04.webp?v=520","./day-scene-v52-05.webp?v=520",
-  "./day-scene-v52-06.webp?v=520","./day-scene-v52-07.webp?v=520","./day-scene-v52-08.webp?v=520","./day-scene-v52-09.webp?v=520","./day-scene-v52-10.webp?v=520",
+  "./day-scene-v52-01.webp?v=548","./day-scene-v52-02.webp?v=548","./day-scene-v52-03.webp?v=548","./day-scene-v52-04.webp?v=548","./day-scene-v52-05.webp?v=548",
+  "./day-scene-v52-06.webp?v=548","./day-scene-v52-07.webp?v=548","./day-scene-v52-08.webp?v=548","./day-scene-v52-09.webp?v=548","./day-scene-v52-10.webp?v=548",
   "./weather-rain-usagi-v47.webp?v=470","./weather-sunny-usagi-v536.webp?v=536","./weather-teruteru-usagi-v536.webp?v=536","./weather-cloudy-usagi-v536.webp?v=536","./weather-thunder-usagi-v536.webp?v=536","./weather-snow-usagi-v536.webp?v=536","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
   "./egg-sendoff-v539.png?v=539","./egg-cry-v539.png?v=539","./egg-home-sleep-v539.png?v=539",
   "./duck_gang.png?v=5311","./seal_gang.png?v=5311",
@@ -2127,7 +2127,7 @@ function buddyPeek(kind="purin"){
   buddyPeek._timer=setTimeout(()=>{layer.classList.remove("show");setTimeout(()=>{layer.className="buddy-peek-layer buddy-only-art";layer.innerHTML=""},480)},2400);
 }
 function dailySceneAsset(index){
-  return `./day-scene-v52-${String(index+1).padStart(2,"0")}.webp?v=520`;
+  return `./day-scene-v52-${String(index+1).padStart(2,"0")}.webp?v=548`;
 }
 function renderDailyScene(){
   const img=$("#daySceneImage"), bar=$("#daySceneProgressBar");
@@ -2807,6 +2807,13 @@ function renderSchedule(){
   $("#dayNumber").textContent=`D${state.dayIndex+1}`;
   $("#dayTitle").textContent=d.title;
   $("#daySubtitle").textContent=d.subtitle;
+  const dayRouteLink=$("#dayRouteLink");
+  if(dayRouteLink){
+    const routeUrl=String(d.routeUrl||"").trim();
+    dayRouteLink.hidden=!routeUrl;
+    if(routeUrl){dayRouteLink.href=routeUrl;dayRouteLink.textContent=`🚗 ${d.routeLabel||"今日自駕路線"} ↗`;}
+    else{dayRouteLink.removeAttribute("href");}
+  }
   const variantStatus=variantStatusForDay(state.dayIndex);
   const variantBadge=$("#dayVariantBadge");
   if(variantBadge){
