@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.44 Shopping Item Only Required */
+/* Private travel PWA · Firebase Auth gated content · v5.3.45 Live Weather Engine */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -2115,7 +2115,7 @@ function renderDailyScene(){
 }
 
 
-const WEATHER_BUDDY_STORAGE_KEY="kyushu-private:weather-buddy-mode";
+const WEATHER_BUDDY_STORAGE_KEY="kyushu-private:weather-buddy-mode"; // legacy key; v5.3.45 uses session-only manual override
 const WEATHER_BUDDY_VARIANTS=[
   {mode:"sunny",src:"./weather-sunny-usagi-v536.webp?v=536",alt:"晴天烏薩奇",label:"晴天"},
   {mode:"teruteru",src:"./weather-teruteru-usagi-v536.webp?v=536",alt:"晴天娃娃烏薩奇",label:"晴天娃娃"},
@@ -2125,11 +2125,8 @@ const WEATHER_BUDDY_VARIANTS=[
   {mode:"snow",src:"./weather-snow-usagi-v536.webp?v=536",alt:"雪天烏薩奇",label:"雪天"}
 ];
 let weatherBuddyIndex=0;
-try{
-  const saved=localStorage.getItem(WEATHER_BUDDY_STORAGE_KEY);
-  const idx=WEATHER_BUDDY_VARIANTS.findIndex(v=>v.mode===saved);
-  if(idx>=0)weatherBuddyIndex=idx;
-}catch{}
+let weatherBuddyManualOverride=false;
+try{localStorage.removeItem(WEATHER_BUDDY_STORAGE_KEY)}catch{}
 function updateWeatherBuddy(mode=WEATHER_BUDDY_VARIANTS[weatherBuddyIndex].mode){
   const el=$("#weatherBuddySlot"), card=$("#weatherCard"); if(!el)return;
   let idx=WEATHER_BUDDY_VARIANTS.findIndex(v=>v.mode===mode);
@@ -2143,11 +2140,15 @@ function updateWeatherBuddy(mode=WEATHER_BUDDY_VARIANTS[weatherBuddyIndex].mode)
   el.innerHTML=`<button type="button" class="weather-buddy-button weather-usagi-${spec.mode}" data-weather-switch="1" aria-label="切換天氣烏薩奇造型，目前：${spec.label}"><img src="${spec.src}" alt="${spec.alt}"></button>`;
 }
 function cycleWeatherBuddy(){
+  weatherBuddyManualOverride=true;
   weatherBuddyIndex=(weatherBuddyIndex+1)%WEATHER_BUDDY_VARIANTS.length;
   const spec=WEATHER_BUDDY_VARIANTS[weatherBuddyIndex];
-  try{localStorage.setItem(WEATHER_BUDDY_STORAGE_KEY,spec.mode)}catch{}
   updateWeatherBuddy(spec.mode);
   return spec.mode;
+}
+function syncWeatherBuddyToForecast(mode){
+  if(weatherBuddyManualOverride)return;
+  updateWeatherBuddy(mode||"cloudy");
 }
 function handleWeatherBuddyTap(){
   clearTimeout(handleWeatherBuddyTap._speechDelay);
@@ -2811,41 +2812,170 @@ function renderSchedule(){
   renderWeather(d);
   requestAnimationFrame(()=>bindGuideTargets(visibleEvents));
 }
+// v5.3.45 — live Open-Meteo weather engine
+const WEATHER_API_BASE="https://api.open-meteo.com/v1/forecast";
+const WEATHER_CACHE_PREFIX="kyushu-oct-2026:weather-cache-v1:";
+const WEATHER_CACHE_TTL_MS=30*60*1000;
+let weatherRenderSeq=0;
+
+function weatherDayDiff(dateStr){
+  const today=japanToday();
+  const a=Date.parse(`${today}T00:00:00+09:00`);
+  const b=Date.parse(`${dateStr}T00:00:00+09:00`);
+  return Math.round((b-a)/86400000);
+}
+function weatherCodeInfo(code){
+  const c=Number(code);
+  if(c===0)return {icon:"☀️",desc:"晴",buddyMode:"sunny"};
+  if(c===1)return {icon:"🌤️",desc:"大致晴朗",buddyMode:"sunny"};
+  if(c===2)return {icon:"⛅",desc:"多雲時晴",buddyMode:"cloudy"};
+  if(c===3)return {icon:"☁️",desc:"陰天",buddyMode:"cloudy"};
+  if(c===45||c===48)return {icon:"🌫️",desc:"有霧",buddyMode:"cloudy"};
+  if([51,53,55].includes(c))return {icon:"🌦️",desc:"毛毛雨",buddyMode:"rain"};
+  if([56,57].includes(c))return {icon:"🌧️",desc:"凍毛毛雨",buddyMode:"rain"};
+  if([61,63,65].includes(c))return {icon:"🌧️",desc:c===61?"小雨":c===63?"中雨":"大雨",buddyMode:"rain"};
+  if([66,67].includes(c))return {icon:"🌧️",desc:"凍雨",buddyMode:"rain"};
+  if([71,73,75,77,85,86].includes(c))return {icon:"🌨️",desc:"降雪",buddyMode:"snow"};
+  if([80,81,82].includes(c))return {icon:"🌦️",desc:c===80?"短暫陣雨":c===81?"陣雨":"強陣雨",buddyMode:"rain"};
+  if([95,96,99].includes(c))return {icon:"⛈️",desc:c===95?"雷雨":"雷雨伴冰雹",buddyMode:"thunder"};
+  return {icon:"☁️",desc:"天氣多變",buddyMode:"cloudy"};
+}
+function weatherCacheKey(d){
+  return `${WEATHER_CACHE_PREFIX}${Number(d.lat).toFixed(3)},${Number(d.lon).toFixed(3)}`;
+}
+function readWeatherCache(d){
+  try{
+    const raw=localStorage.getItem(weatherCacheKey(d));
+    if(!raw)return null;
+    const parsed=JSON.parse(raw);
+    if(!parsed?.data||!parsed?.savedAt)return null;
+    return parsed;
+  }catch{return null}
+}
+function writeWeatherCache(d,data){
+  try{localStorage.setItem(weatherCacheKey(d),JSON.stringify({savedAt:Date.now(),data}))}catch{}
+}
+function hourLabel(hour){
+  if(hour>=24)return "24:00";
+  return `${String(hour).padStart(2,"0")}:00`;
+}
+function buildRainGroups(hourly,dateStr,rainMax){
+  const times=hourly?.time||[], probs=hourly?.precipitation_probability||[];
+  if(!times.length||!probs.length||Number(rainMax)<30)return [];
+  const threshold=Number(rainMax)>=70?50:Number(rainMax)>=40?40:30;
+  const rows=[];
+  for(let i=0;i<times.length;i++){
+    const t=String(times[i]||"");
+    if(!t.startsWith(`${dateStr}T`))continue;
+    const p=Number(probs[i]);
+    const h=Number(t.slice(11,13));
+    if(Number.isFinite(p)&&p>=threshold&&Number.isFinite(h))rows.push({hour:h,prob:p});
+  }
+  if(!rows.length)return [];
+  const groups=[];
+  let group={start:rows[0].hour,end:rows[0].hour+1,maxProb:rows[0].prob};
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i];
+    if(r.hour===group.end){
+      group.end=r.hour+1;
+      group.maxProb=Math.max(group.maxProb,r.prob);
+    }else{
+      groups.push({start:hourLabel(group.start),end:hourLabel(group.end),maxProb:Math.round(group.maxProb)});
+      group={start:r.hour,end:r.hour+1,maxProb:r.prob};
+    }
+  }
+  groups.push({start:hourLabel(group.start),end:hourLabel(group.end),maxProb:Math.round(group.maxProb)});
+  return groups;
+}
+function weatherFromPayload(d,payload,{stale=false}={}){
+  const daily=payload?.daily||{}, dates=daily.time||[];
+  const idx=dates.indexOf(d.date);
+  if(idx<0)return {state:"not-ready",message:"尚未進入預報範圍"};
+  const high=Math.round(Number(daily.temperature_2m_max?.[idx]));
+  const low=Math.round(Number(daily.temperature_2m_min?.[idx]));
+  const rainMax=Math.max(0,Math.round(Number(daily.precipitation_probability_max?.[idx]||0)));
+  const code=Number(daily.weather_code?.[idx]);
+  const info=weatherCodeInfo(code);
+  const isToday=d.date===japanToday();
+  const currentRaw=Number(payload?.current?.temperature_2m);
+  return {
+    state:"forecast",
+    icon:info.icon,
+    current:isToday&&Number.isFinite(currentRaw)?Math.round(currentRaw):null,
+    high:Number.isFinite(high)?high:"—",
+    low:Number.isFinite(low)?low:"—",
+    desc:info.desc,
+    rainMax,
+    rainGroups:buildRainGroups(payload?.hourly,d.date,rainMax),
+    buddyMode:info.buddyMode,
+    stale
+  };
+}
+async function getWeather(d){
+  if(!Number.isFinite(Number(d?.lat))||!Number.isFinite(Number(d?.lon)))
+    return {state:"not-ready",message:"這一天尚未設定天氣座標"};
+  const diff=weatherDayDiff(d.date);
+  if(diff<0||diff>15)return {state:"not-ready",message:"尚未進入 16 天預報範圍"};
+
+  const cached=readWeatherCache(d);
+  if(cached&&Date.now()-cached.savedAt<WEATHER_CACHE_TTL_MS){
+    return weatherFromPayload(d,cached.data);
+  }
+
+  const qs=new URLSearchParams({
+    latitude:String(d.lat),
+    longitude:String(d.lon),
+    timezone:"Asia/Tokyo",
+    forecast_days:"16",
+    current:"temperature_2m",
+    daily:"weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+    hourly:"precipitation_probability"
+  });
+  try{
+    const res=await fetch(`${WEATHER_API_BASE}?${qs.toString()}`,{headers:{Accept:"application/json"},cache:"no-store"});
+    if(!res.ok)throw new Error(`weather ${res.status}`);
+    const payload=await res.json();
+    if(payload?.error)throw new Error(payload.reason||"weather api error");
+    writeWeatherCache(d,payload);
+    return weatherFromPayload(d,payload);
+  }catch(err){
+    if(cached?.data)return weatherFromPayload(d,cached.data,{stale:true});
+    throw err;
+  }
+}
+
 async function renderWeather(d){
+  const seq=++weatherRenderSeq;
   const card=$("#weatherCard");card.classList.add("skeleton");card.classList.remove("weather-no-forecast");
   $("#weatherLocation").textContent=d.location+" · "+d.shortDate;
   $("#weatherTemp").textContent="載入中";
   $("#weatherDesc").textContent="正在取得旅行日期預報";
   $("#weatherIcon").textContent="☁️";$("#rainBox").innerHTML=""; ensureWeatherBuddy();
-  if(typeof getWeather!=="function"){
-    card.classList.add("weather-no-forecast");
-    $("#weatherTemp").textContent="—";
-    $("#weatherDesc").textContent="尚未進入預報範圍";
-    $("#rainBox").textContent="接近旅行日期後再顯示正式天氣資料。";
-    card.classList.remove("skeleton");
-    return;
-  }
   try{
     const w=await getWeather(d);
+    if(seq!==weatherRenderSeq)return;
     if(w.state!=="forecast"){
       card.classList.add("weather-no-forecast");
       $("#weatherTemp").textContent="—";
       $("#weatherDesc").textContent=w.message;
       $("#rainBox").innerHTML="進入預報範圍後，這裡會顯示高低溫、降雨機率與預計下雨時段。";
     }else{
+      syncWeatherBuddyToForecast(w.buddyMode);
       $("#weatherIcon").textContent=w.icon;
       $("#weatherTemp").textContent=w.current!==null?`${w.current}° · ${w.high}° / ${w.low}°`:`${w.high}° / ${w.low}°`;
-      $("#weatherDesc").textContent=`${w.desc} · 全日最高降雨機率 ${w.rainMax}%`;
+      $("#weatherDesc").textContent=`${w.desc} · 全日最高降雨機率 ${w.rainMax}%${w.stale?" · 快取資料":""}`;
       if(w.rainGroups.length){
-        $("#rainBox").innerHTML=w.rainGroups.slice(0,2).map(g=>`<div class="rain-alert">🌧️ 預計 ${g.start}–${g.end} 有雨 · 最高 ${g.maxProb}%</div>`).join("");
+        $("#rainBox").innerHTML=w.rainGroups.slice(0,2).map(g=>`<div class="rain-alert">🌧️ ${g.start}–${g.end} 降雨機率偏高 · 最高 ${g.maxProb}%</div>`).join("");
       }else {
         $("#rainBox").innerHTML="☂️ 目前預報沒有明顯連續降雨時段。";
       }
     }
   }catch(e){
+    if(seq!==weatherRenderSeq)return;
+    card.classList.add("weather-no-forecast");
     $("#weatherTemp").textContent="—";$("#weatherDesc").textContent="天氣暫時無法更新";
-    $("#rainBox").textContent="保留上次行程資料；網路恢復後重新切換日期即可再抓。";
-  }finally{card.classList.remove("skeleton")}
+    $("#rainBox").textContent="目前無可用快取；網路恢復後重新切換日期即可再抓。";
+  }finally{if(seq===weatherRenderSeq)card.classList.remove("skeleton")}
 }
 
 function renderFood(){
@@ -3802,7 +3932,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5344",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5345",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;

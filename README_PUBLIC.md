@@ -264,3 +264,13 @@
 - Owner defaults to unassigned instead of silently assigning the first trip member.
 - Adds an `未指定` shopping filter only when unassigned items exist.
 - Optional shopping metadata no longer renders leading separators when fields are blank.
+
+
+## v5.3.45 — Live Weather Engine
+
+- Implements real Open-Meteo forecast fetching with no API key.
+- Uses each itinerary day’s existing latitude/longitude and Asia/Tokyo timezone.
+- Supports the 16-day forecast horizon, daily high/low, WMO weather code, maximum precipitation probability, and hourly rain-risk windows.
+- Adds a 30-minute per-location local cache and stale-cache fallback for temporary network failures.
+- Weather Usagi follows forecast automatically; manual taps override only for the current app session.
+- Prevents stale async weather requests from overwriting a newly selected day.
