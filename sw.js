@@ -1,4 +1,4 @@
-/* Kyushu 2026 Oct PWA · v5.3.48 THE BLOSSOM + D3/D9 Daily Art Swap
+/* Kyushu 2026 Oct PWA · v5.3.49 iOS Transparent Art Rendering Fix
  * Goals:
  * 1) static images are downloaded once and reused across app versions;
  * 2) app shell updates remain reliable;
@@ -6,7 +6,7 @@
  * 4) caches belonging to other GitHub Pages repos are never touched.
  */
 const CACHE_PREFIX = "kyushu-oct-";
-const SHELL_CACHE = "kyushu-oct-shell-v5.3.48";
+const SHELL_CACHE = "kyushu-oct-shell-v5.3.49";
 const ASSET_CACHE = "kyushu-oct-assets-v1";
 const RUNTIME_CACHE = "kyushu-oct-runtime-v1";
 const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|22|23)$/;
@@ -32,21 +32,21 @@ const ASSETS = [
   "./buddy_eat.png?v=430",
   "./buddy_hero.png?v=430",
   "./buddy_success.png?v=430",
-  "./day-scene-v52-01.webp?v=548",
-  "./day-scene-v52-02.webp?v=548",
-  "./day-scene-v52-03.webp?v=548",
-  "./day-scene-v52-04.webp?v=548",
-  "./day-scene-v52-05.webp?v=548",
-  "./day-scene-v52-06.webp?v=548",
-  "./day-scene-v52-07.webp?v=548",
-  "./day-scene-v52-08.webp?v=548",
-  "./day-scene-v52-09.webp?v=548",
-  "./day-scene-v52-10.webp?v=548",
+  "./day-scene-v52-01.webp?v=520",
+  "./day-scene-v52-02.webp?v=520",
+  "./day-scene-v52-03.webp?v=549",
+  "./day-scene-v52-04.webp?v=520",
+  "./day-scene-v52-05.webp?v=520",
+  "./day-scene-v52-06.webp?v=520",
+  "./day-scene-v52-07.webp?v=520",
+  "./day-scene-v52-08.webp?v=520",
+  "./day-scene-v52-09.webp?v=549",
+  "./day-scene-v52-10.webp?v=520",
   "./duck_gang.png?v=5311",
   "./egg-cry-v539.png?v=539",
   "./egg-home-sleep-v539.png?v=539",
   "./egg-sendoff-v539.png?v=539",
-  "./hero-cover-v51.webp?v=510",
+  "./hero-cover-v51.webp?v=549",
   "./hotel-return-duo.webp?v=460",
   "./mini-purin-clap.webp",
   "./mini-purin-hero.webp",
