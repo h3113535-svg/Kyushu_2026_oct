@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.45 Live Weather Engine */
+/* Private travel PWA · Firebase Auth gated content · v5.3.46 Itinerary + Shared Daily Journal */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -179,6 +179,21 @@ async function removeCloud(key, id){
 const $=(s)=>document.querySelector(s);
 const $$=(s)=>[...document.querySelectorAll(s)];
 const storeKey=k=>`${TRIP?.id||"private-trip"}:${k}`;
+
+// v5.3.46 — shared daily journal. One deterministic Firebase record per trip date.
+function normalizeJournalRecord(raw){
+  if(typeof raw==="string")return {text:raw,updatedAt:0,pending:false};
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))return {text:"",updatedAt:0,pending:false};
+  return {text:String(raw.text||""),updatedAt:Number(raw.updatedAt||0),pending:!!raw.pending};
+}
+function normalizeJournalMap(raw){
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))return {};
+  const out={};
+  for(const [date,value] of Object.entries(raw)){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(date))out[date]=normalizeJournalRecord(value);
+  }
+  return out;
+}
 function createState(){
   return {
     dayIndex:0, view:"schedule", tool:"booking", shoppingMember:"全部",
@@ -189,6 +204,7 @@ function createState(){
     fx:normalizeFxState(loadLocal("fxRate",{})),
     taskStatus:loadLocal("taskStatus",{}), decisions:loadLocal("decisions",{}), decisionDrafts:{},
     notes:loadLocal("notes",""),
+    journals:normalizeJournalMap(loadLocal("journals",{})), journalDayIndex:null, journalTimers:{}, journalPollTimer:null, journalPulling:false,
     guideNotes:normalizeGuideNotesMap(loadLocal("guideNotes",{})),
     guideNotePending:loadLocal("guideNotePending",{}),
     guideNoteTimer:null, guideNoteSyncing:false,
@@ -263,6 +279,9 @@ function decisionById(id){
 }
 
 function variantSetForDay(dayIndex){
+  // A Firebase day explicitly marked sourcePriority is authoritative and must not be replaced by
+  // an older locally imported A/B variant set.
+  if(TRIP?.days?.[Number(dayIndex)]?.sourcePriority===true)return null;
   return (state?.variantSets||[]).find(set=>set.dayIndexes.includes(Number(dayIndex)))||null;
 }
 function selectedVariantId(setOrId){
@@ -320,12 +339,17 @@ async function importVariantConfigFile(file){
   const incomingPatches=normalizePrivateDayPatches(payload.dayPatches);
   const incomingDecisions=normalizePrivateDecisions(payload.decisions);
   const removedDecisionIds=(Array.isArray(payload.removedDecisionIds)?payload.removedDecisionIds:[]).map(String);
-  if(!incoming.length&&!Object.keys(incomingPatches).length&&!incomingDecisions.length)throw new Error("設定檔內沒有可用方案或行程選項");
-  state.variantSets=mergeVariantSets(state.variantSets,incoming);
+  const removedVariantSetIds=(Array.isArray(payload.removedVariantSetIds)?payload.removedVariantSetIds:[]).map(String);
+  const removedDayPatchIndexes=(Array.isArray(payload.removedDayPatchIndexes)?payload.removedDayPatchIndexes:[]).map(x=>String(Number(x))).filter(x=>x!=="NaN");
+  if(!incoming.length&&!Object.keys(incomingPatches).length&&!incomingDecisions.length&&!removedDecisionIds.length&&!removedVariantSetIds.length&&!removedDayPatchIndexes.length)throw new Error("設定檔內沒有可用方案或清理指令");
+  state.variantSets=mergeVariantSets(state.variantSets,incoming).filter(x=>!removedVariantSetIds.includes(x.id));
   state.privateDayPatches={...(state.privateDayPatches||{}),...incomingPatches};
+  for(const idx of removedDayPatchIndexes)delete state.privateDayPatches[idx];
   state.privateDecisions=mergePrivateDecisions(state.privateDecisions,incomingDecisions).filter(x=>!removedDecisionIds.includes(x.id));
+  for(const id of removedVariantSetIds){if(state.variantSelections)delete state.variantSelections[id]}
   for(const id of removedDecisionIds){if(state.decisions)delete state.decisions[id];if(state.decisionDrafts)delete state.decisionDrafts[id]}
   saveLocal("variantSets",state.variantSets);
+  saveLocal("variantSelections",state.variantSelections||{});
   saveLocal("privateDayPatches",state.privateDayPatches);
   saveLocal("privateDecisions",state.privateDecisions);
   if(removedDecisionIds.length)saveLocal("decisions",state.decisions||{});
@@ -2256,7 +2280,12 @@ function renderEventExtras(e){
   ].filter(Boolean).join("");
   const tips=(e.tips||[]).map(t=>`<li>${esc(t)}</li>`).join("");
   const links=(e.links||[]).map(l=>`<a class="mini-action-link" target="_blank" rel="noopener" href="${esc(l.url)}">↗ ${esc(l.label)}</a>`).join("");
-  return `${chips?`<div class="event-info-row">${chips}</div>`:""}${tips?`<div class="event-tips"><b>提醒</b><ul>${tips}</ul></div>`:""}${e.backup?`<div class="backup-box"><b>備案</b><span>${esc(e.backup)}</span></div>`:""}${links?`<div class="event-link-row">${links}</div>`:""}`;
+  const stops=(Array.isArray(e.stops)?e.stops:[]).filter(x=>x&&x.name).map(stop=>`
+    <div class="event-stop-row">
+      <div class="event-stop-copy"><b>${esc(stop.name)}</b>${stop.note?`<small>${esc(stop.note)}</small>`:""}</div>
+      <a class="event-stop-map" target="_blank" rel="noopener" href="${mapSearch(stop.nav||stop.name)}">↗ MAP</a>
+    </div>`).join("");
+  return `${chips?`<div class="event-info-row">${chips}</div>`:""}${tips?`<div class="event-tips"><b>提醒</b><ul>${tips}</ul></div>`:""}${e.backup?`<div class="backup-box"><b>備案</b><span>${esc(e.backup)}</span></div>`:""}${stops?`<div class="event-stop-list"><div class="event-stop-head">店家／停靠點</div>${stops}</div>`:""}${links?`<div class="event-link-row">${links}</div>`:""}`;
 }
 
 
@@ -3242,8 +3271,82 @@ function renderExpenses(){
       <div class="list-meta">¥${Number(i.amount).toLocaleString()}${rate?` · 約 NT$${formatTwd(Number(i.amount)*rate)}`:""} · ${esc(i.payer)} 付款 · 分攤：${esc((i.participants||TRIP.members).join("、"))}${i.date?` · ${esc(i.date)}`:""}</div>
       </div><button class="mini-btn" data-delete-expense="${i.id}">刪</button></div></div>`).join(""):`<div class="empty">還沒有記帳紀錄。</div>`;
 }
+// v5.3.46 — daily Firebase journal (D1–D10). Local-first, shared cloud, last-write-wins.
+function journalDateForIndex(index){return TRIP?.days?.[Number(index)]?.date||""}
+function journalRecord(date){return normalizeJournalRecord(state?.journals?.[date])}
+function saveJournalsLocal(){saveLocal("journals",state.journals||{})}
+function journalStatusText(rec){
+  if(rec.pending)return navigator.onLine?"本機已儲存・等待雲端同步":"離線已儲存・恢復網路後同步";
+  if(state.cloud)return rec.text?"✓ Firebase 共編已同步":"Firebase 共編・尚未開始";
+  return rec.text?"本機已儲存":"輸入後自動儲存";
+}
+function renderJournal({force=false}={}){
+  const tabs=$("#journalDayTabs"),area=$("#journalArea"),status=$("#journalStatus"),label=$("#journalSelectedDay");
+  if(!tabs||!area)return;
+  if(state.journalDayIndex===null||!Number.isInteger(state.journalDayIndex))state.journalDayIndex=Math.max(0,Math.min(state.dayIndex||0,(TRIP.days?.length||1)-1));
+  state.journalDayIndex=Math.max(0,Math.min(state.journalDayIndex,(TRIP.days?.length||1)-1));
+  tabs.innerHTML=(TRIP.days||[]).map((d,i)=>`<button type="button" class="journal-day-btn ${i===state.journalDayIndex?"active":""}" data-journal-day="${i}"><b>D${i+1}</b><span>${esc(shortDateForIsoDate(d.date,d.shortDate))}</span></button>`).join("");
+  const date=journalDateForIndex(state.journalDayIndex),rec=journalRecord(date);
+  if(label)label.textContent=`D${state.journalDayIndex+1} · ${shortDateForIsoDate(date)} · ${TRIP.days?.[state.journalDayIndex]?.title||"旅程"}`;
+  if(force||document.activeElement!==area)area.value=rec.text||"";
+  if(status){status.textContent=journalStatusText(rec);status.dataset.state=rec.pending?"pending":(state.cloud?"synced":"local")}
+}
+async function syncJournalDate(date){
+  if(!date||!state?.journals?.[date]||!state.journals[date].pending||!state.cloud||!navigator.onLine)return false;
+  const snapshot={...state.journals[date]};
+  try{
+    await setCloud(`journals/${date}`,{text:snapshot.text,updatedAt:snapshot.updatedAt});
+    const current=state.journals[date];
+    if(current&&current.updatedAt===snapshot.updatedAt){current.pending=false;saveJournalsLocal()}
+    if(state.tool==="journal")renderJournal();
+    return true;
+  }catch(err){
+    console.warn("Journal sync failed",date,err);
+    if(state.tool==="journal")renderJournal();
+    return false;
+  }
+}
+function queueJournalSync(date,delay=750){
+  state.journalTimers=state.journalTimers||{};
+  clearTimeout(state.journalTimers[date]);
+  state.journalTimers[date]=setTimeout(()=>syncJournalDate(date),delay);
+}
+async function syncPendingJournals(){
+  if(!state?.journals||!state.cloud||!navigator.onLine)return;
+  for(const [date,rec] of Object.entries(state.journals)){if(rec?.pending)await syncJournalDate(date)}
+}
+function mergeJournalsFromCloud(raw){
+  const remote=normalizeJournalMap(raw||{}),local=state.journals||{};
+  for(const [date,r] of Object.entries(remote)){
+    const l=normalizeJournalRecord(local[date]);
+    if(l.pending&&l.updatedAt>=r.updatedAt)continue;
+    if(!local[date]||r.updatedAt>=l.updatedAt)local[date]={text:r.text,updatedAt:r.updatedAt,pending:false};
+  }
+  state.journals=local;saveJournalsLocal();
+  if(state.tool==="journal")renderJournal();
+}
+async function pullJournalsFromCloud(){
+  if(!state.cloud||!navigator.onLine||state.journalPulling)return;
+  state.journalPulling=true;
+  try{const remote=await request(pathFor("journals"),{method:"GET"});mergeJournalsFromCloud(remote)}
+  catch(err){console.warn("Journal collaborative refresh failed",err)}
+  finally{state.journalPulling=false}
+}
+function stopJournalCollabPoll(){if(state?.journalPollTimer){clearInterval(state.journalPollTimer);state.journalPollTimer=null}}
+function startJournalCollabPoll(){
+  stopJournalCollabPoll();
+  if(!state||state.tool!=="journal")return;
+  pullJournalsFromCloud();
+  state.journalPollTimer=setInterval(()=>{if(state.tool==="journal"&&state.cloud&&navigator.onLine)pullJournalsFromCloud()},8000);
+}
+async function selectJournalDay(index){
+  const prev=journalDateForIndex(state.journalDayIndex);
+  if(prev&&state.journals?.[prev]?.pending)syncJournalDate(prev);
+  state.journalDayIndex=Math.max(0,Math.min(Number(index)||0,(TRIP.days?.length||1)-1));
+  renderJournal({force:true});
+}
 function renderNotes(){ $("#notesArea").value=state.notes||""; }
-function renderTools(){renderBookings();renderShopping();renderExpenses();renderNotes();renderImportedPlaces()}
+function renderTools(){renderBookings();renderShopping();renderExpenses();renderNotes();renderJournal();renderImportedPlaces()}
 function renderAll(){renderDays();renderSchedule();renderFood();renderTools()}
 
 function switchView(v){
@@ -3264,6 +3367,7 @@ function switchTool(t){
   $$(".tool-panel").forEach(x=>x.classList.toggle("active",x.id===`${t}Panel`));
   if(t==="expense")setTimeout(()=>ensureFxRate(),0);
   if(t==="import")setTimeout(()=>renderImportedPlaces(),0);
+  if(t==="journal"){renderJournal();startJournalCollabPoll()}else stopJournalCollabPoll();
   if(prev&&prev!==t)setTimeout(()=>maybePageSwitchDashEgg("tool"),260);
 }
 function localUpsert(key,obj){
@@ -3378,6 +3482,7 @@ function bind(){
     if(buddyReaction){buddyReact(buddyReaction.dataset.buddyReact,buddyReaction);}
     const themeChoice=e.target.closest("[data-theme-choice]");if(themeChoice){setDisplayTheme(themeChoice.dataset.themeChoice);return}
     const fontChoice=e.target.closest("[data-font-choice]");if(fontChoice){setFontSize(fontChoice.dataset.fontChoice);return}
+    const journalDay=e.target.closest("[data-journal-day]");if(journalDay){await selectJournalDay(Number(journalDay.dataset.journalDay));return}
     const d=e.target.closest("[data-day]");if(d){state.dayIndex=Number(d.dataset.day);state.decisionDrafts={};renderDays();renderSchedule();return}
     const n=e.target.closest("[data-view]");if(n){switchView(n.dataset.view);return}
     const t=e.target.closest("[data-tool]");if(t){switchTool(t.dataset.tool);return}
@@ -3556,6 +3661,15 @@ function bind(){
     if(e.key==="Enter"||e.key===" "){e.preventDefault();forceCloudSync()}
   });
 
+  $("#journalArea")?.addEventListener("input",e=>{
+    const date=journalDateForIndex(state.journalDayIndex);if(!date)return;
+    state.journals=state.journals||{};
+    state.journals[date]={text:e.target.value,updatedAt:Date.now(),pending:true};
+    saveJournalsLocal();
+    if($("#journalStatus"))$("#journalStatus").textContent=state.cloud&&navigator.onLine?"本機已儲存・同步中…":"離線／本機已儲存";
+    if(state.cloud&&navigator.onLine)queueJournalSync(date,700);
+  });
+
   $("#notesArea").addEventListener("input",e=>{
     state.notes=e.target.value;saveLocal("notes",state.notes);$("#noteStatus").textContent="本機已儲存";
     clearTimeout(state.noteTimer);
@@ -3612,6 +3726,8 @@ async function connectCloud({force=false}={}){
       if(state.guideNotePending?.[key])setGuideSaveStatus("已存本機・等待同步","pending");
       else setGuideSaveStatus(guideNoteText(key)?"✓ 本機資料已就緒":"已開啟自動儲存","synced");
     }
+    syncPendingJournals().catch(()=>{});
+    if(state.tool==="journal")startJournalCollabPoll();
     return true;
   }
 
@@ -3637,6 +3753,7 @@ async function connectCloud({force=false}={}){
   }catch(err){console.warn("Guide notes initial merge failed",err)}
   await syncPendingGuideNotes();
   await syncPendingImportedPlaces();
+  await syncPendingJournals();
 
   const mappings=[
     ["foods",v=>{if(v!==null){state.foods=normalizeCloud(v);saveLocal("foods",state.foods);renderFood()}}],
@@ -3646,6 +3763,7 @@ async function connectCloud({force=false}={}){
     ["taskStatus",v=>{if(v && typeof v==="object"){state.taskStatus=v;saveLocal("taskStatus",v);renderBookings()}}],
     ["decisions",v=>{if(v && typeof v==="object"){state.decisions=v;saveLocal("decisions",v);renderSchedule()}}],
     ["guideNotes",v=>mergeGuideNotesFromCloud(v)],
+    ["journals",v=>mergeJournalsFromCloud(v)],
     ["notes",v=>{if(typeof v==="string" && document.activeElement!==$("#notesArea")){state.notes=v;saveLocal("notes",v);renderNotes()}}]
   ];
   const results=await Promise.all(mappings.map(async([k,cb])=>{
@@ -3665,6 +3783,7 @@ async function connectCloud({force=false}={}){
     if(state.guideNotePending?.[key])setGuideSaveStatus("已存本機・同步中…","saving");
     else setGuideSaveStatus(guideNoteText(key)?"✓ 雲端同步完成":"已開啟自動儲存","synced");
   }
+  if(state.tool==="journal")startJournalCollabPoll();
   return results.some(Boolean);
 }
 
@@ -3702,10 +3821,11 @@ async function resumeCloudAfterOnline(){
 }
 function enterOfflineMode(){
   if(!state)return;
-  state.cloud=false;stopCloudPollers();
+  state.cloud=false;stopCloudPollers();stopJournalCollabPoll();
   $("#syncPill")?.classList.remove("cloud");
   if($("#syncText"))$("#syncText").textContent="離線模式";
   if(activeGuideContext)setGuideSaveStatus("已存本機・等待網路同步","pending");
+  if(state.tool==="journal")renderJournal();
 }
 window.addEventListener("online",()=>resumeCloudAfterOnline());
 window.addEventListener("offline",()=>enterOfflineMode());
