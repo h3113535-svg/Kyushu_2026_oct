@@ -6,7 +6,7 @@
  * 4) caches belonging to other GitHub Pages repos are never touched.
  */
 const CACHE_PREFIX = "kyushu-oct-";
-const SHELL_CACHE = "kyushu-oct-shell-v5.3.52-authfix1";
+const SHELL_CACHE = "kyushu-oct-shell-v5.3.52-authfix2";
 const ASSET_CACHE = "kyushu-oct-assets-v2";
 const RUNTIME_CACHE = "kyushu-oct-runtime-v1";
 const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|22|23)$/;
@@ -14,7 +14,7 @@ const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|2
 // Small files that are expected to change when app code changes.
 const SHELL = [
   "./index.html",
-  "./app.js?v=5352-authfix1",
+  "./app.js?v=5352-authfix2",
   "./style.css?v=5352",
   "./manifest.json",
   "./firebase-config.js?v=5352-authfix1"
@@ -127,15 +127,8 @@ self.addEventListener("install", event => {
       await shellCache.put(request, response.clone());
     }
 
-    // Migrate cached images from the old versioned cache without re-downloading them.
-    let cursor = 0;
-    const workers = Array.from({ length: Math.min(4, ASSETS.length) }, async () => {
-      while (cursor < ASSETS.length) {
-        const path = ASSETS[cursor++];
-        await fetchAssetFresh(path);
-      }
-    });
-    await Promise.all(workers);
+    // PWA install must not depend on dozens of image downloads.
+    // Visual assets are cached lazily by assetCacheFirst() when actually requested.
 
     // Never leave a new shell waiting behind an older Chrome/PWA worker.
     // Image assets remain in the shared asset cache, so this does not redownload them.
