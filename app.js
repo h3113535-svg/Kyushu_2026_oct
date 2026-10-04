@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.52 Stable Booking Attachment IDs */
+/* Private travel PWA · Firebase Auth gated content · v5.3.53 Stable Image Decode */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -40,28 +40,60 @@ const pollers = new Set();
 let cloudReconnectInFlight = false;
 const GUIDE_DEVICE_ID_KEY = "kyushu-private:guide-device-id";
 
-const BUDDY_FAST_ASSETS=[
-  "./day-scene-v52-01.webp?v=520","./day-scene-v52-02.webp?v=520","./day-scene-v52-03.webp?v=550","./day-scene-v52-04.webp?v=520","./day-scene-v52-05.webp?v=520",
-  "./day-scene-v52-06.webp?v=520","./day-scene-v52-07.webp?v=520","./day-scene-v52-08.webp?v=520","./day-scene-v52-09.webp?v=550","./day-scene-v52-10.webp?v=520",
-  "./weather-rain-usagi-v47.webp?v=470","./weather-sunny-usagi-v536.webp?v=536","./weather-teruteru-usagi-v536.webp?v=536","./weather-cloudy-usagi-v536.webp?v=536","./weather-thunder-usagi-v536.webp?v=536","./weather-snow-usagi-v536.webp?v=536","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
-  "./egg-sendoff-v539.png?v=539","./egg-cry-v539.png?v=539","./egg-home-sleep-v539.png?v=539",
-  "./duck_gang.png?v=5311","./seal_gang.png?v=5311",
-  "./ui-cloud.webp?v=440","./ui-coffee.webp?v=440","./ui-suitcase.webp?v=440","./ui-purin-tip.webp?v=440"
-];
-const buddyFastImageCache=[];
+// Large transparent illustrations used to be eagerly decoded all at once. On mobile this can
+// keep tens of MB of decoded bitmap surfaces alive while the UI is also animating/re-rendering.
+// v5.3.53 switches to decode-on-demand and keeps the currently visible image stable until the
+// replacement has finished decoding. This changes no image files or formats.
+const IMAGE_DECODE_PROMISES=new Map();
+function ensureImageDecoded(src,priority="auto"){
+  if(!src)return Promise.resolve();
+  if(IMAGE_DECODE_PROMISES.has(src))return IMAGE_DECODE_PROMISES.get(src);
+  const promise=new Promise(resolve=>{
+    const probe=new Image();
+    probe.decoding="async";
+    try{probe.fetchPriority=priority}catch{}
+    const done=()=>resolve();
+    probe.onload=()=>{
+      if(typeof probe.decode==="function") probe.decode().catch(()=>{}).finally(done);
+      else done();
+    };
+    probe.onerror=done;
+    probe.src=src;
+    if(probe.complete&&probe.naturalWidth){
+      if(typeof probe.decode==="function") probe.decode().catch(()=>{}).finally(done);
+      else done();
+    }
+  });
+  IMAGE_DECODE_PROMISES.set(src,promise);
+  return promise;
+}
+async function setImageAfterDecode(img,src,{alt="",animateClass=""}={}){
+  if(!img||!src)return;
+  if(alt)img.alt=alt;
+  const absolute=new URL(src,location.href).href;
+  if(img.src===absolute||img.getAttribute("src")===src){
+    img.dataset.pendingSrc="";
+    return;
+  }
+  img.dataset.pendingSrc=src;
+  await ensureImageDecoded(src,"high");
+  if(img.dataset.pendingSrc!==src)return;
+  if(animateClass)img.classList.remove(animateClass);
+  img.src=src;
+  img.dataset.pendingSrc="";
+  if(typeof img.decode==="function")await img.decode().catch(()=>{});
+  if(animateClass){
+    void img.offsetWidth;
+    img.classList.add(animateClass);
+  }
+}
+// Only warm the next day's scene instead of decoding the entire trip + weather art set at boot.
 function preloadBuddyFastAssets(){
   if(preloadBuddyFastAssets.started)return;
   preloadBuddyFastAssets.started=true;
-  const load=(src,priority="auto")=>{
-    const img=new Image(); img.decoding="async";
-    try{img.fetchPriority=priority}catch{}
-    img.src=src; buddyFastImageCache.push(img);
-    if(img.decode) img.decode().catch(()=>{});
-  };
-  BUDDY_FAST_ASSETS.slice(0,2).forEach(src=>load(src,"high"));
-  const rest=()=>BUDDY_FAST_ASSETS.slice(2).forEach(src=>load(src,"low"));
-  if("requestIdleCallback" in window) requestIdleCallback(rest,{timeout:1200});
-  else setTimeout(rest,450);
+  const warm=()=>ensureImageDecoded("./day-scene-v52-02.webp?v=520","low");
+  if("requestIdleCallback" in window)requestIdleCallback(warm,{timeout:1500});
+  else setTimeout(warm,700);
 }
 preloadBuddyFastAssets();
 
@@ -2145,10 +2177,10 @@ function dailySceneAsset(index){
 function renderDailyScene(){
   const img=$("#daySceneImage"), bar=$("#daySceneProgressBar");
   if(!img)return;
-  const src=dailySceneAsset(state.dayIndex);
-  if(img.getAttribute("src")!==src) img.src=src;
-  img.alt=`D${state.dayIndex+1} 布丁狗與烏薩奇旅行主題插畫`;
-  if(bar) bar.style.width=`${((state.dayIndex+1)/TRIP.days.length)*100}%`;
+  const dayIndex=state.dayIndex;
+  const src=dailySceneAsset(dayIndex);
+  setImageAfterDecode(img,src,{alt:`D${dayIndex+1} 布丁狗與烏薩奇旅行主題插畫`});
+  if(bar) bar.style.width=`${((dayIndex+1)/TRIP.days.length)*100}%`;
 }
 
 
@@ -2170,11 +2202,28 @@ function updateWeatherBuddy(mode=WEATHER_BUDDY_VARIANTS[weatherBuddyIndex].mode)
   if(idx<0)idx=0;
   weatherBuddyIndex=idx;
   const spec=WEATHER_BUDDY_VARIANTS[idx];
+  const sameMode=el.dataset.weatherMode===spec.mode;
   el.dataset.weatherMode=spec.mode;
   el.className=`weather-buddy-slot buddy-only-art is-${spec.mode}`;
   card?.classList.add("has-weather-buddy");
   el.hidden=false;
-  el.innerHTML=`<button type="button" class="weather-buddy-button weather-usagi-${spec.mode}" data-weather-switch="1" aria-label="切換天氣烏薩奇造型，目前：${spec.label}"><img src="${spec.src}" alt="${spec.alt}"></button>`;
+  let button=el.querySelector("[data-weather-switch]");
+  let img=button?.querySelector("img");
+  if(!button){
+    button=document.createElement("button");
+    button.type="button";
+    button.dataset.weatherSwitch="1";
+    img=document.createElement("img");
+    button.appendChild(img);
+    el.replaceChildren(button);
+  }
+  button.className=`weather-buddy-button weather-usagi-${spec.mode}`;
+  button.setAttribute("aria-label",`切換天氣烏薩奇造型，目前：${spec.label}`);
+  if(!sameMode||img.getAttribute("src")!==spec.src){
+    setImageAfterDecode(img,spec.src,{alt:spec.alt});
+  }else{
+    img.alt=spec.alt;
+  }
 }
 function cycleWeatherBuddy(){
   weatherBuddyManualOverride=true;
@@ -2469,12 +2518,24 @@ function cleanHotelTitle(title){
 function renderHotelReturnCard(){
   const box=$("#hotelReturnCard"); if(!box)return;
   const hotel=hotelForDay(state.dayIndex);
-  if(!hotel){box.hidden=true;box.innerHTML="";return;}
+  if(!hotel){box.hidden=true;return;}
   const lastDay=state.dayIndex===TRIP.days.length-1;
   const label=lastDay?"返台前據點":"今晚住這裡";
   const help=lastDay?"取行李或需要回住宿時，從這裡直接導航。":"一天走完要回飯店時，不用再往上找地址。";
   box.hidden=false;
-  box.innerHTML=`<div class="hotel-return-copy"><span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ Google Maps 查看飯店</a></div><div class="hotel-return-art buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="hotel"><img src="./hotel-return-duo.webp?v=460" alt="布丁狗與烏薩奇回飯店休息"></div>`;
+  let copy=box.querySelector(".hotel-return-copy");
+  let art=box.querySelector(".hotel-return-art");
+  if(!copy){copy=document.createElement("div");copy.className="hotel-return-copy";box.appendChild(copy)}
+  if(!art){
+    art=document.createElement("div");
+    art.className="hotel-return-art buddy-only-art buddy-reactable";
+    art.dataset.buddyReact="duo";art.dataset.buddyContext="hotel";
+    const img=document.createElement("img");
+    img.alt="布丁狗與烏薩奇回飯店休息";
+    art.appendChild(img);box.appendChild(art);
+    setImageAfterDecode(img,"./hotel-return-duo.webp?v=460",{alt:img.alt});
+  }
+  copy.innerHTML=`<span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ Google Maps 查看飯店</a>`;
 }
 
 
@@ -3668,10 +3729,7 @@ function bind(){
     const setHero=(idx,animate=true)=>{
       heroIndex=(idx+heroGallery.length)%heroGallery.length;
       if(heroImg){
-        heroImg.classList.remove("swap");
-        if(animate)void heroImg.offsetWidth;
-        heroImg.src=heroGallery[heroIndex];
-        if(animate)heroImg.classList.add("swap");
+        setImageAfterDecode(heroImg,heroGallery[heroIndex],{animateClass:animate?"swap":""});
       }
       syncDots();
     };
