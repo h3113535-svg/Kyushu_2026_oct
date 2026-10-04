@@ -16,9 +16,9 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=5343" />
+  <link rel="stylesheet" href="./style.css?v=5352" />
   <title>私人旅程</title>
-  <meta name="app-version" content="5.3.43" />
+  <meta name="app-version" content="5.3.52" />
   <link rel="preload" as="image" href="./day-scene-v52-01.webp?v=520" fetchpriority="high">
 </head>
 <body>
@@ -30,7 +30,7 @@
       <p>行程內容只有已授權的 Google 帳號才能載入。</p>
       <button type="button" class="google-login-btn" id="googleLoginBtn"><span>G</span> 使用 Google 登入</button>
       <div class="auth-status" id="authStatus">正在確認登入狀態…</div>
-      <div class="auth-build" aria-label="App version">v5.3.43</div>
+      <div class="auth-build" aria-label="App version">v5.3.52</div>
     </div>
   </section>
   <div id="app" hidden>
@@ -85,6 +85,7 @@
             <span id="dayVariantBadge" class="day-variant-badge" hidden></span>
           </div>
           <p id="daySubtitle"></p>
+          <a id="dayRouteLink" class="day-route-link" target="_blank" rel="noopener" hidden>🚗 今日自駕路線 ↗</a>
         </section>
         <button type="button" id="daySceneCard" class="day-scene-card buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="day" aria-label="今日旅伴主題插畫">
           <img id="daySceneImage" src="./day-scene-v52-01.webp?v=520" alt="布丁狗與烏薩奇今日旅行">
@@ -143,6 +144,7 @@
           <button class="tool-card" data-tool="shopping"><span class="tool-emoji">🛍️</span><img class="tool-card-art buddy-only-art" src="./travel_shopping.png?v=430" alt=""><b>購物清單</b><small>採買</small></button>
           <button class="tool-card" data-tool="expense"><span class="tool-emoji">💴</span><img class="tool-card-art buddy-only-art" src="./travel_coffee.png?v=430" alt=""><b>記帳</b><small>支出・分帳</small></button>
           <button class="tool-card" data-tool="note"><span class="tool-emoji">📝</span><img class="tool-card-art buddy-only-art" src="./travel_camera.png?v=430" alt=""><b>記事</b><small>備忘・同步</small></button>
+          <button class="tool-card" data-tool="journal"><span class="tool-emoji">📔</span><img class="tool-card-art buddy-only-art" src="./buddy_chill.png?v=430" alt=""><b>旅遊日記</b><small>每日・Firebase 共編</small></button>
           <button class="tool-card" data-tool="import"><span class="tool-emoji">📍</span><img class="tool-card-art buddy-only-art" src="./travel_suitcase.png?v=430" alt=""><b>快速匯入</b><small>Maps・景點</small></button>
         </div>
 
@@ -155,8 +157,9 @@
               <img class="booking-usagi-art buddy-reactable" data-buddy-react="usagi" data-buddy-context="booking" src="./booking-dash-usagi.webp?v=460" alt="烏薩奇衝刺">
             </div>
           </div>
-          <p class="privacy-note">私人票券可直接附加 PDF／圖片並離線查看；附件只存在這台裝置，不會上傳 Firebase 或公開 GitHub。</p>
-          <div id="bookingList" class="list-stack"></div>
+          <p class="privacy-note">PDF／圖片附件仍只存在這台裝置的 IndexedDB；分類名稱與自訂美食名稱可同步 Firebase，但附件本身不會上傳。</p>
+          <div id="bookingLibrary" class="booking-category-grid" aria-label="訂位票券分類"></div>
+          <div id="bookingList" class="list-stack booking-legacy-list"></div>
         </div>
 
         <div id="shoppingPanel" class="tool-panel">
@@ -205,6 +208,18 @@
           <textarea id="notesArea" class="notes-area" placeholder="行前提醒、臨時備註、想買的東西…"></textarea>
           <button type="button" class="primary-btn" id="firebaseTestBtn" style="margin-top:10px">測試 Firebase 連線</button>
           <div id="noteStatus" class="save-status">輸入後自動儲存</div>
+        </div>
+
+        <div id="journalPanel" class="tool-panel">
+          <div class="panel-heading buddy-panel-head">
+            <div><span class="eyebrow">DAILY JOURNAL</span><h3>旅遊日記</h3></div>
+            <img class="panel-character-art buddy-only-art" src="./travel_camera.png?v=430" alt="">
+          </div>
+          <p class="privacy-note">D1～D10 每天各一頁。文字先存本機，再同步到 Firebase；兩台已登入裝置開著日記頁時會自動拉取彼此更新。若同時修改同一天，以最後一次儲存版本為準。</p>
+          <div id="journalDayTabs" class="journal-day-tabs" aria-label="選擇日記日期"></div>
+          <div id="journalSelectedDay" class="journal-selected-day"></div>
+          <textarea id="journalArea" class="notes-area journal-area" placeholder="今天最好玩的事、吃了什麼、照片回憶、想記住的小事…"></textarea>
+          <div id="journalStatus" class="save-status">輸入後自動儲存・Firebase 共編</div>
         </div>
 
         <div id="importPanel" class="tool-panel">
@@ -352,6 +367,21 @@ https://www.google.com/maps/place/...
     </div>
   </dialog>
 
+  <dialog id="bookingCategoryModal" class="booking-category-modal">
+    <div class="booking-category-sheet">
+      <div class="booking-attachment-head">
+        <div><span class="eyebrow">TICKET FOLDER</span><h3 id="bookingCategoryTitle">票券分類</h3><p id="bookingCategorySubtitle"></p></div>
+        <button type="button" class="close-btn" id="bookingCategoryClose" aria-label="關閉">×</button>
+      </div>
+      <p id="bookingLegacyNote" class="privacy-note" hidden>舊版住宿附件會自動沿用原 taskId 顯示；不搬移、不刪除 IndexedDB 內既有 PDF／圖片。</p>
+      <div id="bookingCategoryList" class="booking-category-list"></div>
+      <form id="bookingFoodAddForm" class="booking-food-add" hidden>
+        <label for="bookingFoodName">新增餐廳</label>
+        <div><input id="bookingFoodName" type="text" autocomplete="off" placeholder="輸入餐廳名稱，例如：勝烈亭"><button class="primary-btn" type="submit">新增</button></div>
+      </form>
+    </div>
+  </dialog>
+
   <dialog id="bookingAttachmentModal" class="booking-attachment-modal">
     <div class="booking-attachment-sheet">
       <div class="booking-attachment-head">
@@ -452,7 +482,7 @@ https://www.google.com/maps/place/...
   <div id="toast" class="toast" role="status"></div>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-  <script defer src="./firebase-config.js?v=5343-login1"></script>
-  <script defer src="./app.js?v=5343-login1"></script>
+  <script defer src="./firebase-config.js?v=5352-authfix1"></script>
+  <script defer src="./app.js?v=5352-authfix1"></script>
 </body>
 </html>

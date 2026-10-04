@@ -255,3 +255,73 @@
 - The public package still contains no private itinerary payload. The corrected Firebase content and cumulative private itinerary config are distributed separately.
 - No visual assets changed; the stable asset cache remains `kyushu-oct-assets-v1`.
 
+
+## v5.3.44 — Shopping item-only required
+
+- Keeps the full v5.3.43 D2 shopping replan.
+- Shopping list now requires only the item/product name.
+- Owner, budget, store and planned day are optional.
+- Owner defaults to unassigned instead of silently assigning the first trip member.
+- Adds an `未指定` shopping filter only when unassigned items exist.
+- Optional shopping metadata no longer renders leading separators when fields are blank.
+
+
+## v5.3.45 — Live Weather Engine
+
+- Implements real Open-Meteo forecast fetching with no API key.
+- Uses each itinerary day’s existing latitude/longitude and Asia/Tokyo timezone.
+- Supports the 16-day forecast horizon, daily high/low, WMO weather code, maximum precipitation probability, and hourly rain-risk windows.
+- Adds a 30-minute per-location local cache and stale-cache fallback for temporary network failures.
+- Weather Usagi follows forecast automatically; manual taps override only for the current app session.
+- Prevents stale async weather requests from overwriting a newly selected day.
+
+
+## v5.3.46 — Itinerary Lock + Shared Daily Journal
+
+- D1–D4 / D8–D10 itinerary refresh: D3 defaults to Hakata + LaLaport; D9 defaults to Uminonakamichi + Marine World + Fukuoka Tower/Momochi.
+- D4 Yufuin no Mori is locked to 09:17; luggage uses YUFUiNFO because Etavia cannot accept early baggage.
+- Itinerary event cards can render nested stop lists with an individual Google Maps link per shop/stop.
+- New Daily Journal tool: one page per D1–D10, local-first autosave, Firebase deterministic records at `journals/<YYYY-MM-DD>`, pending offline sync, and an 8-second collaborative refresh while the Journal panel is open.
+- Authoritative Firebase days ignore stale locally imported A/B variants; private config v8 can explicitly remove legacy variant sets/day patches.
+
+
+## v5.3.47 — Daily Route Links + D6 Cleanup
+- D5 / D6 / D7 daily pages show the user-provided full-day Google Maps driving route directly below the day subtitle.
+- D6 removes the locked lunch stop and uses Roadside Station Aso for flexible lunch + supplies.
+- D10 airport transfer is pinned to the 14:15 Kumamoto Station airport limousine (14:45 backup), ¥1,400 per person.
+- Keeps v5.3.45 live weather and v5.3.46 shared daily journal unchanged.
+
+
+## v5.3.48 — THE BLOSSOM + D3/D9 Daily Art Swap
+- Corrects D8–D10 lodging to THE BLOSSOM KUMAMOTO, directly adjacent to JR Kumamoto Station / AMU PLAZA KUMAMOTO.
+- Simplifies D10 airport transfer: retrieve luggage at THE BLOSSOM, walk to the Kumamoto Station airport-limousine stop, and use the 14:15 main bus (14:45 backup).
+- Swaps the active D3 and D9 daily scene artwork to match the new default itineraries.
+- Bumps daily-scene asset query tokens to v548 and the shell cache to v5.3.48 so installed PWAs refresh the swapped artwork.
+- Includes all v5.3.47 D5/D6/D7 route-link and D6 lunch cleanup changes.
+
+
+## v5.3.50 — Clean Asset Pipeline
+
+- Rebuilds the visual/runtime layer from the pre-art-swap baseline while preserving current itinerary features.
+- Synchronizes index/app/style/service-worker cache-bust tokens at 5350.
+- Moves image assets to `kyushu-oct-assets-v2`; v1 is discarded during activation.
+- Disables migration from legacy image caches and fetches a clean copy of each precached visual asset.
+- Restores original D3/D9 source files and swaps their day presentation in code instead of rewriting image files.
+- Keeps all non-swapped daily artwork on the long-stable v520 token.
+
+
+## v5.3.51 — Booking Ticket Library
+
+- Reorganizes the Booking tool into five folders: Accommodation, Takachiho boat, Rental car, Yufuin train ticket, and Food.
+- Accommodation exposes separate D1–D9 attachment slots derived from each day's hotel.
+- Boat, rental car and Yufuin train reuse their existing booking task IDs so existing local attachments remain available.
+- Food shows official restaurant booking tasks and supports user-created restaurant names; custom names are stored locally and synced to Firebase when connected.
+- PDF/image attachment blobs remain device-local in IndexedDB and are never uploaded to Firebase.
+- Keeps the original booking checklist in a collapsed compatibility section.
+
+
+## v5.3.52 — Stable Booking Attachment IDs
+- Booking attachment IndexedDB remains `kyushu-oct-booking-attachments-v1` / store `files`; no database reset or delete is performed.
+- Hotel folders D1–D9 use stable canonical IDs while transparently reading legacy hotel task IDs (`richmond`, `etavia`, `senomoto`, `grateful`, `kamenoi`, `kumamoto-sakura`).
+- Existing local PDF/image blobs remain in place; the compatibility layer only changes lookup, not storage.
+- New hotel attachments are saved under the stable per-day folder ID.

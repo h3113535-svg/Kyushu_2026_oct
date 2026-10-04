@@ -1,3 +1,4 @@
+/* Firebase Web config is public by design. Do not put passwords or service-account keys here. */
 window.KYUSHU_FIREBASE_CONFIG = {
   apiKey: "AIzaSyAnyC1Rpp6gvPXeeAkkXHpLX_uYCoJ2DJw",
   authDomain: "kyushu2026-9b6b9.firebaseapp.com",

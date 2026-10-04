@@ -1,4 +1,4 @@
-/* Kyushu 2026 Oct PWA · v5.3.43 D2 Shopping Replan
+/* Kyushu 2026 Oct PWA · v5.3.52 Stable Booking Attachment IDs
  * Goals:
  * 1) static images are downloaded once and reused across app versions;
  * 2) app shell updates remain reliable;
@@ -6,18 +6,18 @@
  * 4) caches belonging to other GitHub Pages repos are never touched.
  */
 const CACHE_PREFIX = "kyushu-oct-";
-const SHELL_CACHE = "kyushu-oct-shell-v5.3.43-login1";
-const ASSET_CACHE = "kyushu-oct-assets-v1";
+const SHELL_CACHE = "kyushu-oct-shell-v5.3.52-authfix1";
+const ASSET_CACHE = "kyushu-oct-assets-v2";
 const RUNTIME_CACHE = "kyushu-oct-runtime-v1";
 const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|22|23)$/;
 
 // Small files that are expected to change when app code changes.
 const SHELL = [
   "./index.html",
-  "./app.js?v=5343-login1",
-  "./style.css?v=5343",
+  "./app.js?v=5352-authfix1",
+  "./style.css?v=5352",
   "./manifest.json",
-  "./firebase-config.js?v=5343-login1"
+  "./firebase-config.js?v=5352-authfix1"
 ];
 
 // Large/stable visual assets. This cache deliberately has a stable name across releases.
@@ -34,13 +34,13 @@ const ASSETS = [
   "./buddy_success.png?v=430",
   "./day-scene-v52-01.webp?v=520",
   "./day-scene-v52-02.webp?v=520",
-  "./day-scene-v52-03.webp?v=520",
+  "./day-scene-v52-03.webp?v=550",
   "./day-scene-v52-04.webp?v=520",
   "./day-scene-v52-05.webp?v=520",
   "./day-scene-v52-06.webp?v=520",
   "./day-scene-v52-07.webp?v=520",
   "./day-scene-v52-08.webp?v=520",
-  "./day-scene-v52-09.webp?v=520",
+  "./day-scene-v52-09.webp?v=550",
   "./day-scene-v52-10.webp?v=520",
   "./duck_gang.png?v=5311",
   "./egg-cry-v539.png?v=539",
@@ -106,16 +106,10 @@ async function fetchFresh(request) {
   return fetch(request, { cache: "no-store" });
 }
 
-// Copy from any existing October cache before going to network. This is the key migration step:
-// users upgrading from 5.3.20–5.3.23 do NOT re-download the ~20 MB visual asset set.
-async function migrateOrFetchAsset(path) {
-  const request = new Request(path, { cache: "default" });
-  const existing = await caches.match(request);
-  if (existing) {
-    const target = await caches.open(ASSET_CACHE);
-    await target.put(request, existing.clone());
-    return;
-  }
+// v5.3.50 clean reset: never migrate image responses from an older asset cache.
+// Fetch each listed asset from network with no-store so all devices converge on the same bytes.
+async function fetchAssetFresh(path) {
+  const request = new Request(path, { cache: "reload" });
   const response = await fetchFresh(request);
   if (!response.ok) throw new Error(`Asset preload failed: ${path} (${response.status})`);
   const target = await caches.open(ASSET_CACHE);
@@ -138,7 +132,7 @@ self.addEventListener("install", event => {
     const workers = Array.from({ length: Math.min(4, ASSETS.length) }, async () => {
       while (cursor < ASSETS.length) {
         const path = ASSETS[cursor++];
-        await migrateOrFetchAsset(path);
+        await fetchAssetFresh(path);
       }
     });
     await Promise.all(workers);
@@ -196,19 +190,13 @@ async function assetCacheFirst(request) {
   const exact = await assetCache.match(request);
   if (exact) return exact;
 
-  // Migration/fallback may find the same URL in an older cache on first access.
-  const anyExact = await caches.match(request);
-  if (anyExact) {
-    assetCache.put(request, anyExact.clone()).catch(() => {});
-    return anyExact;
-  }
-
   try {
-    const response = await fetch(request);
+    const response = await fetchFresh(request);
     if (response && response.ok) assetCache.put(request, response.clone()).catch(() => {});
     return response;
   } catch (error) {
-    const fallback = await caches.match(request, { ignoreSearch: true });
+    // Offline fallback is restricted to the current clean asset cache; never revive an older cache entry.
+    const fallback = await assetCache.match(request, { ignoreSearch: true });
     if (fallback) return fallback;
     throw error;
   }
