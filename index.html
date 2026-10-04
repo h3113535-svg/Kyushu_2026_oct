@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="九州 秋旅" />
   <meta name="robots" content="noindex,nofollow" />
-  <link rel="manifest" href="./manifest.json?v=5354" />
+  <link rel="manifest" href="./manifest.json" />
   <link rel="apple-touch-icon" href="./icon-192.png" />
   <script>
     try{
@@ -16,9 +16,9 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=5354" />
+  <link rel="stylesheet" href="./style.css?v=5355" />
   <title>私人旅程</title>
-  <meta name="app-version" content="5.3.54" />
+  <meta name="app-version" content="5.3.55" />
   <link rel="preload" as="image" href="./day-scene-v52-01.webp?v=520" fetchpriority="high">
 </head>
 <body>
@@ -30,7 +30,7 @@
       <p>行程內容只有已授權的 Google 帳號才能載入。</p>
       <button type="button" class="google-login-btn" id="googleLoginBtn"><span>G</span> 使用 Google 登入</button>
       <div class="auth-status" id="authStatus">正在確認登入狀態…</div>
-      <div class="auth-build" aria-label="App version">v5.3.54</div>
+      <div class="auth-build" aria-label="App version">v5.3.55</div>
     </div>
   </section>
   <div id="app" hidden>
@@ -47,7 +47,7 @@
           <div class="hero-submeta buddy-only-art" aria-label="旅程摘要"><span>10天9夜</span><i></i><span>旅伴手帳</span></div>
         </div>
         <button type="button" class="buddy-hero-art buddy-only-art" id="buddyHeroEgg" aria-label="旅伴彩蛋">
-          <img src="./hero-cover-v51.webp?v=510" alt="布丁狗與烏薩奇旅行首頁圖" decoding="sync" fetchpriority="high" />
+          <img src="./hero-cover-v51.webp?v=510" alt="布丁狗與烏薩奇旅行首頁圖" />
         </button>
         <div class="buddy-hero-tapcue buddy-only-art" aria-hidden="true">↔ 左右滑換首頁圖・長按有彩蛋</div>
       </div>
@@ -85,10 +85,9 @@
             <span id="dayVariantBadge" class="day-variant-badge" hidden></span>
           </div>
           <p id="daySubtitle"></p>
-          <a id="dayRouteLink" class="day-route-link" target="_blank" rel="noopener" hidden>🚗 今日自駕路線 ↗</a>
         </section>
         <button type="button" id="daySceneCard" class="day-scene-card buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="day" aria-label="今日旅伴主題插畫">
-          <img id="daySceneImage" src="./day-scene-v52-01.webp?v=520" alt="布丁狗與烏薩奇今日旅行" decoding="sync" fetchpriority="high">
+          <img id="daySceneImage" src="./day-scene-v52-01.webp?v=520" alt="布丁狗與烏薩奇今日旅行">
           <span class="day-scene-progress"><i><em id="daySceneProgressBar"></em></i></span>
         </button>
         <section id="dayBrief" class="day-brief"></section>
@@ -157,9 +156,8 @@
               <img class="booking-usagi-art buddy-reactable" data-buddy-react="usagi" data-buddy-context="booking" src="./booking-dash-usagi.webp?v=460" alt="烏薩奇衝刺">
             </div>
           </div>
-          <p class="privacy-note">PDF／圖片附件仍只存在這台裝置的 IndexedDB；分類名稱與自訂美食名稱可同步 Firebase，但附件本身不會上傳。</p>
-          <div id="bookingLibrary" class="booking-category-grid" aria-label="訂位票券分類"></div>
-          <div id="bookingList" class="list-stack booking-legacy-list"></div>
+          <p class="privacy-note">私人票券可直接附加 PDF／圖片並離線查看；附件只存在這台裝置，不會上傳 Firebase 或公開 GitHub。</p>
+          <div id="bookingList" class="list-stack"></div>
         </div>
 
         <div id="shoppingPanel" class="tool-panel">
@@ -367,21 +365,6 @@ https://www.google.com/maps/place/...
     </div>
   </dialog>
 
-  <dialog id="bookingCategoryModal" class="booking-category-modal">
-    <div class="booking-category-sheet">
-      <div class="booking-attachment-head">
-        <div><span class="eyebrow">TICKET FOLDER</span><h3 id="bookingCategoryTitle">票券分類</h3><p id="bookingCategorySubtitle"></p></div>
-        <button type="button" class="close-btn" id="bookingCategoryClose" aria-label="關閉">×</button>
-      </div>
-      <p id="bookingLegacyNote" class="privacy-note" hidden>舊版住宿附件會自動沿用原 taskId 顯示；不搬移、不刪除 IndexedDB 內既有 PDF／圖片。</p>
-      <div id="bookingCategoryList" class="booking-category-list"></div>
-      <form id="bookingFoodAddForm" class="booking-food-add" hidden>
-        <label for="bookingFoodName">新增餐廳</label>
-        <div><input id="bookingFoodName" type="text" autocomplete="off" placeholder="輸入餐廳名稱，例如：勝烈亭"><button class="primary-btn" type="submit">新增</button></div>
-      </form>
-    </div>
-  </dialog>
-
   <dialog id="bookingAttachmentModal" class="booking-attachment-modal">
     <div class="booking-attachment-sheet">
       <div class="booking-attachment-head">
@@ -483,6 +466,6 @@ https://www.google.com/maps/place/...
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=430"></script>
-  <script defer src="./app.js?v=5354"></script>
+  <script defer src="./app.js?v=5355"></script>
 </body>
 </html>

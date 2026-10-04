@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.54 Reliable Update Bootstrap */
+/* Private travel PWA · Firebase Auth gated content · v5.3.55 Stable Rollback (v5.3.46 visual baseline) */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -40,60 +40,28 @@ const pollers = new Set();
 let cloudReconnectInFlight = false;
 const GUIDE_DEVICE_ID_KEY = "kyushu-private:guide-device-id";
 
-// Large transparent illustrations used to be eagerly decoded all at once. On mobile this can
-// keep tens of MB of decoded bitmap surfaces alive while the UI is also animating/re-rendering.
-// v5.3.53 switches to decode-on-demand and keeps the currently visible image stable until the
-// replacement has finished decoding. This changes no image files or formats.
-const IMAGE_DECODE_PROMISES=new Map();
-function ensureImageDecoded(src,priority="auto"){
-  if(!src)return Promise.resolve();
-  if(IMAGE_DECODE_PROMISES.has(src))return IMAGE_DECODE_PROMISES.get(src);
-  const promise=new Promise(resolve=>{
-    const probe=new Image();
-    probe.decoding="async";
-    try{probe.fetchPriority=priority}catch{}
-    const done=()=>resolve();
-    probe.onload=()=>{
-      if(typeof probe.decode==="function") probe.decode().catch(()=>{}).finally(done);
-      else done();
-    };
-    probe.onerror=done;
-    probe.src=src;
-    if(probe.complete&&probe.naturalWidth){
-      if(typeof probe.decode==="function") probe.decode().catch(()=>{}).finally(done);
-      else done();
-    }
-  });
-  IMAGE_DECODE_PROMISES.set(src,promise);
-  return promise;
-}
-async function setImageAfterDecode(img,src,{alt="",animateClass=""}={}){
-  if(!img||!src)return;
-  if(alt)img.alt=alt;
-  const absolute=new URL(src,location.href).href;
-  if(img.src===absolute||img.getAttribute("src")===src){
-    img.dataset.pendingSrc="";
-    return;
-  }
-  img.dataset.pendingSrc=src;
-  await ensureImageDecoded(src,"high");
-  if(img.dataset.pendingSrc!==src)return;
-  if(animateClass)img.classList.remove(animateClass);
-  img.src=src;
-  img.dataset.pendingSrc="";
-  if(typeof img.decode==="function")await img.decode().catch(()=>{});
-  if(animateClass){
-    void img.offsetWidth;
-    img.classList.add(animateClass);
-  }
-}
-// Only warm the next day's scene instead of decoding the entire trip + weather art set at boot.
+const BUDDY_FAST_ASSETS=[
+  "./day-scene-v52-01.webp?v=520","./day-scene-v52-02.webp?v=520","./day-scene-v52-03.webp?v=520","./day-scene-v52-04.webp?v=520","./day-scene-v52-05.webp?v=520",
+  "./day-scene-v52-06.webp?v=520","./day-scene-v52-07.webp?v=520","./day-scene-v52-08.webp?v=520","./day-scene-v52-09.webp?v=520","./day-scene-v52-10.webp?v=520",
+  "./weather-rain-usagi-v47.webp?v=470","./weather-sunny-usagi-v536.webp?v=536","./weather-teruteru-usagi-v536.webp?v=536","./weather-cloudy-usagi-v536.webp?v=536","./weather-thunder-usagi-v536.webp?v=536","./weather-snow-usagi-v536.webp?v=536","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
+  "./egg-sendoff-v539.png?v=539","./egg-cry-v539.png?v=539","./egg-home-sleep-v539.png?v=539",
+  "./duck_gang.png?v=5311","./seal_gang.png?v=5311",
+  "./ui-cloud.webp?v=440","./ui-coffee.webp?v=440","./ui-suitcase.webp?v=440","./ui-purin-tip.webp?v=440"
+];
+const buddyFastImageCache=[];
 function preloadBuddyFastAssets(){
   if(preloadBuddyFastAssets.started)return;
   preloadBuddyFastAssets.started=true;
-  const warm=()=>ensureImageDecoded("./day-scene-v52-02.webp?v=520","low");
-  if("requestIdleCallback" in window)requestIdleCallback(warm,{timeout:1500});
-  else setTimeout(warm,700);
+  const load=(src,priority="auto")=>{
+    const img=new Image(); img.decoding="async";
+    try{img.fetchPriority=priority}catch{}
+    img.src=src; buddyFastImageCache.push(img);
+    if(img.decode) img.decode().catch(()=>{});
+  };
+  BUDDY_FAST_ASSETS.slice(0,2).forEach(src=>load(src,"high"));
+  const rest=()=>BUDDY_FAST_ASSETS.slice(2).forEach(src=>load(src,"low"));
+  if("requestIdleCallback" in window) requestIdleCallback(rest,{timeout:1200});
+  else setTimeout(rest,450);
 }
 preloadBuddyFastAssets();
 
@@ -226,15 +194,6 @@ function normalizeJournalMap(raw){
   }
   return out;
 }
-function normalizeBookingFoodEntries(raw){
-  if(!Array.isArray(raw))return [];
-  return raw.map(item=>({
-    id:String(item?.id||""),
-    name:String(item?.name||"").trim(),
-    createdAt:Number(item?.createdAt||0)
-  })).filter(item=>item.id&&item.name);
-}
-
 function createState(){
   return {
     dayIndex:0, view:"schedule", tool:"booking", shoppingMember:"全部",
@@ -244,7 +203,6 @@ function createState(){
     privateDayPatches:normalizePrivateDayPatches(loadLocal("privateDayPatches",{})), privateDecisions:normalizePrivateDecisions(loadLocal("privateDecisions",[])),
     fx:normalizeFxState(loadLocal("fxRate",{})),
     taskStatus:loadLocal("taskStatus",{}), decisions:loadLocal("decisions",{}), decisionDrafts:{},
-    bookingFoodEntries:normalizeBookingFoodEntries(loadLocal("bookingFoodEntries",[])), activeBookingCategory:"",
     notes:loadLocal("notes",""),
     journals:normalizeJournalMap(loadLocal("journals",{})), journalDayIndex:null, journalTimers:{}, journalPollTimer:null, journalPulling:false,
     guideNotes:normalizeGuideNotesMap(loadLocal("guideNotes",{})),
@@ -2169,18 +2127,15 @@ function buddyPeek(kind="purin"){
   buddyPeek._timer=setTimeout(()=>{layer.classList.remove("show");setTimeout(()=>{layer.className="buddy-peek-layer buddy-only-art";layer.innerHTML=""},480)},2400);
 }
 function dailySceneAsset(index){
-  // D3 and D9 intentionally swap illustrations without modifying the underlying asset files.
-  if(index===2) return "./day-scene-v52-09.webp?v=550";
-  if(index===8) return "./day-scene-v52-03.webp?v=550";
   return `./day-scene-v52-${String(index+1).padStart(2,"0")}.webp?v=520`;
 }
 function renderDailyScene(){
   const img=$("#daySceneImage"), bar=$("#daySceneProgressBar");
   if(!img)return;
-  const dayIndex=state.dayIndex;
-  const src=dailySceneAsset(dayIndex);
-  setImageAfterDecode(img,src,{alt:`D${dayIndex+1} 布丁狗與烏薩奇旅行主題插畫`});
-  if(bar) bar.style.width=`${((dayIndex+1)/TRIP.days.length)*100}%`;
+  const src=dailySceneAsset(state.dayIndex);
+  if(img.getAttribute("src")!==src) img.src=src;
+  img.alt=`D${state.dayIndex+1} 布丁狗與烏薩奇旅行主題插畫`;
+  if(bar) bar.style.width=`${((state.dayIndex+1)/TRIP.days.length)*100}%`;
 }
 
 
@@ -2202,28 +2157,11 @@ function updateWeatherBuddy(mode=WEATHER_BUDDY_VARIANTS[weatherBuddyIndex].mode)
   if(idx<0)idx=0;
   weatherBuddyIndex=idx;
   const spec=WEATHER_BUDDY_VARIANTS[idx];
-  const sameMode=el.dataset.weatherMode===spec.mode;
   el.dataset.weatherMode=spec.mode;
   el.className=`weather-buddy-slot buddy-only-art is-${spec.mode}`;
   card?.classList.add("has-weather-buddy");
   el.hidden=false;
-  let button=el.querySelector("[data-weather-switch]");
-  let img=button?.querySelector("img");
-  if(!button){
-    button=document.createElement("button");
-    button.type="button";
-    button.dataset.weatherSwitch="1";
-    img=document.createElement("img");
-    button.appendChild(img);
-    el.replaceChildren(button);
-  }
-  button.className=`weather-buddy-button weather-usagi-${spec.mode}`;
-  button.setAttribute("aria-label",`切換天氣烏薩奇造型，目前：${spec.label}`);
-  if(!sameMode||img.getAttribute("src")!==spec.src){
-    setImageAfterDecode(img,spec.src,{alt:spec.alt});
-  }else{
-    img.alt=spec.alt;
-  }
+  el.innerHTML=`<button type="button" class="weather-buddy-button weather-usagi-${spec.mode}" data-weather-switch="1" aria-label="切換天氣烏薩奇造型，目前：${spec.label}"><img src="${spec.src}" alt="${spec.alt}"></button>`;
 }
 function cycleWeatherBuddy(){
   weatherBuddyManualOverride=true;
@@ -2518,24 +2456,12 @@ function cleanHotelTitle(title){
 function renderHotelReturnCard(){
   const box=$("#hotelReturnCard"); if(!box)return;
   const hotel=hotelForDay(state.dayIndex);
-  if(!hotel){box.hidden=true;return;}
+  if(!hotel){box.hidden=true;box.innerHTML="";return;}
   const lastDay=state.dayIndex===TRIP.days.length-1;
   const label=lastDay?"返台前據點":"今晚住這裡";
   const help=lastDay?"取行李或需要回住宿時，從這裡直接導航。":"一天走完要回飯店時，不用再往上找地址。";
   box.hidden=false;
-  let copy=box.querySelector(".hotel-return-copy");
-  let art=box.querySelector(".hotel-return-art");
-  if(!copy){copy=document.createElement("div");copy.className="hotel-return-copy";box.appendChild(copy)}
-  if(!art){
-    art=document.createElement("div");
-    art.className="hotel-return-art buddy-only-art buddy-reactable";
-    art.dataset.buddyReact="duo";art.dataset.buddyContext="hotel";
-    const img=document.createElement("img");
-    img.alt="布丁狗與烏薩奇回飯店休息";
-    art.appendChild(img);box.appendChild(art);
-    setImageAfterDecode(img,"./hotel-return-duo.webp?v=460",{alt:img.alt});
-  }
-  copy.innerHTML=`<span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ Google Maps 查看飯店</a>`;
+  box.innerHTML=`<div class="hotel-return-copy"><span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ Google Maps 查看飯店</a></div><div class="hotel-return-art buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="hotel"><img src="./hotel-return-duo.webp?v=460" alt="布丁狗與烏薩奇回飯店休息"></div>`;
 }
 
 
@@ -2881,13 +2807,6 @@ function renderSchedule(){
   $("#dayNumber").textContent=`D${state.dayIndex+1}`;
   $("#dayTitle").textContent=d.title;
   $("#daySubtitle").textContent=d.subtitle;
-  const dayRouteLink=$("#dayRouteLink");
-  if(dayRouteLink){
-    const routeUrl=String(d.routeUrl||"").trim();
-    dayRouteLink.hidden=!routeUrl;
-    if(routeUrl){dayRouteLink.href=routeUrl;dayRouteLink.textContent=`🚗 ${d.routeLabel||"今日自駕路線"} ↗`;}
-    else{dayRouteLink.removeAttribute("href");}
-  }
   const variantStatus=variantStatusForDay(state.dayIndex);
   const variantBadge=$("#dayVariantBadge");
   if(variantBadge){
@@ -3129,30 +3048,12 @@ function openBookingAttachmentDb(){
 function bookingAttachmentRequest(req){
   return new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error("附件資料庫操作失敗"))});
 }
-const BOOKING_ATTACHMENT_LEGACY_ALIASES={
-  "booking-hotel-d1":["richmond"],
-  "booking-hotel-d2":["richmond"],
-  "booking-hotel-d3":["richmond"],
-  "booking-hotel-d4":["etavia"],
-  "booking-hotel-d5":["senomoto"],
-  "booking-hotel-d6":["grateful"],
-  "booking-hotel-d7":["kamenoi"],
-  "booking-hotel-d8":["kumamoto-sakura"],
-  "booking-hotel-d9":["kumamoto-sakura"]
-};
-function bookingAttachmentLookupKeys(taskId){
-  const canonical=String(taskId||"");
-  return [...new Set([canonical,...(BOOKING_ATTACHMENT_LEGACY_ALIASES[canonical]||[])].filter(Boolean))];
-}
 async function listBookingAttachments(taskId){
   const db=await openBookingAttachmentDb();
   try{
     const tx=db.transaction(BOOKING_ATTACHMENT_STORE,"readonly");
-    const index=tx.objectStore(BOOKING_ATTACHMENT_STORE).index("taskId");
-    const groups=await Promise.all(bookingAttachmentLookupKeys(taskId).map(key=>bookingAttachmentRequest(index.getAll(key))));
-    const seen=new Set(),merged=[];
-    for(const item of groups.flat()){if(item?.id&&!seen.has(item.id)){seen.add(item.id);merged.push(item)}}
-    return merged.sort((a,b)=>Number(b.addedAt||0)-Number(a.addedAt||0));
+    const list=await bookingAttachmentRequest(tx.objectStore(BOOKING_ATTACHMENT_STORE).index("taskId").getAll(String(taskId)));
+    return (list||[]).sort((a,b)=>Number(b.addedAt||0)-Number(a.addedAt||0));
   }finally{db.close()}
 }
 async function getBookingAttachment(id){
@@ -3216,23 +3117,10 @@ async function renderBookingAttachmentManager(){
     if($("#bookingAttachmentStorage"))$("#bookingAttachmentStorage").textContent=`${list.length} 個附件 · 約 ${formatAttachmentBytes(total)} · 僅此裝置`;
   }catch(err){box.innerHTML=`<div class="empty">無法讀取附件：${esc(err.message)}</div>`}
 }
-function bookingSlotTitle(taskId){
-  const id=String(taskId||"");
-  const task=TRIP?.bookingTasks?.find(t=>String(t.id)===id);
-  if(task?.title)return task.title;
-  const hotelMatch=id.match(/^booking-hotel-d(\d+)$/);
-  if(hotelMatch){
-    const day=TRIP?.days?.[Number(hotelMatch[1])-1];
-    return day?`D${hotelMatch[1]} ${day.hotel?.name||"住宿"}`:"住宿";
-  }
-  const custom=state?.bookingFoodEntries?.find(x=>`booking-food-${x.id}`===id);
-  if(custom)return custom.name;
-  return "票券附件";
-}
-async function openBookingAttachmentManager(taskId,titleOverride=""){
+async function openBookingAttachmentManager(taskId){
+  const task=TRIP?.bookingTasks?.find(t=>String(t.id)===String(taskId));
   activeBookingAttachmentTaskId=String(taskId||"");
-  const title=String(titleOverride||bookingSlotTitle(taskId)||"票券附件");
-  if($("#bookingAttachmentTitle"))$("#bookingAttachmentTitle").textContent=`附件｜${title}`;
+  if($("#bookingAttachmentTitle"))$("#bookingAttachmentTitle").textContent=task?.title?`附件｜${task.title}`:"票券附件";
   $("#bookingAttachmentModal")?.showModal();
   await renderBookingAttachmentManager();
 }
@@ -3266,95 +3154,6 @@ async function handleBookingAttachmentFiles(files){
   await renderBookingAttachmentManager();await refreshBookingAttachmentBadges();
   if(added)toast(`已加入 ${added} 個離線附件`);
   if(errors.length)toast(errors[0]);
-}
-
-const BOOKING_CATEGORY_META={
-  hotel:{icon:"🏨",title:"住宿",subtitle:"D1–D9 每晚分開放票券"},
-  boat:{icon:"🚣",title:"高千穗划船",subtitle:"D7 · 10/15 08:30"},
-  car:{icon:"🚗",title:"租車",subtitle:"由布院取車／熊本還車"},
-  train:{icon:"🚆",title:"由布院車票",subtitle:"由布院之森 1 號"},
-  food:{icon:"🍽️",title:"美食",subtitle:"訂位確認＋自訂餐廳"}
-};
-function bookingCategorySlots(category){
-  if(category==="hotel"){
-    return (TRIP?.days||[]).slice(0,9).map((day,i)=>({
-      id:`booking-hotel-d${i+1}`,
-      label:`D${i+1}`,
-      title:day.hotel?.name||"住宿",
-      meta:`${day.date?.slice(5).replace("-","/")||""}`
-    }));
-  }
-  if(category==="boat"){
-    const t=TRIP?.bookingTasks?.find(x=>x.id==="takachiho-boat");
-    return [{id:t?.id||"takachiho-boat",label:"D7",title:t?.title||"高千穗峽划船",meta:t?.when||"10/15 08:30"}];
-  }
-  if(category==="car"){
-    const t=TRIP?.bookingTasks?.find(x=>x.id==="nissan");
-    return [{id:t?.id||"nissan",label:"D5→D8",title:t?.title||"Nissan Rent a Car",meta:t?.when||"10/13 10:00"}];
-  }
-  if(category==="train"){
-    const t=TRIP?.bookingTasks?.find(x=>x.id==="yufuin-no-mori");
-    return [{id:t?.id||"yufuin-no-mori",label:"D4",title:t?.title||"由布院之森 1 號",meta:t?.when||"10/12 09:17"}];
-  }
-  if(category==="food"){
-    const official=(TRIP?.bookingTasks||[]).filter(t=>String(t.type||"").includes("餐廳")&&t.defaultDone).map(t=>({id:t.id,label:t.when||"已訂",title:t.title,meta:t.detail||""}));
-    const custom=(state?.bookingFoodEntries||[]).map(t=>({id:`booking-food-${t.id}`,label:"自訂",title:t.name,meta:"自行新增" ,customId:t.id}));
-    return [...official,...custom];
-  }
-  return [];
-}
-function bookingCategoryCard(key){
-  const meta=BOOKING_CATEGORY_META[key],slots=bookingCategorySlots(key);
-  return `<button type="button" class="booking-category-card" data-booking-category="${key}">
-    <span class="booking-category-icon">${meta.icon}</span>
-    <span class="booking-category-copy"><b>${meta.title}</b><small>${meta.subtitle}</small></span>
-    <span class="booking-category-meta">${slots.length} 項 ›</span>
-  </button>`;
-}
-function renderBookingLibrary(){
-  const box=$("#bookingLibrary");if(!box)return;
-  box.innerHTML=["hotel","boat","car","train","food"].map(bookingCategoryCard).join("");
-}
-function renderBookingCategoryModal(){
-  const key=state.activeBookingCategory;
-  const meta=BOOKING_CATEGORY_META[key];
-  const box=$("#bookingCategoryList");
-  if(!meta||!box)return;
-  $("#bookingCategoryTitle").textContent=meta.title;
-  $("#bookingCategorySubtitle").textContent=meta.subtitle;
-  const slots=bookingCategorySlots(key);
-  box.innerHTML=slots.length?slots.map(slot=>`<div class="booking-folder-row">
-    <div class="booking-folder-day">${esc(slot.label||"")}</div>
-    <div class="booking-folder-copy"><b>${esc(slot.title||"")}</b>${slot.meta?`<small>${esc(slot.meta)}</small>`:""}</div>
-    <div class="booking-folder-actions">
-      <button type="button" class="mini-btn booking-folder-file-btn" data-booking-attachments="${esc(slot.id)}" data-booking-title="${esc(slot.title||"")}">PDF／圖片 <span class="booking-attachment-count" hidden></span></button>
-      ${slot.customId?`<button type="button" class="mini-btn danger" data-booking-food-delete="${esc(slot.customId)}">刪除</button>`:""}
-    </div>
-  </div>`).join(""):'<div class="empty">目前沒有項目。</div>';
-  const add=$("#bookingFoodAddArea");if(add)add.hidden=key!=="food";
-  const legacyNote=$("#bookingLegacyNote");if(legacyNote)legacyNote.hidden=key!=="hotel";
-  refreshBookingAttachmentBadges().catch(()=>{});
-}
-function openBookingCategory(key){
-  if(!BOOKING_CATEGORY_META[key])return;
-  state.activeBookingCategory=key;
-  renderBookingCategoryModal();
-  $("#bookingCategoryModal")?.showModal();
-}
-async function saveBookingFoodEntries(){
-  saveLocal("bookingFoodEntries",state.bookingFoodEntries);
-  if(state.cloud){
-    try{await setCloud("bookingFoodEntries",state.bookingFoodEntries);if($("#syncText"))$("#syncText").textContent="雲端已同步"}catch(err){console.warn("Booking food sync failed",err)}
-  }
-}
-async function addBookingFoodEntry(name){
-  name=String(name||"").trim();if(!name){toast("請輸入餐廳名稱");return false}
-  state.bookingFoodEntries.push({id:uid(),name,createdAt:Date.now()});
-  await saveBookingFoodEntries();renderBookingLibrary();renderBookingCategoryModal();toast("已新增美食票券分類");return true;
-}
-async function removeBookingFoodEntry(id){
-  state.bookingFoodEntries=state.bookingFoodEntries.filter(x=>x.id!==String(id));
-  await saveBookingFoodEntries();renderBookingLibrary();renderBookingCategoryModal();toast("已刪除分類名稱");
 }
 
 function taskDone(task){
@@ -3400,22 +3199,17 @@ function bookingTaskCard(t){
   </div>`;
 }
 function renderBookings(){
-  renderBookingLibrary();
   const pending=TRIP.bookingTasks.filter(t=>!taskDone(t));
   const done=TRIP.bookingTasks.filter(taskDone);
-  $("#bookingList").innerHTML=`<details class="booking-task-details">
-    <summary><span>📌 原本預約待辦</span><small>${pending.length} 待處理 · ${done.length} 已完成</small></summary>
-    <div class="booking-task-detail-body">
-      <section class="task-section">
-        <div class="task-section-title"><span>🔥</span><div><b>尚未處理</b><small>${pending.length} 項</small></div></div>
-        <div class="task-stack">${pending.length?pending.map(bookingTaskCard).join(""):`<div class="empty">目前沒有待處理任務。</div>`}</div>
-      </section>
-      <section class="task-section completed-section">
-        <div class="task-section-title"><span>✅</span><div><b>已完成／已訂</b><small>${done.length} 項</small></div></div>
-        <div class="task-stack">${done.map(bookingTaskCard).join("")}</div>
-      </section>
-    </div>
-  </details>`;
+  $("#bookingList").innerHTML=`
+    <section class="task-section">
+      <div class="task-section-title"><span>🔥</span><div><b>尚未處理</b><small>${pending.length} 項</small></div></div>
+      <div class="task-stack">${pending.length?pending.map(bookingTaskCard).join(""):`<div class="empty">目前沒有待處理任務。</div>`}</div>
+    </section>
+    <section class="task-section completed-section">
+      <div class="task-section-title"><span>✅</span><div><b>已完成／已訂</b><small>${done.length} 項</small></div></div>
+      <div class="task-stack">${done.map(bookingTaskCard).join("")}</div>
+    </section>`;
   refreshBookingAttachmentBadges().catch(err=>console.warn("Attachment badge refresh failed",err));
 }
 function renderShopping(){
@@ -3699,9 +3493,7 @@ function bind(){
     const decisionConfirm=e.target.closest("[data-decision-confirm]");if(decisionConfirm){await confirmDecision(decisionConfirm.dataset.decisionConfirm);return}
     const decisionClear=e.target.closest("[data-decision-clear]");if(decisionClear){await clearDecision(decisionClear.dataset.decisionClear);return}
     const decision=e.target.closest("[data-decision-id]");if(decision){stageDecision(decision.dataset.decisionId,decision.dataset.decisionOption);return}
-    const bookingCategory=e.target.closest("[data-booking-category]");if(bookingCategory){openBookingCategory(bookingCategory.dataset.bookingCategory);return}
-    const bookingFoodDelete=e.target.closest("[data-booking-food-delete]");if(bookingFoodDelete){if(confirm("刪除這個自訂餐廳分類？附件檔案不會自動刪除。"))await removeBookingFoodEntry(bookingFoodDelete.dataset.bookingFoodDelete);return}
-    const attachmentManager=e.target.closest("[data-booking-attachments]");if(attachmentManager){await openBookingAttachmentManager(attachmentManager.dataset.bookingAttachments,attachmentManager.dataset.bookingTitle||"");return}
+    const attachmentManager=e.target.closest("[data-booking-attachments]");if(attachmentManager){await openBookingAttachmentManager(attachmentManager.dataset.bookingAttachments);return}
     const attachmentOpen=e.target.closest("[data-booking-attachment-open]");if(attachmentOpen){await openBookingAttachmentPreview(attachmentOpen.dataset.bookingAttachmentOpen);return}
     const attachmentDelete=e.target.closest("[data-booking-attachment-delete]");if(attachmentDelete){if(confirm("刪除這個本機附件？")){await deleteBookingAttachment(attachmentDelete.dataset.bookingAttachmentDelete);await renderBookingAttachmentManager();await refreshBookingAttachmentBadges();toast("附件已刪除")}return}
     const task=e.target.closest("[data-task-id]");if(task){await toggleBookingTask(task.dataset.taskId);return}
@@ -3729,7 +3521,10 @@ function bind(){
     const setHero=(idx,animate=true)=>{
       heroIndex=(idx+heroGallery.length)%heroGallery.length;
       if(heroImg){
-        setImageAfterDecode(heroImg,heroGallery[heroIndex],{animateClass:animate?"swap":""});
+        heroImg.classList.remove("swap");
+        if(animate)void heroImg.offsetWidth;
+        heroImg.src=heroGallery[heroIndex];
+        if(animate)heroImg.classList.add("swap");
       }
       syncDots();
     };
@@ -3799,9 +3594,6 @@ function bind(){
   $("#foodNearbyOpen")?.addEventListener("click",()=>$("#foodNearbyModal")?.showModal());
   $("#foodNearbyClose")?.addEventListener("click",()=>$("#foodNearbyModal")?.close());
   $("#foodNearbyModal")?.addEventListener("click",e=>{if(e.target===$("#foodNearbyModal"))$("#foodNearbyModal").close()});
-  $("#bookingCategoryClose")?.addEventListener("click",()=>$("#bookingCategoryModal")?.close());
-  $("#bookingCategoryModal")?.addEventListener("click",e=>{if(e.target===$("#bookingCategoryModal"))$("#bookingCategoryModal").close()});
-  $("#bookingFoodAddForm")?.addEventListener("submit",async e=>{e.preventDefault();const input=$("#bookingFoodName");if(await addBookingFoodEntry(input?.value||"")){if(input)input.value=""}});
   $("#bookingAttachmentClose")?.addEventListener("click",()=>$("#bookingAttachmentModal")?.close());
   $("#bookingAttachmentModal")?.addEventListener("click",e=>{if(e.target===$("#bookingAttachmentModal"))$("#bookingAttachmentModal").close()});
   $("#bookingAttachmentInput")?.addEventListener("change",async e=>{try{await handleBookingAttachmentFiles(e.target.files)}finally{e.target.value=""}});
@@ -3969,7 +3761,6 @@ async function connectCloud({force=false}={}){
     ["expenses",v=>{if(v!==null){state.expenses=normalizeCloud(v);saveLocal("expenses",state.expenses);renderExpenses()}}],
     ["importedPlaces",v=>{if(v!==null&&!state.importedPlacesPending){state.importedPlaces=normalizeImportedPlaces(v);saveLocal("importedPlaces",state.importedPlaces);renderImportedPlaces();renderSchedule()}}],
     ["taskStatus",v=>{if(v && typeof v==="object"){state.taskStatus=v;saveLocal("taskStatus",v);renderBookings()}}],
-    ["bookingFoodEntries",v=>{if(Array.isArray(v)){state.bookingFoodEntries=normalizeBookingFoodEntries(v);saveLocal("bookingFoodEntries",state.bookingFoodEntries);renderBookings();if(state.activeBookingCategory==="food")renderBookingCategoryModal()}}],
     ["decisions",v=>{if(v && typeof v==="object"){state.decisions=v;saveLocal("decisions",v);renderSchedule()}}],
     ["guideNotes",v=>mergeGuideNotesFromCloud(v)],
     ["journals",v=>mergeJournalsFromCloud(v)],
@@ -4261,7 +4052,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5354",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5355",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
