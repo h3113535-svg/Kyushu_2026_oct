@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.43 D2 Shopping Replan */
+/* Private travel PWA · Firebase Auth gated content · v5.3.52 Stable Booking Attachment IDs */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -41,8 +41,8 @@ let cloudReconnectInFlight = false;
 const GUIDE_DEVICE_ID_KEY = "kyushu-private:guide-device-id";
 
 const BUDDY_FAST_ASSETS=[
-  "./day-scene-v52-01.webp?v=520","./day-scene-v52-02.webp?v=520","./day-scene-v52-03.webp?v=520","./day-scene-v52-04.webp?v=520","./day-scene-v52-05.webp?v=520",
-  "./day-scene-v52-06.webp?v=520","./day-scene-v52-07.webp?v=520","./day-scene-v52-08.webp?v=520","./day-scene-v52-09.webp?v=520","./day-scene-v52-10.webp?v=520",
+  "./day-scene-v52-01.webp?v=520","./day-scene-v52-02.webp?v=520","./day-scene-v52-03.webp?v=550","./day-scene-v52-04.webp?v=520","./day-scene-v52-05.webp?v=520",
+  "./day-scene-v52-06.webp?v=520","./day-scene-v52-07.webp?v=520","./day-scene-v52-08.webp?v=520","./day-scene-v52-09.webp?v=550","./day-scene-v52-10.webp?v=520",
   "./weather-rain-usagi-v47.webp?v=470","./weather-sunny-usagi-v536.webp?v=536","./weather-teruteru-usagi-v536.webp?v=536","./weather-cloudy-usagi-v536.webp?v=536","./weather-thunder-usagi-v536.webp?v=536","./weather-snow-usagi-v536.webp?v=536","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
   "./egg-sendoff-v539.png?v=539","./egg-cry-v539.png?v=539","./egg-home-sleep-v539.png?v=539",
   "./duck_gang.png?v=5311","./seal_gang.png?v=5311",
@@ -179,6 +179,30 @@ async function removeCloud(key, id){
 const $=(s)=>document.querySelector(s);
 const $$=(s)=>[...document.querySelectorAll(s)];
 const storeKey=k=>`${TRIP?.id||"private-trip"}:${k}`;
+
+// v5.3.46 — shared daily journal. One deterministic Firebase record per trip date.
+function normalizeJournalRecord(raw){
+  if(typeof raw==="string")return {text:raw,updatedAt:0,pending:false};
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))return {text:"",updatedAt:0,pending:false};
+  return {text:String(raw.text||""),updatedAt:Number(raw.updatedAt||0),pending:!!raw.pending};
+}
+function normalizeJournalMap(raw){
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))return {};
+  const out={};
+  for(const [date,value] of Object.entries(raw)){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(date))out[date]=normalizeJournalRecord(value);
+  }
+  return out;
+}
+function normalizeBookingFoodEntries(raw){
+  if(!Array.isArray(raw))return [];
+  return raw.map(item=>({
+    id:String(item?.id||""),
+    name:String(item?.name||"").trim(),
+    createdAt:Number(item?.createdAt||0)
+  })).filter(item=>item.id&&item.name);
+}
+
 function createState(){
   return {
     dayIndex:0, view:"schedule", tool:"booking", shoppingMember:"全部",
@@ -188,7 +212,9 @@ function createState(){
     privateDayPatches:normalizePrivateDayPatches(loadLocal("privateDayPatches",{})), privateDecisions:normalizePrivateDecisions(loadLocal("privateDecisions",[])),
     fx:normalizeFxState(loadLocal("fxRate",{})),
     taskStatus:loadLocal("taskStatus",{}), decisions:loadLocal("decisions",{}), decisionDrafts:{},
+    bookingFoodEntries:normalizeBookingFoodEntries(loadLocal("bookingFoodEntries",[])), activeBookingCategory:"",
     notes:loadLocal("notes",""),
+    journals:normalizeJournalMap(loadLocal("journals",{})), journalDayIndex:null, journalTimers:{}, journalPollTimer:null, journalPulling:false,
     guideNotes:normalizeGuideNotesMap(loadLocal("guideNotes",{})),
     guideNotePending:loadLocal("guideNotePending",{}),
     guideNoteTimer:null, guideNoteSyncing:false,
@@ -263,6 +289,9 @@ function decisionById(id){
 }
 
 function variantSetForDay(dayIndex){
+  // A Firebase day explicitly marked sourcePriority is authoritative and must not be replaced by
+  // an older locally imported A/B variant set.
+  if(TRIP?.days?.[Number(dayIndex)]?.sourcePriority===true)return null;
   return (state?.variantSets||[]).find(set=>set.dayIndexes.includes(Number(dayIndex)))||null;
 }
 function selectedVariantId(setOrId){
@@ -320,12 +349,17 @@ async function importVariantConfigFile(file){
   const incomingPatches=normalizePrivateDayPatches(payload.dayPatches);
   const incomingDecisions=normalizePrivateDecisions(payload.decisions);
   const removedDecisionIds=(Array.isArray(payload.removedDecisionIds)?payload.removedDecisionIds:[]).map(String);
-  if(!incoming.length&&!Object.keys(incomingPatches).length&&!incomingDecisions.length)throw new Error("設定檔內沒有可用方案或行程選項");
-  state.variantSets=mergeVariantSets(state.variantSets,incoming);
+  const removedVariantSetIds=(Array.isArray(payload.removedVariantSetIds)?payload.removedVariantSetIds:[]).map(String);
+  const removedDayPatchIndexes=(Array.isArray(payload.removedDayPatchIndexes)?payload.removedDayPatchIndexes:[]).map(x=>String(Number(x))).filter(x=>x!=="NaN");
+  if(!incoming.length&&!Object.keys(incomingPatches).length&&!incomingDecisions.length&&!removedDecisionIds.length&&!removedVariantSetIds.length&&!removedDayPatchIndexes.length)throw new Error("設定檔內沒有可用方案或清理指令");
+  state.variantSets=mergeVariantSets(state.variantSets,incoming).filter(x=>!removedVariantSetIds.includes(x.id));
   state.privateDayPatches={...(state.privateDayPatches||{}),...incomingPatches};
+  for(const idx of removedDayPatchIndexes)delete state.privateDayPatches[idx];
   state.privateDecisions=mergePrivateDecisions(state.privateDecisions,incomingDecisions).filter(x=>!removedDecisionIds.includes(x.id));
+  for(const id of removedVariantSetIds){if(state.variantSelections)delete state.variantSelections[id]}
   for(const id of removedDecisionIds){if(state.decisions)delete state.decisions[id];if(state.decisionDrafts)delete state.decisionDrafts[id]}
   saveLocal("variantSets",state.variantSets);
+  saveLocal("variantSelections",state.variantSelections||{});
   saveLocal("privateDayPatches",state.privateDayPatches);
   saveLocal("privateDecisions",state.privateDecisions);
   if(removedDecisionIds.length)saveLocal("decisions",state.decisions||{});
@@ -2103,6 +2137,9 @@ function buddyPeek(kind="purin"){
   buddyPeek._timer=setTimeout(()=>{layer.classList.remove("show");setTimeout(()=>{layer.className="buddy-peek-layer buddy-only-art";layer.innerHTML=""},480)},2400);
 }
 function dailySceneAsset(index){
+  // D3 and D9 intentionally swap illustrations without modifying the underlying asset files.
+  if(index===2) return "./day-scene-v52-09.webp?v=550";
+  if(index===8) return "./day-scene-v52-03.webp?v=550";
   return `./day-scene-v52-${String(index+1).padStart(2,"0")}.webp?v=520`;
 }
 function renderDailyScene(){
@@ -2115,7 +2152,7 @@ function renderDailyScene(){
 }
 
 
-const WEATHER_BUDDY_STORAGE_KEY="kyushu-private:weather-buddy-mode";
+const WEATHER_BUDDY_STORAGE_KEY="kyushu-private:weather-buddy-mode"; // legacy key; v5.3.45 uses session-only manual override
 const WEATHER_BUDDY_VARIANTS=[
   {mode:"sunny",src:"./weather-sunny-usagi-v536.webp?v=536",alt:"晴天烏薩奇",label:"晴天"},
   {mode:"teruteru",src:"./weather-teruteru-usagi-v536.webp?v=536",alt:"晴天娃娃烏薩奇",label:"晴天娃娃"},
@@ -2125,11 +2162,8 @@ const WEATHER_BUDDY_VARIANTS=[
   {mode:"snow",src:"./weather-snow-usagi-v536.webp?v=536",alt:"雪天烏薩奇",label:"雪天"}
 ];
 let weatherBuddyIndex=0;
-try{
-  const saved=localStorage.getItem(WEATHER_BUDDY_STORAGE_KEY);
-  const idx=WEATHER_BUDDY_VARIANTS.findIndex(v=>v.mode===saved);
-  if(idx>=0)weatherBuddyIndex=idx;
-}catch{}
+let weatherBuddyManualOverride=false;
+try{localStorage.removeItem(WEATHER_BUDDY_STORAGE_KEY)}catch{}
 function updateWeatherBuddy(mode=WEATHER_BUDDY_VARIANTS[weatherBuddyIndex].mode){
   const el=$("#weatherBuddySlot"), card=$("#weatherCard"); if(!el)return;
   let idx=WEATHER_BUDDY_VARIANTS.findIndex(v=>v.mode===mode);
@@ -2143,11 +2177,15 @@ function updateWeatherBuddy(mode=WEATHER_BUDDY_VARIANTS[weatherBuddyIndex].mode)
   el.innerHTML=`<button type="button" class="weather-buddy-button weather-usagi-${spec.mode}" data-weather-switch="1" aria-label="切換天氣烏薩奇造型，目前：${spec.label}"><img src="${spec.src}" alt="${spec.alt}"></button>`;
 }
 function cycleWeatherBuddy(){
+  weatherBuddyManualOverride=true;
   weatherBuddyIndex=(weatherBuddyIndex+1)%WEATHER_BUDDY_VARIANTS.length;
   const spec=WEATHER_BUDDY_VARIANTS[weatherBuddyIndex];
-  try{localStorage.setItem(WEATHER_BUDDY_STORAGE_KEY,spec.mode)}catch{}
   updateWeatherBuddy(spec.mode);
   return spec.mode;
+}
+function syncWeatherBuddyToForecast(mode){
+  if(weatherBuddyManualOverride)return;
+  updateWeatherBuddy(mode||"cloudy");
 }
 function handleWeatherBuddyTap(){
   clearTimeout(handleWeatherBuddyTap._speechDelay);
@@ -2255,7 +2293,12 @@ function renderEventExtras(e){
   ].filter(Boolean).join("");
   const tips=(e.tips||[]).map(t=>`<li>${esc(t)}</li>`).join("");
   const links=(e.links||[]).map(l=>`<a class="mini-action-link" target="_blank" rel="noopener" href="${esc(l.url)}">↗ ${esc(l.label)}</a>`).join("");
-  return `${chips?`<div class="event-info-row">${chips}</div>`:""}${tips?`<div class="event-tips"><b>提醒</b><ul>${tips}</ul></div>`:""}${e.backup?`<div class="backup-box"><b>備案</b><span>${esc(e.backup)}</span></div>`:""}${links?`<div class="event-link-row">${links}</div>`:""}`;
+  const stops=(Array.isArray(e.stops)?e.stops:[]).filter(x=>x&&x.name).map(stop=>`
+    <div class="event-stop-row">
+      <div class="event-stop-copy"><b>${esc(stop.name)}</b>${stop.note?`<small>${esc(stop.note)}</small>`:""}</div>
+      <a class="event-stop-map" target="_blank" rel="noopener" href="${mapSearch(stop.nav||stop.name)}">↗ MAP</a>
+    </div>`).join("");
+  return `${chips?`<div class="event-info-row">${chips}</div>`:""}${tips?`<div class="event-tips"><b>提醒</b><ul>${tips}</ul></div>`:""}${e.backup?`<div class="backup-box"><b>備案</b><span>${esc(e.backup)}</span></div>`:""}${stops?`<div class="event-stop-list"><div class="event-stop-head">店家／停靠點</div>${stops}</div>`:""}${links?`<div class="event-link-row">${links}</div>`:""}`;
 }
 
 
@@ -2777,6 +2820,13 @@ function renderSchedule(){
   $("#dayNumber").textContent=`D${state.dayIndex+1}`;
   $("#dayTitle").textContent=d.title;
   $("#daySubtitle").textContent=d.subtitle;
+  const dayRouteLink=$("#dayRouteLink");
+  if(dayRouteLink){
+    const routeUrl=String(d.routeUrl||"").trim();
+    dayRouteLink.hidden=!routeUrl;
+    if(routeUrl){dayRouteLink.href=routeUrl;dayRouteLink.textContent=`🚗 ${d.routeLabel||"今日自駕路線"} ↗`;}
+    else{dayRouteLink.removeAttribute("href");}
+  }
   const variantStatus=variantStatusForDay(state.dayIndex);
   const variantBadge=$("#dayVariantBadge");
   if(variantBadge){
@@ -2811,41 +2861,170 @@ function renderSchedule(){
   renderWeather(d);
   requestAnimationFrame(()=>bindGuideTargets(visibleEvents));
 }
+// v5.3.45 — live Open-Meteo weather engine
+const WEATHER_API_BASE="https://api.open-meteo.com/v1/forecast";
+const WEATHER_CACHE_PREFIX="kyushu-oct-2026:weather-cache-v1:";
+const WEATHER_CACHE_TTL_MS=30*60*1000;
+let weatherRenderSeq=0;
+
+function weatherDayDiff(dateStr){
+  const today=japanToday();
+  const a=Date.parse(`${today}T00:00:00+09:00`);
+  const b=Date.parse(`${dateStr}T00:00:00+09:00`);
+  return Math.round((b-a)/86400000);
+}
+function weatherCodeInfo(code){
+  const c=Number(code);
+  if(c===0)return {icon:"☀️",desc:"晴",buddyMode:"sunny"};
+  if(c===1)return {icon:"🌤️",desc:"大致晴朗",buddyMode:"sunny"};
+  if(c===2)return {icon:"⛅",desc:"多雲時晴",buddyMode:"cloudy"};
+  if(c===3)return {icon:"☁️",desc:"陰天",buddyMode:"cloudy"};
+  if(c===45||c===48)return {icon:"🌫️",desc:"有霧",buddyMode:"cloudy"};
+  if([51,53,55].includes(c))return {icon:"🌦️",desc:"毛毛雨",buddyMode:"rain"};
+  if([56,57].includes(c))return {icon:"🌧️",desc:"凍毛毛雨",buddyMode:"rain"};
+  if([61,63,65].includes(c))return {icon:"🌧️",desc:c===61?"小雨":c===63?"中雨":"大雨",buddyMode:"rain"};
+  if([66,67].includes(c))return {icon:"🌧️",desc:"凍雨",buddyMode:"rain"};
+  if([71,73,75,77,85,86].includes(c))return {icon:"🌨️",desc:"降雪",buddyMode:"snow"};
+  if([80,81,82].includes(c))return {icon:"🌦️",desc:c===80?"短暫陣雨":c===81?"陣雨":"強陣雨",buddyMode:"rain"};
+  if([95,96,99].includes(c))return {icon:"⛈️",desc:c===95?"雷雨":"雷雨伴冰雹",buddyMode:"thunder"};
+  return {icon:"☁️",desc:"天氣多變",buddyMode:"cloudy"};
+}
+function weatherCacheKey(d){
+  return `${WEATHER_CACHE_PREFIX}${Number(d.lat).toFixed(3)},${Number(d.lon).toFixed(3)}`;
+}
+function readWeatherCache(d){
+  try{
+    const raw=localStorage.getItem(weatherCacheKey(d));
+    if(!raw)return null;
+    const parsed=JSON.parse(raw);
+    if(!parsed?.data||!parsed?.savedAt)return null;
+    return parsed;
+  }catch{return null}
+}
+function writeWeatherCache(d,data){
+  try{localStorage.setItem(weatherCacheKey(d),JSON.stringify({savedAt:Date.now(),data}))}catch{}
+}
+function hourLabel(hour){
+  if(hour>=24)return "24:00";
+  return `${String(hour).padStart(2,"0")}:00`;
+}
+function buildRainGroups(hourly,dateStr,rainMax){
+  const times=hourly?.time||[], probs=hourly?.precipitation_probability||[];
+  if(!times.length||!probs.length||Number(rainMax)<30)return [];
+  const threshold=Number(rainMax)>=70?50:Number(rainMax)>=40?40:30;
+  const rows=[];
+  for(let i=0;i<times.length;i++){
+    const t=String(times[i]||"");
+    if(!t.startsWith(`${dateStr}T`))continue;
+    const p=Number(probs[i]);
+    const h=Number(t.slice(11,13));
+    if(Number.isFinite(p)&&p>=threshold&&Number.isFinite(h))rows.push({hour:h,prob:p});
+  }
+  if(!rows.length)return [];
+  const groups=[];
+  let group={start:rows[0].hour,end:rows[0].hour+1,maxProb:rows[0].prob};
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i];
+    if(r.hour===group.end){
+      group.end=r.hour+1;
+      group.maxProb=Math.max(group.maxProb,r.prob);
+    }else{
+      groups.push({start:hourLabel(group.start),end:hourLabel(group.end),maxProb:Math.round(group.maxProb)});
+      group={start:r.hour,end:r.hour+1,maxProb:r.prob};
+    }
+  }
+  groups.push({start:hourLabel(group.start),end:hourLabel(group.end),maxProb:Math.round(group.maxProb)});
+  return groups;
+}
+function weatherFromPayload(d,payload,{stale=false}={}){
+  const daily=payload?.daily||{}, dates=daily.time||[];
+  const idx=dates.indexOf(d.date);
+  if(idx<0)return {state:"not-ready",message:"尚未進入預報範圍"};
+  const high=Math.round(Number(daily.temperature_2m_max?.[idx]));
+  const low=Math.round(Number(daily.temperature_2m_min?.[idx]));
+  const rainMax=Math.max(0,Math.round(Number(daily.precipitation_probability_max?.[idx]||0)));
+  const code=Number(daily.weather_code?.[idx]);
+  const info=weatherCodeInfo(code);
+  const isToday=d.date===japanToday();
+  const currentRaw=Number(payload?.current?.temperature_2m);
+  return {
+    state:"forecast",
+    icon:info.icon,
+    current:isToday&&Number.isFinite(currentRaw)?Math.round(currentRaw):null,
+    high:Number.isFinite(high)?high:"—",
+    low:Number.isFinite(low)?low:"—",
+    desc:info.desc,
+    rainMax,
+    rainGroups:buildRainGroups(payload?.hourly,d.date,rainMax),
+    buddyMode:info.buddyMode,
+    stale
+  };
+}
+async function getWeather(d){
+  if(!Number.isFinite(Number(d?.lat))||!Number.isFinite(Number(d?.lon)))
+    return {state:"not-ready",message:"這一天尚未設定天氣座標"};
+  const diff=weatherDayDiff(d.date);
+  if(diff<0||diff>15)return {state:"not-ready",message:"尚未進入 16 天預報範圍"};
+
+  const cached=readWeatherCache(d);
+  if(cached&&Date.now()-cached.savedAt<WEATHER_CACHE_TTL_MS){
+    return weatherFromPayload(d,cached.data);
+  }
+
+  const qs=new URLSearchParams({
+    latitude:String(d.lat),
+    longitude:String(d.lon),
+    timezone:"Asia/Tokyo",
+    forecast_days:"16",
+    current:"temperature_2m",
+    daily:"weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+    hourly:"precipitation_probability"
+  });
+  try{
+    const res=await fetch(`${WEATHER_API_BASE}?${qs.toString()}`,{headers:{Accept:"application/json"},cache:"no-store"});
+    if(!res.ok)throw new Error(`weather ${res.status}`);
+    const payload=await res.json();
+    if(payload?.error)throw new Error(payload.reason||"weather api error");
+    writeWeatherCache(d,payload);
+    return weatherFromPayload(d,payload);
+  }catch(err){
+    if(cached?.data)return weatherFromPayload(d,cached.data,{stale:true});
+    throw err;
+  }
+}
+
 async function renderWeather(d){
+  const seq=++weatherRenderSeq;
   const card=$("#weatherCard");card.classList.add("skeleton");card.classList.remove("weather-no-forecast");
   $("#weatherLocation").textContent=d.location+" · "+d.shortDate;
   $("#weatherTemp").textContent="載入中";
   $("#weatherDesc").textContent="正在取得旅行日期預報";
   $("#weatherIcon").textContent="☁️";$("#rainBox").innerHTML=""; ensureWeatherBuddy();
-  if(typeof getWeather!=="function"){
-    card.classList.add("weather-no-forecast");
-    $("#weatherTemp").textContent="—";
-    $("#weatherDesc").textContent="尚未進入預報範圍";
-    $("#rainBox").textContent="接近旅行日期後再顯示正式天氣資料。";
-    card.classList.remove("skeleton");
-    return;
-  }
   try{
     const w=await getWeather(d);
+    if(seq!==weatherRenderSeq)return;
     if(w.state!=="forecast"){
       card.classList.add("weather-no-forecast");
       $("#weatherTemp").textContent="—";
       $("#weatherDesc").textContent=w.message;
       $("#rainBox").innerHTML="進入預報範圍後，這裡會顯示高低溫、降雨機率與預計下雨時段。";
     }else{
+      syncWeatherBuddyToForecast(w.buddyMode);
       $("#weatherIcon").textContent=w.icon;
       $("#weatherTemp").textContent=w.current!==null?`${w.current}° · ${w.high}° / ${w.low}°`:`${w.high}° / ${w.low}°`;
-      $("#weatherDesc").textContent=`${w.desc} · 全日最高降雨機率 ${w.rainMax}%`;
+      $("#weatherDesc").textContent=`${w.desc} · 全日最高降雨機率 ${w.rainMax}%${w.stale?" · 快取資料":""}`;
       if(w.rainGroups.length){
-        $("#rainBox").innerHTML=w.rainGroups.slice(0,2).map(g=>`<div class="rain-alert">🌧️ 預計 ${g.start}–${g.end} 有雨 · 最高 ${g.maxProb}%</div>`).join("");
+        $("#rainBox").innerHTML=w.rainGroups.slice(0,2).map(g=>`<div class="rain-alert">🌧️ ${g.start}–${g.end} 降雨機率偏高 · 最高 ${g.maxProb}%</div>`).join("");
       }else {
         $("#rainBox").innerHTML="☂️ 目前預報沒有明顯連續降雨時段。";
       }
     }
   }catch(e){
+    if(seq!==weatherRenderSeq)return;
+    card.classList.add("weather-no-forecast");
     $("#weatherTemp").textContent="—";$("#weatherDesc").textContent="天氣暫時無法更新";
-    $("#rainBox").textContent="保留上次行程資料；網路恢復後重新切換日期即可再抓。";
-  }finally{card.classList.remove("skeleton")}
+    $("#rainBox").textContent="目前無可用快取；網路恢復後重新切換日期即可再抓。";
+  }finally{if(seq===weatherRenderSeq)card.classList.remove("skeleton")}
 }
 
 function renderFood(){
@@ -2889,12 +3068,30 @@ function openBookingAttachmentDb(){
 function bookingAttachmentRequest(req){
   return new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error("附件資料庫操作失敗"))});
 }
+const BOOKING_ATTACHMENT_LEGACY_ALIASES={
+  "booking-hotel-d1":["richmond"],
+  "booking-hotel-d2":["richmond"],
+  "booking-hotel-d3":["richmond"],
+  "booking-hotel-d4":["etavia"],
+  "booking-hotel-d5":["senomoto"],
+  "booking-hotel-d6":["grateful"],
+  "booking-hotel-d7":["kamenoi"],
+  "booking-hotel-d8":["kumamoto-sakura"],
+  "booking-hotel-d9":["kumamoto-sakura"]
+};
+function bookingAttachmentLookupKeys(taskId){
+  const canonical=String(taskId||"");
+  return [...new Set([canonical,...(BOOKING_ATTACHMENT_LEGACY_ALIASES[canonical]||[])].filter(Boolean))];
+}
 async function listBookingAttachments(taskId){
   const db=await openBookingAttachmentDb();
   try{
     const tx=db.transaction(BOOKING_ATTACHMENT_STORE,"readonly");
-    const list=await bookingAttachmentRequest(tx.objectStore(BOOKING_ATTACHMENT_STORE).index("taskId").getAll(String(taskId)));
-    return (list||[]).sort((a,b)=>Number(b.addedAt||0)-Number(a.addedAt||0));
+    const index=tx.objectStore(BOOKING_ATTACHMENT_STORE).index("taskId");
+    const groups=await Promise.all(bookingAttachmentLookupKeys(taskId).map(key=>bookingAttachmentRequest(index.getAll(key))));
+    const seen=new Set(),merged=[];
+    for(const item of groups.flat()){if(item?.id&&!seen.has(item.id)){seen.add(item.id);merged.push(item)}}
+    return merged.sort((a,b)=>Number(b.addedAt||0)-Number(a.addedAt||0));
   }finally{db.close()}
 }
 async function getBookingAttachment(id){
@@ -2958,10 +3155,23 @@ async function renderBookingAttachmentManager(){
     if($("#bookingAttachmentStorage"))$("#bookingAttachmentStorage").textContent=`${list.length} 個附件 · 約 ${formatAttachmentBytes(total)} · 僅此裝置`;
   }catch(err){box.innerHTML=`<div class="empty">無法讀取附件：${esc(err.message)}</div>`}
 }
-async function openBookingAttachmentManager(taskId){
-  const task=TRIP?.bookingTasks?.find(t=>String(t.id)===String(taskId));
+function bookingSlotTitle(taskId){
+  const id=String(taskId||"");
+  const task=TRIP?.bookingTasks?.find(t=>String(t.id)===id);
+  if(task?.title)return task.title;
+  const hotelMatch=id.match(/^booking-hotel-d(\d+)$/);
+  if(hotelMatch){
+    const day=TRIP?.days?.[Number(hotelMatch[1])-1];
+    return day?`D${hotelMatch[1]} ${day.hotel?.name||"住宿"}`:"住宿";
+  }
+  const custom=state?.bookingFoodEntries?.find(x=>`booking-food-${x.id}`===id);
+  if(custom)return custom.name;
+  return "票券附件";
+}
+async function openBookingAttachmentManager(taskId,titleOverride=""){
   activeBookingAttachmentTaskId=String(taskId||"");
-  if($("#bookingAttachmentTitle"))$("#bookingAttachmentTitle").textContent=task?.title?`附件｜${task.title}`:"票券附件";
+  const title=String(titleOverride||bookingSlotTitle(taskId)||"票券附件");
+  if($("#bookingAttachmentTitle"))$("#bookingAttachmentTitle").textContent=`附件｜${title}`;
   $("#bookingAttachmentModal")?.showModal();
   await renderBookingAttachmentManager();
 }
@@ -2995,6 +3205,95 @@ async function handleBookingAttachmentFiles(files){
   await renderBookingAttachmentManager();await refreshBookingAttachmentBadges();
   if(added)toast(`已加入 ${added} 個離線附件`);
   if(errors.length)toast(errors[0]);
+}
+
+const BOOKING_CATEGORY_META={
+  hotel:{icon:"🏨",title:"住宿",subtitle:"D1–D9 每晚分開放票券"},
+  boat:{icon:"🚣",title:"高千穗划船",subtitle:"D7 · 10/15 08:30"},
+  car:{icon:"🚗",title:"租車",subtitle:"由布院取車／熊本還車"},
+  train:{icon:"🚆",title:"由布院車票",subtitle:"由布院之森 1 號"},
+  food:{icon:"🍽️",title:"美食",subtitle:"訂位確認＋自訂餐廳"}
+};
+function bookingCategorySlots(category){
+  if(category==="hotel"){
+    return (TRIP?.days||[]).slice(0,9).map((day,i)=>({
+      id:`booking-hotel-d${i+1}`,
+      label:`D${i+1}`,
+      title:day.hotel?.name||"住宿",
+      meta:`${day.date?.slice(5).replace("-","/")||""}`
+    }));
+  }
+  if(category==="boat"){
+    const t=TRIP?.bookingTasks?.find(x=>x.id==="takachiho-boat");
+    return [{id:t?.id||"takachiho-boat",label:"D7",title:t?.title||"高千穗峽划船",meta:t?.when||"10/15 08:30"}];
+  }
+  if(category==="car"){
+    const t=TRIP?.bookingTasks?.find(x=>x.id==="nissan");
+    return [{id:t?.id||"nissan",label:"D5→D8",title:t?.title||"Nissan Rent a Car",meta:t?.when||"10/13 10:00"}];
+  }
+  if(category==="train"){
+    const t=TRIP?.bookingTasks?.find(x=>x.id==="yufuin-no-mori");
+    return [{id:t?.id||"yufuin-no-mori",label:"D4",title:t?.title||"由布院之森 1 號",meta:t?.when||"10/12 09:17"}];
+  }
+  if(category==="food"){
+    const official=(TRIP?.bookingTasks||[]).filter(t=>String(t.type||"").includes("餐廳")&&t.defaultDone).map(t=>({id:t.id,label:t.when||"已訂",title:t.title,meta:t.detail||""}));
+    const custom=(state?.bookingFoodEntries||[]).map(t=>({id:`booking-food-${t.id}`,label:"自訂",title:t.name,meta:"自行新增" ,customId:t.id}));
+    return [...official,...custom];
+  }
+  return [];
+}
+function bookingCategoryCard(key){
+  const meta=BOOKING_CATEGORY_META[key],slots=bookingCategorySlots(key);
+  return `<button type="button" class="booking-category-card" data-booking-category="${key}">
+    <span class="booking-category-icon">${meta.icon}</span>
+    <span class="booking-category-copy"><b>${meta.title}</b><small>${meta.subtitle}</small></span>
+    <span class="booking-category-meta">${slots.length} 項 ›</span>
+  </button>`;
+}
+function renderBookingLibrary(){
+  const box=$("#bookingLibrary");if(!box)return;
+  box.innerHTML=["hotel","boat","car","train","food"].map(bookingCategoryCard).join("");
+}
+function renderBookingCategoryModal(){
+  const key=state.activeBookingCategory;
+  const meta=BOOKING_CATEGORY_META[key];
+  const box=$("#bookingCategoryList");
+  if(!meta||!box)return;
+  $("#bookingCategoryTitle").textContent=meta.title;
+  $("#bookingCategorySubtitle").textContent=meta.subtitle;
+  const slots=bookingCategorySlots(key);
+  box.innerHTML=slots.length?slots.map(slot=>`<div class="booking-folder-row">
+    <div class="booking-folder-day">${esc(slot.label||"")}</div>
+    <div class="booking-folder-copy"><b>${esc(slot.title||"")}</b>${slot.meta?`<small>${esc(slot.meta)}</small>`:""}</div>
+    <div class="booking-folder-actions">
+      <button type="button" class="mini-btn booking-folder-file-btn" data-booking-attachments="${esc(slot.id)}" data-booking-title="${esc(slot.title||"")}">PDF／圖片 <span class="booking-attachment-count" hidden></span></button>
+      ${slot.customId?`<button type="button" class="mini-btn danger" data-booking-food-delete="${esc(slot.customId)}">刪除</button>`:""}
+    </div>
+  </div>`).join(""):'<div class="empty">目前沒有項目。</div>';
+  const add=$("#bookingFoodAddArea");if(add)add.hidden=key!=="food";
+  const legacyNote=$("#bookingLegacyNote");if(legacyNote)legacyNote.hidden=key!=="hotel";
+  refreshBookingAttachmentBadges().catch(()=>{});
+}
+function openBookingCategory(key){
+  if(!BOOKING_CATEGORY_META[key])return;
+  state.activeBookingCategory=key;
+  renderBookingCategoryModal();
+  $("#bookingCategoryModal")?.showModal();
+}
+async function saveBookingFoodEntries(){
+  saveLocal("bookingFoodEntries",state.bookingFoodEntries);
+  if(state.cloud){
+    try{await setCloud("bookingFoodEntries",state.bookingFoodEntries);if($("#syncText"))$("#syncText").textContent="雲端已同步"}catch(err){console.warn("Booking food sync failed",err)}
+  }
+}
+async function addBookingFoodEntry(name){
+  name=String(name||"").trim();if(!name){toast("請輸入餐廳名稱");return false}
+  state.bookingFoodEntries.push({id:uid(),name,createdAt:Date.now()});
+  await saveBookingFoodEntries();renderBookingLibrary();renderBookingCategoryModal();toast("已新增美食票券分類");return true;
+}
+async function removeBookingFoodEntry(id){
+  state.bookingFoodEntries=state.bookingFoodEntries.filter(x=>x.id!==String(id));
+  await saveBookingFoodEntries();renderBookingLibrary();renderBookingCategoryModal();toast("已刪除分類名稱");
 }
 
 function taskDone(task){
@@ -3040,32 +3339,42 @@ function bookingTaskCard(t){
   </div>`;
 }
 function renderBookings(){
+  renderBookingLibrary();
   const pending=TRIP.bookingTasks.filter(t=>!taskDone(t));
   const done=TRIP.bookingTasks.filter(taskDone);
-  $("#bookingList").innerHTML=`
-    <section class="task-section">
-      <div class="task-section-title"><span>🔥</span><div><b>尚未處理</b><small>${pending.length} 項</small></div></div>
-      <div class="task-stack">${pending.length?pending.map(bookingTaskCard).join(""):`<div class="empty">目前沒有待處理任務。</div>`}</div>
-    </section>
-    <section class="task-section completed-section">
-      <div class="task-section-title"><span>✅</span><div><b>已完成／已訂</b><small>${done.length} 項</small></div></div>
-      <div class="task-stack">${done.map(bookingTaskCard).join("")}</div>
-    </section>`;
+  $("#bookingList").innerHTML=`<details class="booking-task-details">
+    <summary><span>📌 原本預約待辦</span><small>${pending.length} 待處理 · ${done.length} 已完成</small></summary>
+    <div class="booking-task-detail-body">
+      <section class="task-section">
+        <div class="task-section-title"><span>🔥</span><div><b>尚未處理</b><small>${pending.length} 項</small></div></div>
+        <div class="task-stack">${pending.length?pending.map(bookingTaskCard).join(""):`<div class="empty">目前沒有待處理任務。</div>`}</div>
+      </section>
+      <section class="task-section completed-section">
+        <div class="task-section-title"><span>✅</span><div><b>已完成／已訂</b><small>${done.length} 項</small></div></div>
+        <div class="task-stack">${done.map(bookingTaskCard).join("")}</div>
+      </section>
+    </div>
+  </details>`;
   refreshBookingAttachmentBadges().catch(err=>console.warn("Attachment badge refresh failed",err));
 }
 function renderShopping(){
-  const members=["全部",...TRIP.members];
+  const hasUnassigned=state.shopping.some(i=>!i.owner);
+  const members=["全部",...TRIP.members,...(hasUnassigned?["未指定"]:[])];
+  const byMember=m=>m==="全部"?state.shopping:(m==="未指定"?state.shopping.filter(i=>!i.owner):state.shopping.filter(i=>i.owner===m));
   $("#shoppingSummary").innerHTML=members.map(m=>{
-    const list=m==="全部"?state.shopping:state.shopping.filter(i=>i.owner===m);
+    const list=byMember(m);
     const open=list.filter(i=>!i.checked).length;
     return `<button class="member-pill ${state.shoppingMember===m?"active":""}" data-member="${esc(m)}">${esc(m)} · ${open}</button>`;
   }).join("");
-  const list=state.shoppingMember==="全部"?state.shopping:state.shopping.filter(i=>i.owner===state.shoppingMember);
-  $("#shoppingList").innerHTML=list.length?list.map(i=>`
+  if(state.shoppingMember==="未指定"&&!hasUnassigned)state.shoppingMember="全部";
+  const list=byMember(state.shoppingMember);
+  $("#shoppingList").innerHTML=list.length?list.map(i=>{
+    const meta=[i.owner||"",i.amount?`¥${Number(i.amount).toLocaleString()}`:"",i.shop?`📍 ${esc(i.shop)}`:"",i.day?esc(i.day):""].filter(Boolean).join(" · ");
+    return `
     <div class="list-item ${i.checked?"checked":""}">
       <div class="list-main">
         <div><div class="list-title">${esc(i.name)}</div>
-          <div class="list-meta">${esc(i.owner)}${i.amount?` · ¥${Number(i.amount).toLocaleString()}`:""}${i.shop?` · 📍 ${esc(i.shop)}`:""}${i.day?` · ${esc(i.day)}`:""}</div>
+          ${meta?`<div class="list-meta">${meta}</div>`:""}
         </div>
         <div class="list-actions">
           ${i.shop?`<a class="mini-btn" target="_blank" href="${mapSearch(i.shop)}">地圖</a>`:""}
@@ -3073,7 +3382,8 @@ function renderShopping(){
           <button class="mini-btn" data-delete-shopping="${i.id}">刪</button>
         </div>
       </div>
-    </div>`).join(""):`<div class="empty">目前沒有購物項目。</div>`;
+    </div>`;
+  }).join(""):`<div class="empty">目前沒有購物項目。</div>`;
 }
 function computeExpense(){
   const paid=Object.fromEntries(TRIP.members.map(m=>[m,0]));
@@ -3106,8 +3416,82 @@ function renderExpenses(){
       <div class="list-meta">¥${Number(i.amount).toLocaleString()}${rate?` · 約 NT$${formatTwd(Number(i.amount)*rate)}`:""} · ${esc(i.payer)} 付款 · 分攤：${esc((i.participants||TRIP.members).join("、"))}${i.date?` · ${esc(i.date)}`:""}</div>
       </div><button class="mini-btn" data-delete-expense="${i.id}">刪</button></div></div>`).join(""):`<div class="empty">還沒有記帳紀錄。</div>`;
 }
+// v5.3.46 — daily Firebase journal (D1–D10). Local-first, shared cloud, last-write-wins.
+function journalDateForIndex(index){return TRIP?.days?.[Number(index)]?.date||""}
+function journalRecord(date){return normalizeJournalRecord(state?.journals?.[date])}
+function saveJournalsLocal(){saveLocal("journals",state.journals||{})}
+function journalStatusText(rec){
+  if(rec.pending)return navigator.onLine?"本機已儲存・等待雲端同步":"離線已儲存・恢復網路後同步";
+  if(state.cloud)return rec.text?"✓ Firebase 共編已同步":"Firebase 共編・尚未開始";
+  return rec.text?"本機已儲存":"輸入後自動儲存";
+}
+function renderJournal({force=false}={}){
+  const tabs=$("#journalDayTabs"),area=$("#journalArea"),status=$("#journalStatus"),label=$("#journalSelectedDay");
+  if(!tabs||!area)return;
+  if(state.journalDayIndex===null||!Number.isInteger(state.journalDayIndex))state.journalDayIndex=Math.max(0,Math.min(state.dayIndex||0,(TRIP.days?.length||1)-1));
+  state.journalDayIndex=Math.max(0,Math.min(state.journalDayIndex,(TRIP.days?.length||1)-1));
+  tabs.innerHTML=(TRIP.days||[]).map((d,i)=>`<button type="button" class="journal-day-btn ${i===state.journalDayIndex?"active":""}" data-journal-day="${i}"><b>D${i+1}</b><span>${esc(shortDateForIsoDate(d.date,d.shortDate))}</span></button>`).join("");
+  const date=journalDateForIndex(state.journalDayIndex),rec=journalRecord(date);
+  if(label)label.textContent=`D${state.journalDayIndex+1} · ${shortDateForIsoDate(date)} · ${TRIP.days?.[state.journalDayIndex]?.title||"旅程"}`;
+  if(force||document.activeElement!==area)area.value=rec.text||"";
+  if(status){status.textContent=journalStatusText(rec);status.dataset.state=rec.pending?"pending":(state.cloud?"synced":"local")}
+}
+async function syncJournalDate(date){
+  if(!date||!state?.journals?.[date]||!state.journals[date].pending||!state.cloud||!navigator.onLine)return false;
+  const snapshot={...state.journals[date]};
+  try{
+    await setCloud(`journals/${date}`,{text:snapshot.text,updatedAt:snapshot.updatedAt});
+    const current=state.journals[date];
+    if(current&&current.updatedAt===snapshot.updatedAt){current.pending=false;saveJournalsLocal()}
+    if(state.tool==="journal")renderJournal();
+    return true;
+  }catch(err){
+    console.warn("Journal sync failed",date,err);
+    if(state.tool==="journal")renderJournal();
+    return false;
+  }
+}
+function queueJournalSync(date,delay=750){
+  state.journalTimers=state.journalTimers||{};
+  clearTimeout(state.journalTimers[date]);
+  state.journalTimers[date]=setTimeout(()=>syncJournalDate(date),delay);
+}
+async function syncPendingJournals(){
+  if(!state?.journals||!state.cloud||!navigator.onLine)return;
+  for(const [date,rec] of Object.entries(state.journals)){if(rec?.pending)await syncJournalDate(date)}
+}
+function mergeJournalsFromCloud(raw){
+  const remote=normalizeJournalMap(raw||{}),local=state.journals||{};
+  for(const [date,r] of Object.entries(remote)){
+    const l=normalizeJournalRecord(local[date]);
+    if(l.pending&&l.updatedAt>=r.updatedAt)continue;
+    if(!local[date]||r.updatedAt>=l.updatedAt)local[date]={text:r.text,updatedAt:r.updatedAt,pending:false};
+  }
+  state.journals=local;saveJournalsLocal();
+  if(state.tool==="journal")renderJournal();
+}
+async function pullJournalsFromCloud(){
+  if(!state.cloud||!navigator.onLine||state.journalPulling)return;
+  state.journalPulling=true;
+  try{const remote=await request(pathFor("journals"),{method:"GET"});mergeJournalsFromCloud(remote)}
+  catch(err){console.warn("Journal collaborative refresh failed",err)}
+  finally{state.journalPulling=false}
+}
+function stopJournalCollabPoll(){if(state?.journalPollTimer){clearInterval(state.journalPollTimer);state.journalPollTimer=null}}
+function startJournalCollabPoll(){
+  stopJournalCollabPoll();
+  if(!state||state.tool!=="journal")return;
+  pullJournalsFromCloud();
+  state.journalPollTimer=setInterval(()=>{if(state.tool==="journal"&&state.cloud&&navigator.onLine)pullJournalsFromCloud()},8000);
+}
+async function selectJournalDay(index){
+  const prev=journalDateForIndex(state.journalDayIndex);
+  if(prev&&state.journals?.[prev]?.pending)syncJournalDate(prev);
+  state.journalDayIndex=Math.max(0,Math.min(Number(index)||0,(TRIP.days?.length||1)-1));
+  renderJournal({force:true});
+}
 function renderNotes(){ $("#notesArea").value=state.notes||""; }
-function renderTools(){renderBookings();renderShopping();renderExpenses();renderNotes();renderImportedPlaces()}
+function renderTools(){renderBookings();renderShopping();renderExpenses();renderNotes();renderJournal();renderImportedPlaces()}
 function renderAll(){renderDays();renderSchedule();renderFood();renderTools()}
 
 function switchView(v){
@@ -3128,6 +3512,7 @@ function switchTool(t){
   $$(".tool-panel").forEach(x=>x.classList.toggle("active",x.id===`${t}Panel`));
   if(t==="expense")setTimeout(()=>ensureFxRate(),0);
   if(t==="import")setTimeout(()=>renderImportedPlaces(),0);
+  if(t==="journal"){renderJournal();startJournalCollabPoll()}else stopJournalCollabPoll();
   if(prev&&prev!==t)setTimeout(()=>maybePageSwitchDashEgg("tool"),260);
 }
 function localUpsert(key,obj){
@@ -3167,8 +3552,8 @@ function openModal(type){
   }else if(type==="shopping"){
     title.textContent="新增購物";
     fields.innerHTML=field("商品","name","text","例如：On Cloud 7")+
-      selectField("誰的","owner",TRIP.members)+field("預算（JPY）","amount","number","20000")+
-      field("店家","shop","text","例如：On Fukuoka")+field("預計哪天","day","text","例如：D2");
+      optionalSelectField("誰的","owner",TRIP.members,"未指定")+optionalField("預算（JPY）","amount","number","20000")+
+      optionalField("店家","shop","text","例如：On Fukuoka")+optionalField("預計哪天","day","text","例如：D2");
   }else{
     title.textContent="新增記帳";
     fields.innerHTML=field("名稱","name","text","例如：晚餐")+field("金額（JPY）","amount","number","4800")+
@@ -3178,14 +3563,17 @@ function openModal(type){
   modal.showModal();
 }
 function field(label,name,type,placeholder){return `<div class="field"><label>${label}</label><input required name="${name}" type="${type}" placeholder="${placeholder}"></div>`}
+function optionalField(label,name,type,placeholder){return `<div class="field"><label>${label}（選填）</label><input name="${name}" type="${type}" placeholder="${placeholder}"></div>`}
 function selectField(label,name,opts){return `<div class="field"><label>${label}</label><select name="${name}">${opts.map(o=>`<option>${esc(o)}</option>`).join("")}</select></div>`}
+function optionalSelectField(label,name,opts,emptyLabel="未指定"){return `<div class="field"><label>${label}（選填）</label><select name="${name}"><option value="">${esc(emptyLabel)}</option>${opts.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join("")}</select></div>`}
 async function handleSubmit(e){
   e.preventDefault(); const type=$("#formModal").dataset.type, fd=new FormData(e.currentTarget);
   const base={id:uid(),name:fd.get("name")?.trim()};
+  if(!base.name){toast(type==="shopping"?"請輸入商品名稱":"請輸入名稱");return}
   if(type==="food"){
     await cloudAdd("foods",{...base,location:fd.get("location")?.trim(),note:fd.get("note")?.trim(),checked:false}); renderFood();
   }else if(type==="shopping"){
-    await cloudAdd("shopping",{...base,owner:fd.get("owner"),amount:Number(fd.get("amount")||0),shop:fd.get("shop")?.trim(),day:fd.get("day")?.trim(),checked:false}); renderShopping();
+    await cloudAdd("shopping",{...base,owner:fd.get("owner")?.trim()||"",amount:Number(fd.get("amount")||0),shop:fd.get("shop")?.trim()||"",day:fd.get("day")?.trim()||"",checked:false}); renderShopping();
   }else{
     const participants=fd.getAll("participants");
     await cloudAdd("expenses",{...base,amount:Number(fd.get("amount")||0),payer:fd.get("payer"),participants,date:fd.get("date")||japanToday()});renderExpenses();
@@ -3239,6 +3627,7 @@ function bind(){
     if(buddyReaction){buddyReact(buddyReaction.dataset.buddyReact,buddyReaction);}
     const themeChoice=e.target.closest("[data-theme-choice]");if(themeChoice){setDisplayTheme(themeChoice.dataset.themeChoice);return}
     const fontChoice=e.target.closest("[data-font-choice]");if(fontChoice){setFontSize(fontChoice.dataset.fontChoice);return}
+    const journalDay=e.target.closest("[data-journal-day]");if(journalDay){await selectJournalDay(Number(journalDay.dataset.journalDay));return}
     const d=e.target.closest("[data-day]");if(d){state.dayIndex=Number(d.dataset.day);state.decisionDrafts={};renderDays();renderSchedule();return}
     const n=e.target.closest("[data-view]");if(n){switchView(n.dataset.view);return}
     const t=e.target.closest("[data-tool]");if(t){switchTool(t.dataset.tool);return}
@@ -3249,7 +3638,9 @@ function bind(){
     const decisionConfirm=e.target.closest("[data-decision-confirm]");if(decisionConfirm){await confirmDecision(decisionConfirm.dataset.decisionConfirm);return}
     const decisionClear=e.target.closest("[data-decision-clear]");if(decisionClear){await clearDecision(decisionClear.dataset.decisionClear);return}
     const decision=e.target.closest("[data-decision-id]");if(decision){stageDecision(decision.dataset.decisionId,decision.dataset.decisionOption);return}
-    const attachmentManager=e.target.closest("[data-booking-attachments]");if(attachmentManager){await openBookingAttachmentManager(attachmentManager.dataset.bookingAttachments);return}
+    const bookingCategory=e.target.closest("[data-booking-category]");if(bookingCategory){openBookingCategory(bookingCategory.dataset.bookingCategory);return}
+    const bookingFoodDelete=e.target.closest("[data-booking-food-delete]");if(bookingFoodDelete){if(confirm("刪除這個自訂餐廳分類？附件檔案不會自動刪除。"))await removeBookingFoodEntry(bookingFoodDelete.dataset.bookingFoodDelete);return}
+    const attachmentManager=e.target.closest("[data-booking-attachments]");if(attachmentManager){await openBookingAttachmentManager(attachmentManager.dataset.bookingAttachments,attachmentManager.dataset.bookingTitle||"");return}
     const attachmentOpen=e.target.closest("[data-booking-attachment-open]");if(attachmentOpen){await openBookingAttachmentPreview(attachmentOpen.dataset.bookingAttachmentOpen);return}
     const attachmentDelete=e.target.closest("[data-booking-attachment-delete]");if(attachmentDelete){if(confirm("刪除這個本機附件？")){await deleteBookingAttachment(attachmentDelete.dataset.bookingAttachmentDelete);await renderBookingAttachmentManager();await refreshBookingAttachmentBadges();toast("附件已刪除")}return}
     const task=e.target.closest("[data-task-id]");if(task){await toggleBookingTask(task.dataset.taskId);return}
@@ -3350,6 +3741,9 @@ function bind(){
   $("#foodNearbyOpen")?.addEventListener("click",()=>$("#foodNearbyModal")?.showModal());
   $("#foodNearbyClose")?.addEventListener("click",()=>$("#foodNearbyModal")?.close());
   $("#foodNearbyModal")?.addEventListener("click",e=>{if(e.target===$("#foodNearbyModal"))$("#foodNearbyModal").close()});
+  $("#bookingCategoryClose")?.addEventListener("click",()=>$("#bookingCategoryModal")?.close());
+  $("#bookingCategoryModal")?.addEventListener("click",e=>{if(e.target===$("#bookingCategoryModal"))$("#bookingCategoryModal").close()});
+  $("#bookingFoodAddForm")?.addEventListener("submit",async e=>{e.preventDefault();const input=$("#bookingFoodName");if(await addBookingFoodEntry(input?.value||"")){if(input)input.value=""}});
   $("#bookingAttachmentClose")?.addEventListener("click",()=>$("#bookingAttachmentModal")?.close());
   $("#bookingAttachmentModal")?.addEventListener("click",e=>{if(e.target===$("#bookingAttachmentModal"))$("#bookingAttachmentModal").close()});
   $("#bookingAttachmentInput")?.addEventListener("change",async e=>{try{await handleBookingAttachmentFiles(e.target.files)}finally{e.target.value=""}});
@@ -3417,6 +3811,15 @@ function bind(){
     if(e.key==="Enter"||e.key===" "){e.preventDefault();forceCloudSync()}
   });
 
+  $("#journalArea")?.addEventListener("input",e=>{
+    const date=journalDateForIndex(state.journalDayIndex);if(!date)return;
+    state.journals=state.journals||{};
+    state.journals[date]={text:e.target.value,updatedAt:Date.now(),pending:true};
+    saveJournalsLocal();
+    if($("#journalStatus"))$("#journalStatus").textContent=state.cloud&&navigator.onLine?"本機已儲存・同步中…":"離線／本機已儲存";
+    if(state.cloud&&navigator.onLine)queueJournalSync(date,700);
+  });
+
   $("#notesArea").addEventListener("input",e=>{
     state.notes=e.target.value;saveLocal("notes",state.notes);$("#noteStatus").textContent="本機已儲存";
     clearTimeout(state.noteTimer);
@@ -3473,6 +3876,8 @@ async function connectCloud({force=false}={}){
       if(state.guideNotePending?.[key])setGuideSaveStatus("已存本機・等待同步","pending");
       else setGuideSaveStatus(guideNoteText(key)?"✓ 本機資料已就緒":"已開啟自動儲存","synced");
     }
+    syncPendingJournals().catch(()=>{});
+    if(state.tool==="journal")startJournalCollabPoll();
     return true;
   }
 
@@ -3498,6 +3903,7 @@ async function connectCloud({force=false}={}){
   }catch(err){console.warn("Guide notes initial merge failed",err)}
   await syncPendingGuideNotes();
   await syncPendingImportedPlaces();
+  await syncPendingJournals();
 
   const mappings=[
     ["foods",v=>{if(v!==null){state.foods=normalizeCloud(v);saveLocal("foods",state.foods);renderFood()}}],
@@ -3505,8 +3911,10 @@ async function connectCloud({force=false}={}){
     ["expenses",v=>{if(v!==null){state.expenses=normalizeCloud(v);saveLocal("expenses",state.expenses);renderExpenses()}}],
     ["importedPlaces",v=>{if(v!==null&&!state.importedPlacesPending){state.importedPlaces=normalizeImportedPlaces(v);saveLocal("importedPlaces",state.importedPlaces);renderImportedPlaces();renderSchedule()}}],
     ["taskStatus",v=>{if(v && typeof v==="object"){state.taskStatus=v;saveLocal("taskStatus",v);renderBookings()}}],
+    ["bookingFoodEntries",v=>{if(Array.isArray(v)){state.bookingFoodEntries=normalizeBookingFoodEntries(v);saveLocal("bookingFoodEntries",state.bookingFoodEntries);renderBookings();if(state.activeBookingCategory==="food")renderBookingCategoryModal()}}],
     ["decisions",v=>{if(v && typeof v==="object"){state.decisions=v;saveLocal("decisions",v);renderSchedule()}}],
     ["guideNotes",v=>mergeGuideNotesFromCloud(v)],
+    ["journals",v=>mergeJournalsFromCloud(v)],
     ["notes",v=>{if(typeof v==="string" && document.activeElement!==$("#notesArea")){state.notes=v;saveLocal("notes",v);renderNotes()}}]
   ];
   const results=await Promise.all(mappings.map(async([k,cb])=>{
@@ -3526,6 +3934,7 @@ async function connectCloud({force=false}={}){
     if(state.guideNotePending?.[key])setGuideSaveStatus("已存本機・同步中…","saving");
     else setGuideSaveStatus(guideNoteText(key)?"✓ 雲端同步完成":"已開啟自動儲存","synced");
   }
+  if(state.tool==="journal")startJournalCollabPoll();
   return results.some(Boolean);
 }
 
@@ -3563,10 +3972,11 @@ async function resumeCloudAfterOnline(){
 }
 function enterOfflineMode(){
   if(!state)return;
-  state.cloud=false;stopCloudPollers();
+  state.cloud=false;stopCloudPollers();stopJournalCollabPoll();
   $("#syncPill")?.classList.remove("cloud");
   if($("#syncText"))$("#syncText").textContent="離線模式";
   if(activeGuideContext)setGuideSaveStatus("已存本機・等待網路同步","pending");
+  if(state.tool==="journal")renderJournal();
 }
 window.addEventListener("online",()=>resumeCloudAfterOnline());
 window.addEventListener("offline",()=>enterOfflineMode());
@@ -3706,26 +4116,32 @@ async function handleAuthorizedUser(user){
     showAuthGate();
   }
 }
-function ensureFirebaseAppReady(){
-  const cfg=window.KYUSHU_FIREBASE_CONFIG||FIREBASE_CONFIG;
-  if(!window.firebase?.initializeApp||!window.firebase?.auth) throw new Error("Firebase SDK 尚未載入");
-  if(!cfg?.apiKey||/PASTE_/i.test(cfg.apiKey)) throw new Error("Firebase 設定尚未載入");
-  if(!firebase.apps.length) firebase.initializeApp(cfg);
-  return firebase.auth();
+
+async function ensureDefaultFirebaseApp(){
+  if(!window.KYUSHU_FIREBASE_CONFIG || !window.firebase?.initializeApp){
+    throw new Error("Firebase SDK/config 尚未載入");
+  }
+  if(!firebase.apps.length){
+    firebase.initializeApp(FIREBASE_CONFIG);
+  }
+  const app=firebase.app();
+  const auth=firebase.auth(app);
+  return {app,auth};
 }
+
 async function signInGoogle(){
   setAuthStatus("正在開啟 Google 登入…");
   try{
-    const auth=ensureFirebaseAppReady();
-    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+    const {auth}=await ensureDefaultFirebaseApp();
     const provider=new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({prompt:"select_account"});
     await auth.signInWithPopup(provider);
   }catch(err){
     if(["auth/popup-blocked","auth/operation-not-supported-in-this-environment","auth/cancelled-popup-request"].includes(err.code)){
       try{
+        const {auth}=await ensureDefaultFirebaseApp();
         const provider=new firebase.auth.GoogleAuthProvider();
-        await ensureFirebaseAppReady().signInWithRedirect(provider);
+        await auth.signInWithRedirect(provider);
         return;
       }catch(redirectErr){
         setAuthStatus(`登入失敗：${redirectErr.message}`,"error");
@@ -3761,7 +4177,7 @@ async function startPrivateAuth(){
     return;
   }
   try{
-    const auth=ensureFirebaseAppReady();
+    const {auth}=await ensureDefaultFirebaseApp();
     await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
     auth.onAuthStateChanged(user=>{
       if(user){
@@ -3798,7 +4214,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5343",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5352-authfix1",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
