@@ -16,9 +16,9 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=5355" />
+  <link rel="stylesheet" href="./style.css?v=5345" />
   <title>私人旅程</title>
-  <meta name="app-version" content="5.3.55" />
+  <meta name="app-version" content="5.3.45" />
   <link rel="preload" as="image" href="./day-scene-v52-01.webp?v=520" fetchpriority="high">
 </head>
 <body>
@@ -30,7 +30,7 @@
       <p>行程內容只有已授權的 Google 帳號才能載入。</p>
       <button type="button" class="google-login-btn" id="googleLoginBtn"><span>G</span> 使用 Google 登入</button>
       <div class="auth-status" id="authStatus">正在確認登入狀態…</div>
-      <div class="auth-build" aria-label="App version">v5.3.55</div>
+      <div class="auth-build" aria-label="App version">v5.3.45</div>
     </div>
   </section>
   <div id="app" hidden>
@@ -143,7 +143,6 @@
           <button class="tool-card" data-tool="shopping"><span class="tool-emoji">🛍️</span><img class="tool-card-art buddy-only-art" src="./travel_shopping.png?v=430" alt=""><b>購物清單</b><small>採買</small></button>
           <button class="tool-card" data-tool="expense"><span class="tool-emoji">💴</span><img class="tool-card-art buddy-only-art" src="./travel_coffee.png?v=430" alt=""><b>記帳</b><small>支出・分帳</small></button>
           <button class="tool-card" data-tool="note"><span class="tool-emoji">📝</span><img class="tool-card-art buddy-only-art" src="./travel_camera.png?v=430" alt=""><b>記事</b><small>備忘・同步</small></button>
-          <button class="tool-card" data-tool="journal"><span class="tool-emoji">📔</span><img class="tool-card-art buddy-only-art" src="./buddy_chill.png?v=430" alt=""><b>旅遊日記</b><small>每日・Firebase 共編</small></button>
           <button class="tool-card" data-tool="import"><span class="tool-emoji">📍</span><img class="tool-card-art buddy-only-art" src="./travel_suitcase.png?v=430" alt=""><b>快速匯入</b><small>Maps・景點</small></button>
         </div>
 
@@ -206,18 +205,6 @@
           <textarea id="notesArea" class="notes-area" placeholder="行前提醒、臨時備註、想買的東西…"></textarea>
           <button type="button" class="primary-btn" id="firebaseTestBtn" style="margin-top:10px">測試 Firebase 連線</button>
           <div id="noteStatus" class="save-status">輸入後自動儲存</div>
-        </div>
-
-        <div id="journalPanel" class="tool-panel">
-          <div class="panel-heading buddy-panel-head">
-            <div><span class="eyebrow">DAILY JOURNAL</span><h3>旅遊日記</h3></div>
-            <img class="panel-character-art buddy-only-art" src="./travel_camera.png?v=430" alt="">
-          </div>
-          <p class="privacy-note">D1～D10 每天各一頁。文字先存本機，再同步到 Firebase；兩台已登入裝置開著日記頁時會自動拉取彼此更新。若同時修改同一天，以最後一次儲存版本為準。</p>
-          <div id="journalDayTabs" class="journal-day-tabs" aria-label="選擇日記日期"></div>
-          <div id="journalSelectedDay" class="journal-selected-day"></div>
-          <textarea id="journalArea" class="notes-area journal-area" placeholder="今天最好玩的事、吃了什麼、照片回憶、想記住的小事…"></textarea>
-          <div id="journalStatus" class="save-status">輸入後自動儲存・Firebase 共編</div>
         </div>
 
         <div id="importPanel" class="tool-panel">
@@ -466,6 +453,6 @@ https://www.google.com/maps/place/...
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=430"></script>
-  <script defer src="./app.js?v=5355"></script>
+  <script defer src="./app.js?v=5345"></script>
 </body>
 </html>
