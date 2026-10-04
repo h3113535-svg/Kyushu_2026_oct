@@ -1,4 +1,4 @@
-/* Kyushu 2026 Oct PWA · v5.3.52-r2 Image Alpha Fix
+/* Kyushu 2026 Oct PWA · v5.3.52-r3 Targeted Image Cleanup
  * Goals:
  * 1) static images are downloaded once and reused across app versions;
  * 2) app shell updates remain reliable;
@@ -6,7 +6,7 @@
  * 4) caches belonging to other GitHub Pages repos are never touched.
  */
 const CACHE_PREFIX = "kyushu-oct-";
-const SHELL_CACHE = "kyushu-oct-shell-v5.3.52-r2";
+const SHELL_CACHE = "kyushu-oct-shell-v5.3.52-r3";
 const ASSET_CACHE = "kyushu-oct-assets-v2";
 const RUNTIME_CACHE = "kyushu-oct-runtime-v1";
 const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|22|23)$/;
@@ -14,8 +14,8 @@ const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|2
 // Small files that are expected to change when app code changes.
 const SHELL = [
   "./index.html",
-  "./app.js?v=5352-r2",
-  "./style.css?v=5352-r2",
+  "./app.js?v=5352-r3",
+  "./style.css?v=5352-r3",
   "./manifest.json",
   "./firebase-config.js?v=5352-authfix1"
 ];
@@ -32,7 +32,7 @@ const ASSETS = [
   "./buddy_eat.png?v=430",
   "./buddy_hero.png?v=430",
   "./buddy_success.png?v=430",
-  "./day-scene-v52-01-alpha.png?v=552r2",
+  "./day-scene-v52-01-clean.png?v=552r3",
   "./day-scene-v52-02.webp?v=520",
   "./day-scene-v52-03.webp?v=550",
   "./day-scene-v52-04.webp?v=520",
@@ -41,13 +41,13 @@ const ASSETS = [
   "./day-scene-v52-07.webp?v=520",
   "./day-scene-v52-08.webp?v=520",
   "./day-scene-v52-09.webp?v=550",
-  "./day-scene-v52-10-alpha.png?v=552r2",
+  "./day-scene-v52-10-clean.png?v=552r3",
   "./duck_gang.png?v=5311",
   "./egg-cry-v539.png?v=539",
   "./egg-home-sleep-v539.png?v=539",
   "./egg-sendoff-v539.png?v=539",
   "./hero-cover-v51-alpha.png?v=552r2",
-  "./hotel-return-duo-alpha.png?v=552r2",
+  "./hotel-return-duo-clean.png?v=552r3",
   "./mini-purin-clap.webp",
   "./mini-purin-hero.webp",
   "./mini-purin-lie.webp",

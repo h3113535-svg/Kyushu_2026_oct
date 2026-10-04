@@ -3609,6 +3609,6 @@ html[data-theme="buddy"] .booking-category-card{background:#fffdf8;border-color:
 
 /* v5.3.52-r2 · targeted alpha-compositing guard: only the four reported assets */
 html[data-theme="buddy"] .buddy-hero-art{filter:none!important}
-html[data-theme="buddy"] #daySceneImage[src*="day-scene-v52-01-alpha.png"],
-html[data-theme="buddy"] #daySceneImage[src*="day-scene-v52-10-alpha.png"]{filter:none!important}
-html[data-theme="buddy"] .hotel-return-art>img[src*="hotel-return-duo-alpha.png"]{filter:none!important}
+html[data-theme="buddy"] #daySceneImage[src*="day-scene-v52-01-clean.png"],
+html[data-theme="buddy"] #daySceneImage[src*="day-scene-v52-10-clean.png"]{filter:none!important}
+html[data-theme="buddy"] .hotel-return-art>img[src*="hotel-return-duo-clean.png"]{filter:none!important}
