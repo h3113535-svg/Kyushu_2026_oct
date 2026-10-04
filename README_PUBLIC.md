@@ -1,3 +1,10 @@
+## v5.3.52-r2 — Targeted Image Alpha Fix
+- Repairs only four reported visual assets: hero, D1 scene, D10 scene, and hotel-return duo.
+- No AI redraw/re-generation is used. Decoded visible pixels and alpha values are preserved exactly; only fully transparent hidden RGB is cleared, then assets are stored as PNG.
+- Disables GPU drop-shadow compositing only for the affected hero/D1/D10/hotel image slots.
+- Weather art and every other image asset are untouched.
+- Firebase/private itinerary content is unchanged.
+
 
 ## v5.3.30 ImportedPlaces Boot Fix
 - Fixes a deterministic startup crash introduced in v5.3.26: `normalizeImportedPlaces` was deleted while `createState()` and cloud sync still called it.

@@ -16,10 +16,10 @@
       document.documentElement.dataset.fontSize=localStorage.getItem("kyushu-oct-2026:fontSize")||"standard";
     }catch(e){}
   </script>
-  <link rel="stylesheet" href="./style.css?v=5352" />
+  <link rel="stylesheet" href="./style.css?v=5352-r2" />
   <title>私人旅程</title>
   <meta name="app-version" content="5.3.52" />
-  <link rel="preload" as="image" href="./day-scene-v52-01.webp?v=520" fetchpriority="high">
+  <link rel="preload" as="image" href="./day-scene-v52-01-alpha.png?v=552r2" fetchpriority="high">
 </head>
 <body>
   <section id="authGate" class="auth-gate">
@@ -30,7 +30,7 @@
       <p>行程內容只有已授權的 Google 帳號才能載入。</p>
       <button type="button" class="google-login-btn" id="googleLoginBtn"><span>G</span> 使用 Google 登入</button>
       <div class="auth-status" id="authStatus">正在確認登入狀態…</div>
-      <div class="auth-build" aria-label="App version">v5.3.52</div>
+      <div class="auth-build" aria-label="App version">v5.3.52-r2</div>
     </div>
   </section>
   <div id="app" hidden>
@@ -47,7 +47,7 @@
           <div class="hero-submeta buddy-only-art" aria-label="旅程摘要"><span>10天9夜</span><i></i><span>旅伴手帳</span></div>
         </div>
         <button type="button" class="buddy-hero-art buddy-only-art" id="buddyHeroEgg" aria-label="旅伴彩蛋">
-          <img src="./hero-cover-v51.webp?v=510" alt="布丁狗與烏薩奇旅行首頁圖" />
+          <img src="./hero-cover-v51-alpha.png?v=552r2" alt="布丁狗與烏薩奇旅行首頁圖" />
         </button>
         <div class="buddy-hero-tapcue buddy-only-art" aria-hidden="true">↔ 左右滑換首頁圖・長按有彩蛋</div>
       </div>
@@ -88,7 +88,7 @@
           <a id="dayRouteLink" class="day-route-link" target="_blank" rel="noopener" hidden>🚗 今日自駕路線 ↗</a>
         </section>
         <button type="button" id="daySceneCard" class="day-scene-card buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="day" aria-label="今日旅伴主題插畫">
-          <img id="daySceneImage" src="./day-scene-v52-01.webp?v=520" alt="布丁狗與烏薩奇今日旅行">
+          <img id="daySceneImage" src="./day-scene-v52-01-alpha.png?v=552r2" alt="布丁狗與烏薩奇今日旅行">
           <span class="day-scene-progress"><i><em id="daySceneProgressBar"></em></i></span>
         </button>
         <section id="dayBrief" class="day-brief"></section>
@@ -483,6 +483,6 @@ https://www.google.com/maps/place/...
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=5352-authfix1"></script>
-  <script defer src="./app.js?v=5352-authfix2"></script>
+  <script defer src="./app.js?v=5352-r2"></script>
 </body>
 </html>

@@ -1,0 +1,50 @@
+{
+  "hero-cover-v51.webp": {
+    "dst": "hero-cover-v51-alpha.png",
+    "size": [
+      1200,
+      779
+    ],
+    "transparent_pixels": 356155,
+    "visible_pixels_equal": true,
+    "alpha_equal": true,
+    "src_sha256": "a56a0664496788fca8ad3b3f23592a7d3d82d45f4855d3e50d58c24355e023cb",
+    "dst_sha256": "2c26005571a5aa9398b12955c45a7b97daff16af3a6e4d14b583028da4b05928"
+  },
+  "day-scene-v52-01.webp": {
+    "dst": "day-scene-v52-01-alpha.png",
+    "size": [
+      1200,
+      760
+    ],
+    "transparent_pixels": 469446,
+    "visible_pixels_equal": true,
+    "alpha_equal": true,
+    "src_sha256": "51cbab058b3094fa20cbedb20981aeeb217569f587462f2b3e965a98a95a8084",
+    "dst_sha256": "9a0ac41a34142c4239e5199a1202a2385ea5e16464e0e278e2e9e0110939db97"
+  },
+  "day-scene-v52-10.webp": {
+    "dst": "day-scene-v52-10-alpha.png",
+    "size": [
+      1200,
+      760
+    ],
+    "transparent_pixels": 458033,
+    "visible_pixels_equal": true,
+    "alpha_equal": true,
+    "src_sha256": "6cfeb10091596eca04325b5276c075dd5a04002bca59d863341d06fc70b55a23",
+    "dst_sha256": "b59bc367de1e9409785e75ddf1b7dbc1a50edbbcac1461d5d689db0862603915"
+  },
+  "hotel-return-duo.webp": {
+    "dst": "hotel-return-duo-alpha.png",
+    "size": [
+      730,
+      520
+    ],
+    "transparent_pixels": 146805,
+    "visible_pixels_equal": true,
+    "alpha_equal": true,
+    "src_sha256": "b68910f0cddf7a018fc58b74e1e0f3f235d3803d4c1889d7e64680bc92f59d80",
+    "dst_sha256": "c9b67dfb488d20384a5ae986bc5c9504a81f9cad46e36d5929c74be8dc603892"
+  }
+}

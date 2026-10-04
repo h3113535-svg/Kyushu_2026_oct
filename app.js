@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.52 Stable Booking Attachment IDs */
+/* Private travel PWA · Firebase Auth gated content · v5.3.52-r2 Image Alpha Fix */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -41,9 +41,9 @@ let cloudReconnectInFlight = false;
 const GUIDE_DEVICE_ID_KEY = "kyushu-private:guide-device-id";
 
 const BUDDY_FAST_ASSETS=[
-  "./day-scene-v52-01.webp?v=520","./day-scene-v52-02.webp?v=520","./day-scene-v52-03.webp?v=550","./day-scene-v52-04.webp?v=520","./day-scene-v52-05.webp?v=520",
-  "./day-scene-v52-06.webp?v=520","./day-scene-v52-07.webp?v=520","./day-scene-v52-08.webp?v=520","./day-scene-v52-09.webp?v=550","./day-scene-v52-10.webp?v=520",
-  "./weather-rain-usagi-v47.webp?v=470","./weather-sunny-usagi-v536.webp?v=536","./weather-teruteru-usagi-v536.webp?v=536","./weather-cloudy-usagi-v536.webp?v=536","./weather-thunder-usagi-v536.webp?v=536","./weather-snow-usagi-v536.webp?v=536","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo.webp?v=460",
+  "./day-scene-v52-01-alpha.png?v=552r2","./day-scene-v52-02.webp?v=520","./day-scene-v52-03.webp?v=550","./day-scene-v52-04.webp?v=520","./day-scene-v52-05.webp?v=520",
+  "./day-scene-v52-06.webp?v=520","./day-scene-v52-07.webp?v=520","./day-scene-v52-08.webp?v=520","./day-scene-v52-09.webp?v=550","./day-scene-v52-10-alpha.png?v=552r2",
+  "./weather-rain-usagi-v47.webp?v=470","./weather-sunny-usagi-v536.webp?v=536","./weather-teruteru-usagi-v536.webp?v=536","./weather-cloudy-usagi-v536.webp?v=536","./weather-thunder-usagi-v536.webp?v=536","./weather-snow-usagi-v536.webp?v=536","./booking-check-purin.webp?v=460","./booking-dash-usagi.webp?v=460","./hotel-return-duo-alpha.png?v=552r2",
   "./egg-sendoff-v539.png?v=539","./egg-cry-v539.png?v=539","./egg-home-sleep-v539.png?v=539",
   "./duck_gang.png?v=5311","./seal_gang.png?v=5311",
   "./ui-cloud.webp?v=440","./ui-coffee.webp?v=440","./ui-suitcase.webp?v=440","./ui-purin-tip.webp?v=440"
@@ -2138,8 +2138,10 @@ function buddyPeek(kind="purin"){
 }
 function dailySceneAsset(index){
   // D3 and D9 intentionally swap illustrations without modifying the underlying asset files.
+  if(index===0) return "./day-scene-v52-01-alpha.png?v=552r2";
   if(index===2) return "./day-scene-v52-09.webp?v=550";
   if(index===8) return "./day-scene-v52-03.webp?v=550";
+  if(index===9) return "./day-scene-v52-10-alpha.png?v=552r2";
   return `./day-scene-v52-${String(index+1).padStart(2,"0")}.webp?v=520`;
 }
 function renderDailyScene(){
@@ -2474,7 +2476,7 @@ function renderHotelReturnCard(){
   const label=lastDay?"返台前據點":"今晚住這裡";
   const help=lastDay?"取行李或需要回住宿時，從這裡直接導航。":"一天走完要回飯店時，不用再往上找地址。";
   box.hidden=false;
-  box.innerHTML=`<div class="hotel-return-copy"><span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ Google Maps 查看飯店</a></div><div class="hotel-return-art buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="hotel"><img src="./hotel-return-duo.webp?v=460" alt="布丁狗與烏薩奇回飯店休息"></div>`;
+  box.innerHTML=`<div class="hotel-return-copy"><span class="eyebrow">${label}</span><h3>${esc(cleanHotelTitle(hotel.title))}</h3><p>${help}</p><a class="hotel-nav-btn" target="_blank" rel="noopener" href="${mapDirections(hotel.nav||hotel.title)}">↗ Google Maps 查看飯店</a></div><div class="hotel-return-art buddy-only-art buddy-reactable" data-buddy-react="duo" data-buddy-context="hotel"><img src="./hotel-return-duo-alpha.png?v=552r2" alt="布丁狗與烏薩奇回飯店休息"></div>`;
 }
 
 
@@ -3656,7 +3658,7 @@ function bind(){
   if(heroEgg){
     const heroImg=heroEgg.querySelector("img");
     const heroGallery=[
-      "./hero-cover-v51.webp?v=510",
+      "./hero-cover-v51-alpha.png?v=552r2",
       "./buddy_hero.png?v=430",
       "./buddy_celebrate.png?v=430",
       "./buddy_chill.png?v=430",
@@ -4214,7 +4216,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5352-authfix2",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5352-r2",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
