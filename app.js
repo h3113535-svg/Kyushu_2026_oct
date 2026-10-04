@@ -3706,21 +3706,26 @@ async function handleAuthorizedUser(user){
     showAuthGate();
   }
 }
+function ensureFirebaseAppReady(){
+  const cfg=window.KYUSHU_FIREBASE_CONFIG||FIREBASE_CONFIG;
+  if(!window.firebase?.initializeApp||!window.firebase?.auth) throw new Error("Firebase SDK 尚未載入");
+  if(!cfg?.apiKey||/PASTE_/i.test(cfg.apiKey)) throw new Error("Firebase 設定尚未載入");
+  if(!firebase.apps.length) firebase.initializeApp(cfg);
+  return firebase.auth();
+}
 async function signInGoogle(){
-  if(!window.firebase?.auth){
-    setAuthStatus("Firebase 登入元件尚未載入，請確認網路連線。","error");
-    return;
-  }
   setAuthStatus("正在開啟 Google 登入…");
   try{
+    const auth=ensureFirebaseAppReady();
+    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
     const provider=new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({prompt:"select_account"});
-    await firebase.auth().signInWithPopup(provider);
+    await auth.signInWithPopup(provider);
   }catch(err){
     if(["auth/popup-blocked","auth/operation-not-supported-in-this-environment","auth/cancelled-popup-request"].includes(err.code)){
       try{
         const provider=new firebase.auth.GoogleAuthProvider();
-        await firebase.auth().signInWithRedirect(provider);
+        await ensureFirebaseAppReady().signInWithRedirect(provider);
         return;
       }catch(redirectErr){
         setAuthStatus(`登入失敗：${redirectErr.message}`,"error");
@@ -3756,9 +3761,9 @@ async function startPrivateAuth(){
     return;
   }
   try{
-    if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-    await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-    firebase.auth().onAuthStateChanged(user=>{
+    const auth=ensureFirebaseAppReady();
+    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+    auth.onAuthStateChanged(user=>{
       if(user){
         void handleAuthorizedUser(user).catch(err=>{
           console.error("Authorized-user boot failed",err);
