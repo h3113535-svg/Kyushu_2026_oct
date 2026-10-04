@@ -30,7 +30,7 @@
       <p>行程內容只有已授權的 Google 帳號才能載入。</p>
       <button type="button" class="google-login-btn" id="googleLoginBtn"><span>G</span> 使用 Google 登入</button>
       <div class="auth-status" id="authStatus">正在確認登入狀態…</div>
-      <div class="auth-build" aria-label="App version">v5.3.52-r5</div>
+      <div class="auth-build" aria-label="App version">v5.3.52-r6</div>
     </div>
   </section>
   <div id="app" hidden>
@@ -47,7 +47,7 @@
           <div class="hero-submeta buddy-only-art" aria-label="旅程摘要"><span>10天9夜</span><i></i><span>旅伴手帳</span></div>
         </div>
         <button type="button" class="buddy-hero-art buddy-only-art" id="buddyHeroEgg" aria-label="旅伴彩蛋">
-          <img src="./hero-cover-v51-alpha.png?v=552r5" alt="布丁狗與烏薩奇旅行首頁圖" />
+          <img src="./hero-cover-v51-alpha.png?v=552r6" alt="布丁狗與烏薩奇旅行首頁圖" />
         </button>
         <div class="buddy-hero-tapcue buddy-only-art" aria-hidden="true">↔ 左右滑換首頁圖・長按有彩蛋</div>
       </div>
@@ -311,7 +311,7 @@ https://www.google.com/maps/place/...
         <div class="setting-label"><b>私人帳號</b><small id="accountEmail">—</small></div>
         <button type="button" class="logout-btn" id="logoutBtn">登出這台裝置</button>
       </section>
-      <section class="setting-section sync-setting"><div class="setting-label"><b>資料同步</b><small>省流量模式：不做背景輪詢；點狀態可手動同步</small></div><div class="sync-status" id="syncPill" role="button" tabindex="0" title="點一下手動同步"><span class="dot"></span><span id="syncText">本機模式</span></div></section>
+      <section class="setting-section sync-setting"><div class="setting-label"><b>資料同步</b><small>可手動重新抓取最新行程，並同步記事、清單與共同資料。</small></div><div class="sync-status" id="syncPill" role="button" tabindex="0" title="點一下手動同步"><span class="dot"></span><span id="syncText">本機模式</span></div><button type="button" class="mini-btn" id="manualSyncBtn">↻ 重新整理並同步</button></section>
       <button type="button" class="reset-display-btn" id="displayResetBtn">恢復預設顯示</button>
     </div>
   </dialog>
@@ -483,6 +483,6 @@ https://www.google.com/maps/place/...
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script defer src="./firebase-config.js?v=5352-authfix1"></script>
-  <script defer src="./app.js?v=5352-r5"></script>
+  <script defer src="./app.js?v=5352-r6"></script>
 </body>
 </html>

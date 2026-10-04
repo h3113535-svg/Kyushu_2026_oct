@@ -3658,7 +3658,7 @@ function bind(){
   if(heroEgg){
     const heroImg=heroEgg.querySelector("img");
     const heroGallery=[
-      "./hero-cover-v51-alpha.png?v=552r5",
+      "./hero-cover-v51-alpha.png?v=552r6",
       "./buddy_hero.png?v=430",
       "./buddy_celebrate.png?v=430",
       "./buddy_chill.png?v=430",
@@ -3802,13 +3802,39 @@ function bind(){
     }
   });
   const syncPill=$("#syncPill");
+  const manualSyncBtn=$("#manualSyncBtn");
   const forceCloudSync=async()=>{
     if(!navigator.onLine){toast("目前離線，資料已保存在本機");return}
     if($("#syncText"))$("#syncText").textContent="手動同步中…";
     const ok=await connectCloud({force:true});
     toast(ok?"雲端同步完成":"同步失敗，繼續使用本機資料");
   };
+  const forceFullRefreshSync=async()=>{
+    if(!navigator.onLine){toast("目前離線，無法重新整理雲端資料");return}
+    if(manualSyncBtn){manualSyncBtn.disabled=true;manualSyncBtn.textContent="↻ 重新整理中…"}
+    if($("#syncText"))$("#syncText").textContent="重新整理最新行程…";
+    try{
+      const ready=await ensureFirebaseSessionForReconnect();
+      if(!ready){
+        if($("#syncText"))$("#syncText").textContent="需重新登入才能同步";
+        toast("需重新登入才能同步");
+        return;
+      }
+      const user=currentAuthUser||firebase.auth().currentUser;
+      const tripChanged=await refreshPrivateTripCacheInBackground(user);
+      const cloudOk=await connectCloud({force:true});
+      if($("#syncText"))$("#syncText").textContent=cloudOk?"雲端已同步・最新行程":"行程已重新整理・部分同步失敗";
+      toast(tripChanged?"行程已更新並同步完成":cloudOk?"已重新整理並同步完成":"行程已重新整理；部分雲端資料同步失敗");
+    }catch(err){
+      console.error("Manual full refresh failed",err);
+      if($("#syncText"))$("#syncText").textContent="重新整理失敗";
+      toast(`重新整理失敗：${err.message||err}`);
+    }finally{
+      if(manualSyncBtn){manualSyncBtn.disabled=false;manualSyncBtn.textContent="↻ 重新整理並同步"}
+    }
+  };
   syncPill?.addEventListener("click",forceCloudSync);
+  manualSyncBtn?.addEventListener("click",forceFullRefreshSync);
   syncPill?.addEventListener("keydown",e=>{
     if(e.key==="Enter"||e.key===" "){e.preventDefault();forceCloudSync()}
   });
@@ -4216,7 +4242,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5352-r5",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5352-r6",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
