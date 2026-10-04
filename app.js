@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.52-r3 Targeted Image Cleanup */
+/* Private travel PWA · Firebase Auth gated content · v5.3.52-r5 Hero Handle + D4 Title */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -3658,7 +3658,7 @@ function bind(){
   if(heroEgg){
     const heroImg=heroEgg.querySelector("img");
     const heroGallery=[
-      "./hero-cover-v51-alpha.png?v=552r2",
+      "./hero-cover-v51-alpha.png?v=552r5",
       "./buddy_hero.png?v=430",
       "./buddy_celebrate.png?v=430",
       "./buddy_chill.png?v=430",
@@ -4216,7 +4216,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5352-r3",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5352-r5",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
