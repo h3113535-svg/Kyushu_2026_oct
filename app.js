@@ -3658,7 +3658,7 @@ function bind(){
   if(heroEgg){
     const heroImg=heroEgg.querySelector("img");
     const heroGallery=[
-      "./hero-cover-v51-alpha.png?v=552r6",
+      "./hero-cover-v51-alpha.png?v=552r7",
       "./buddy_hero.png?v=430",
       "./buddy_celebrate.png?v=430",
       "./buddy_chill.png?v=430",

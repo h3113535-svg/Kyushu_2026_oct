@@ -1,10 +1,11 @@
-# Kyushu_2026_oct v5.3.52-r6
+# Kyushu_2026_oct v5.3.52-r7
 
-Changes in this release:
-- Home Hero: stronger cleanup of the remaining white matte inside the two suitcase handle openings.
-- Aa settings: adds an explicit "重新整理並同步" button.
-  - Fetches latest Firebase /content itinerary first.
-  - Then forces a one-shot sync of shared cloud data.
-- D4 title cleanup is delivered in the Firebase Content JSON: "由布院｜09:17 由布院之森".
+Targeted hero luggage-handle cleanup only.
 
-No weather-art changes. No D1/D10/hotel image changes from r5.
+Changes:
+- Darkened the telescoping suitcase handle bars so they no longer read as white-background residue.
+- Preserved the transparent openings around both handles.
+- Bumped only the hero asset cache token to 552r7.
+- Existing r6 manual refresh/sync feature and Firebase itinerary content remain unchanged.
+
+No Firebase content update is required for r7.

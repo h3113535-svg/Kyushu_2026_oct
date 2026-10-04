@@ -6,7 +6,7 @@
  * 4) caches belonging to other GitHub Pages repos are never touched.
  */
 const CACHE_PREFIX = "kyushu-oct-";
-const SHELL_CACHE = "kyushu-oct-shell-v5.3.52-r6";
+const SHELL_CACHE = "kyushu-oct-shell-v5.3.52-r7";
 const ASSET_CACHE = "kyushu-oct-assets-v2";
 const RUNTIME_CACHE = "kyushu-oct-runtime-v1";
 const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|22|23)$/;
@@ -46,7 +46,7 @@ const ASSETS = [
   "./egg-cry-v539.png?v=539",
   "./egg-home-sleep-v539.png?v=539",
   "./egg-sendoff-v539.png?v=539",
-  "./hero-cover-v51-alpha.png?v=552r6",
+  "./hero-cover-v51-alpha.png?v=552r7",
   "./hotel-return-duo-clean.png?v=552r3",
   "./mini-purin-clap.webp",
   "./mini-purin-hero.webp",
