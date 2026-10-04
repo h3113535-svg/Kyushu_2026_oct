@@ -1,4 +1,4 @@
-/* Kyushu 2026 Oct PWA · v5.3.53 Stable Image Decode
+/* Kyushu 2026 Oct PWA · v5.3.54 Reliable Update Bootstrap
  * Goals:
  * 1) static images are downloaded once and reused across app versions;
  * 2) app shell updates remain reliable;
@@ -6,7 +6,7 @@
  * 4) caches belonging to other GitHub Pages repos are never touched.
  */
 const CACHE_PREFIX = "kyushu-oct-";
-const SHELL_CACHE = "kyushu-oct-shell-v5.3.53";
+const SHELL_CACHE = "kyushu-oct-shell-v5.3.54";
 const ASSET_CACHE = "kyushu-oct-assets-v2";
 const RUNTIME_CACHE = "kyushu-oct-runtime-v1";
 const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|22|23)$/;
@@ -14,9 +14,9 @@ const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|2
 // Small files that are expected to change when app code changes.
 const SHELL = [
   "./index.html",
-  "./app.js?v=5353",
-  "./style.css?v=5353",
-  "./manifest.json",
+  "./app.js?v=5354",
+  "./style.css?v=5354",
+  "./manifest.json?v=5354",
   "./firebase-config.js?v=430"
 ];
 
@@ -118,7 +118,8 @@ async function fetchAssetFresh(path) {
 
 self.addEventListener("install", event => {
   event.waitUntil((async () => {
-    // Shell is intentionally refreshed every release; it is small compared with image assets.
+    // Updates must never fail because a decorative image is temporarily unavailable.
+    // Only the tiny core shell is required for installation.
     const shellCache = await caches.open(SHELL_CACHE);
     for (const path of SHELL) {
       const request = new Request(path, { cache: "reload" });
@@ -126,19 +127,6 @@ self.addEventListener("install", event => {
       if (!response.ok) throw new Error(`Shell preload failed: ${path} (${response.status})`);
       await shellCache.put(request, response.clone());
     }
-
-    // Migrate cached images from the old versioned cache without re-downloading them.
-    let cursor = 0;
-    const workers = Array.from({ length: Math.min(4, ASSETS.length) }, async () => {
-      while (cursor < ASSETS.length) {
-        const path = ASSETS[cursor++];
-        await fetchAssetFresh(path);
-      }
-    });
-    await Promise.all(workers);
-
-    // Never leave a new shell waiting behind an older Chrome/PWA worker.
-    // Image assets remain in the shared asset cache, so this does not redownload them.
     await self.skipWaiting();
   })());
 });
@@ -171,14 +159,15 @@ self.addEventListener("message", event => {
   if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
-async function shellCacheFirst(request) {
+async function shellNetworkFirst(request) {
   const cache = await caches.open(SHELL_CACHE);
-  const hit = await cache.match(request, { ignoreSearch: false });
-  if (hit) return hit;
   try {
     const response = await fetchFresh(request);
-    return cacheResponse(SHELL_CACHE, request, response);
+    if (response && response.ok) await cache.put(request, response.clone());
+    return response;
   } catch (error) {
+    const exact = await cache.match(request, { ignoreSearch: false });
+    if (exact) return exact;
     const fallback = await cache.match(request, { ignoreSearch: true });
     if (fallback) return fallback;
     throw error;
@@ -237,13 +226,14 @@ self.addEventListener("fetch", event => {
   if (event.request.mode === "navigate") {
     event.respondWith((async () => {
       const shellCache = await caches.open(SHELL_CACHE);
-      const cached = await shellCache.match("./index.html", { ignoreSearch: true });
-      if (cached) return cached;
       try {
+        // Network first: every normal app launch gets a chance to discover the newest HTML.
         const response = await fetchFresh(event.request);
-        if (response && response.ok) shellCache.put("./index.html", response.clone()).catch(() => {});
+        if (response && response.ok) await shellCache.put("./index.html", response.clone());
         return response;
       } catch {
+        const cached = await shellCache.match("./index.html", { ignoreSearch: true });
+        if (cached) return cached;
         return new Response("Offline", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
       }
     })());
@@ -251,7 +241,7 @@ self.addEventListener("fetch", event => {
   }
 
   if (isShellRequest(url)) {
-    event.respondWith(shellCacheFirst(event.request));
+    event.respondWith(shellNetworkFirst(event.request));
     return;
   }
 
