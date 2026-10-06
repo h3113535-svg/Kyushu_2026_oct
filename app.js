@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.52-r11 In-app PDF preview + stable trip content */
+/* Private travel PWA · Firebase Auth gated content · v5.3.52-r11.2 In-app PDF preview + link dedup cache-bust */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -2294,12 +2294,45 @@ function renderEventExtras(e){
     e.duration?`<span class="info-chip soft">⏱ ${esc(e.duration)}</span>`:""
   ].filter(Boolean).join("");
   const tips=(e.tips||[]).map(t=>`<li>${esc(t)}</li>`).join("");
-  const links=(e.links||[]).map(l=>`<a class="mini-action-link" target="_blank" rel="noopener" href="${esc(l.url)}">↗ ${esc(l.label)}</a>`).join("");
-  const stops=(Array.isArray(e.stops)?e.stops:[]).filter(x=>x&&x.name).map(stop=>`
+
+  // When an explicit event link is the same place as a listed stop, use that
+  // exact URL for the row MAP button and suppress the duplicate link chip.
+  const eventLinks=(Array.isArray(e.links)?e.links:[]).filter(l=>l&&l.url);
+  const stopItems=(Array.isArray(e.stops)?e.stops:[]).filter(x=>x&&x.name);
+  const normalizePlaceLabel=(value)=>String(value||"")
+    .toLowerCase()
+    .replace(/[（(][^）)]*[）)]/g,"")
+    .replace(/[\s・｜|／/]+/g,"")
+    .trim();
+  const matchingLinkForStop=(stop)=>{
+    const stopLabel=normalizePlaceLabel(stop.name);
+    if(!stopLabel) return null;
+    return eventLinks.find(link=>{
+      const linkLabel=normalizePlaceLabel(link.label);
+      if(!linkLabel) return false;
+      return linkLabel===stopLabel ||
+        (linkLabel.length>=6 && stopLabel.includes(linkLabel)) ||
+        (stopLabel.length>=6 && linkLabel.includes(stopLabel));
+    }) || null;
+  };
+  const matchedLinks=new Set();
+
+  const stops=stopItems.map(stop=>{
+    const matched=matchingLinkForStop(stop);
+    if(matched) matchedLinks.add(matched);
+    const href=matched?.url || mapSearch(stop.nav||stop.name);
+    return `
     <div class="event-stop-row">
       <div class="event-stop-copy"><b>${esc(stop.name)}</b>${stop.note?`<small>${esc(stop.note)}</small>`:""}</div>
-      <a class="event-stop-map" target="_blank" rel="noopener" href="${mapSearch(stop.nav||stop.name)}">↗ MAP</a>
-    </div>`).join("");
+      <a class="event-stop-map" target="_blank" rel="noopener" href="${esc(href)}">↗ MAP</a>
+    </div>`;
+  }).join("");
+
+  const links=eventLinks
+    .filter(link=>!matchedLinks.has(link))
+    .map(l=>`<a class="mini-action-link" target="_blank" rel="noopener" href="${esc(l.url)}">↗ ${esc(l.label)}</a>`)
+    .join("");
+
   return `${chips?`<div class="event-info-row">${chips}</div>`:""}${tips?`<div class="event-tips"><b>提醒</b><ul>${tips}</ul></div>`:""}${e.backup?`<div class="backup-box"><b>備案</b><span>${esc(e.backup)}</span></div>`:""}${stops?`<div class="event-stop-list"><div class="event-stop-head">店家／停靠點</div>${stops}</div>`:""}${links?`<div class="event-link-row">${links}</div>`:""}`;
 }
 
@@ -4264,7 +4297,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5352-r11",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5352-r11.2",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;

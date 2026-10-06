@@ -1,8 +1,10 @@
-# Kyushu_2026_oct v5.3.52-r11
+# Kyushu_2026_oct v5.3.52-r11.2
 
 Changes:
-- Booking PDF attachments now try to open inside the app first using an embedded PDF object with iframe compatibility fallback.
-- PDF blobs restored from IndexedDB are normalized to `application/pdf` when needed.
-- “Open new page” remains only as a fallback (`新分頁備用`).
-- Existing r10 features and local booking attachments are preserved.
-- Firebase itinerary content is supplied separately because D3 Hakata shopping flow was reorganized.
+
+- Fixes deployment cache-busting: index now requests app/style with r11.2 query keys and app registers sw.js with r11.2, so installed PWA/browser cannot stay on the old r11 renderer after upload.
+- Booking PDF attachments keep the r11 in-app PDF preview behavior.
+- Event cards no longer repeat the same place as both a store/stop row and an extra link chip below.
+- When a duplicated explicit Google Maps link exists, the row-level `MAP` button now uses that exact URL.
+- Truly extra links that are not represented by a stop row still render below the card.
+- Firebase itinerary content is unchanged; continue using the current r11.4 content JSON.
