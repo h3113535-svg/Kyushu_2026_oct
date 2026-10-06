@@ -1,4 +1,4 @@
-/* Kyushu 2026 Oct PWA · v5.3.52-r10 Hero handle cleanup
+/* Kyushu 2026 Oct PWA · v5.3.52-r11 In-app PDF preview
  * Goals:
  * 1) static images are downloaded once and reused across app versions;
  * 2) app shell updates remain reliable;
@@ -6,7 +6,7 @@
  * 4) caches belonging to other GitHub Pages repos are never touched.
  */
 const CACHE_PREFIX = "kyushu-oct-";
-const SHELL_CACHE = "kyushu-oct-shell-v5.3.52-r10";
+const SHELL_CACHE = "kyushu-oct-shell-v5.3.52-r11";
 const ASSET_CACHE = "kyushu-oct-assets-v2";
 const RUNTIME_CACHE = "kyushu-oct-runtime-v1";
 const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|22|23)$/;
@@ -14,8 +14,8 @@ const LEGACY_BLOCKING_CACHES = /^kyushu-oct-(?:static|runtime)-v5\.3\.(?:20|21|2
 // Small files that are expected to change when app code changes.
 const SHELL = [
   "./index.html",
-  "./app.js?v=5352-r10",
-  "./style.css?v=5352-r3",
+  "./app.js?v=5352-r11",
+  "./style.css?v=5352-r11",
   "./manifest.json",
   "./firebase-config.js?v=5352-authfix1"
 ];
@@ -46,7 +46,7 @@ const ASSETS = [
   "./egg-cry-v539.png?v=539",
   "./egg-home-sleep-v539.png?v=539",
   "./egg-sendoff-v539.png?v=539",
-  "./hero-cover-v51-alpha.png?v=552r10",
+  "./hero-cover-v51-alpha.png?v=552r11",
   "./hotel-return-duo-clean.png?v=552r3",
   "./mini-purin-clap.webp",
   "./mini-purin-hero.webp",

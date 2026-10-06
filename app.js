@@ -1,4 +1,4 @@
-/* Private travel PWA · Firebase Auth gated content · v5.3.52-r10 Hero handle cleanup + D3 LaLaport content */
+/* Private travel PWA · Firebase Auth gated content · v5.3.52-r11 In-app PDF preview + stable trip content */
 
 const FIREBASE_CONFIG = window.KYUSHU_FIREBASE_CONFIG || {};
 const DATABASE_URL = FIREBASE_CONFIG.databaseURL || "https://kyushu2026-9b6b9-default-rtdb.asia-southeast1.firebasedatabase.app";
@@ -3179,21 +3179,43 @@ async function openBookingAttachmentManager(taskId,titleOverride=""){
 }
 function closeBookingAttachmentPreview(){
   const dlg=$("#bookingAttachmentPreview");if(dlg?.open)dlg.close();
-  const frame=$("#bookingAttachmentPreviewFrame"),img=$("#bookingAttachmentPreviewImage");
-  if(frame){frame.src="about:blank";frame.hidden=true}if(img){img.removeAttribute("src");img.hidden=true}
+  const object=$("#bookingAttachmentPreviewObject"),frame=$("#bookingAttachmentPreviewFrame"),img=$("#bookingAttachmentPreviewImage"),unsupported=$("#bookingAttachmentPreviewUnsupported");
+  if(object){object.removeAttribute("data");object.hidden=true}
+  if(frame){frame.src="about:blank";frame.hidden=true}
+  if(img){img.removeAttribute("src");img.hidden=true}
+  if(unsupported)unsupported.hidden=true;
   if(bookingAttachmentPreviewUrl){URL.revokeObjectURL(bookingAttachmentPreviewUrl);bookingAttachmentPreviewUrl=""}
 }
 async function openBookingAttachmentPreview(id){
   const item=await getBookingAttachment(id);if(!item?.blob){toast("找不到這個附件");return}
   closeBookingAttachmentPreview();
-  bookingAttachmentPreviewUrl=URL.createObjectURL(item.blob);
-  if($("#bookingAttachmentPreviewTitle"))$("#bookingAttachmentPreviewTitle").textContent=item.name||"附件預覽";
-  const frame=$("#bookingAttachmentPreviewFrame"),img=$("#bookingAttachmentPreviewImage"),unsupported=$("#bookingAttachmentPreviewUnsupported");
-  if(unsupported)unsupported.hidden=true;
   const type=String(item.type||"").toLowerCase(),ext=bookingAttachmentExt(item.name||"");
-  if(type==="application/pdf"||ext==="pdf"){frame.src=bookingAttachmentPreviewUrl;frame.hidden=false;img.hidden=true}
-  else if(type.startsWith("image/")||["jpg","jpeg","png","webp","heic","heif"].includes(ext)){img.src=bookingAttachmentPreviewUrl;img.hidden=false;frame.hidden=true}
-  else{frame.hidden=true;img.hidden=true;if(unsupported)unsupported.hidden=false}
+  const isPdf=type==="application/pdf"||ext==="pdf";
+  const isImage=type.startsWith("image/")||["jpg","jpeg","png","webp","heic","heif"].includes(ext);
+  // Some mobile/PWA browsers lose the PDF MIME type when a File is restored from IndexedDB.
+  // Re-wrap the blob as application/pdf so the embedded browser viewer can recognize it reliably.
+  const previewBlob=isPdf&&String(item.blob.type||"").toLowerCase()!=="application/pdf"
+    ? new Blob([item.blob],{type:"application/pdf"})
+    : item.blob;
+  bookingAttachmentPreviewUrl=URL.createObjectURL(previewBlob);
+  if($("#bookingAttachmentPreviewTitle"))$("#bookingAttachmentPreviewTitle").textContent=item.name||"附件預覽";
+  const object=$("#bookingAttachmentPreviewObject"),frame=$("#bookingAttachmentPreviewFrame"),img=$("#bookingAttachmentPreviewImage"),unsupported=$("#bookingAttachmentPreviewUnsupported");
+  if(unsupported)unsupported.hidden=true;
+  if(isPdf){
+    const pdfUrl=`${bookingAttachmentPreviewUrl}#toolbar=1&navpanes=0&view=FitH`;
+    if(object){object.data=pdfUrl;object.hidden=false}
+    if(frame){frame.src=pdfUrl;frame.hidden=false}
+    if(img)img.hidden=true;
+  }else if(isImage){
+    if(object){object.removeAttribute("data");object.hidden=true}
+    if(frame){frame.src="about:blank";frame.hidden=true}
+    if(img){img.src=bookingAttachmentPreviewUrl;img.hidden=false}
+  }else{
+    if(object){object.removeAttribute("data");object.hidden=true}
+    if(frame){frame.src="about:blank";frame.hidden=true}
+    if(img)img.hidden=true;
+    if(unsupported)unsupported.hidden=false;
+  }
   const extLink=$("#bookingAttachmentExternal"),download=$("#bookingAttachmentDownload");
   if(extLink)extLink.href=bookingAttachmentPreviewUrl;
   if(download){download.href=bookingAttachmentPreviewUrl;download.download=item.name||"ticket"}
@@ -4242,7 +4264,7 @@ if("serviceWorker" in navigator){
 
   window.addEventListener("load", async()=>{
     try{
-      const reg=await navigator.serviceWorker.register("./sw.js?v=5352-r10",{updateViaCache:"none"});
+      const reg=await navigator.serviceWorker.register("./sw.js?v=5352-r11",{updateViaCache:"none"});
       if(reg.waiting)showAppUpdateBanner(reg);
       reg.addEventListener("updatefound",()=>{
         const worker=reg.installing;if(!worker)return;
